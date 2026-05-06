@@ -32,29 +32,29 @@ Mike's consulting surface = "something didn't work" or "Claude Code is suggestin
 
 ## 4. Stack
 
-| Concern | Choice | Why |
-|---|---|---|
-| Framework | Next.js 16 (App Router) + React 19 + TypeScript strict | Latest stable; Sage's prior repo was already on this version |
-| Hosting | Vercel | Original ask; native to Next |
-| Database | Vercel Postgres (Neon) | Native to Vercel; serverless; branching for dev/test |
-| ORM | Drizzle | TS-native schema, plain SQL migrations, no engine binary, Better Auth has a first-class adapter |
-| Auth | Better Auth + organizations plugin | Open source, lives in our DB, has B2B org primitives, no vendor lock |
-| Email | Resend | Vercel-native partner; verification, password reset, org invites |
-| Mutations | Server Actions wrapped with `next-safe-action` | Type-safe end-to-end, validation + auth + org scope enforced at the wrapper, can't define an unsafe action |
-| External HTTP | Next Route Handlers + Zod | For webhooks (Better Auth, Resend) and any future external API surface |
-| Client cache | TanStack Query | For non-server-action reads where revalidation isn't enough |
-| Forms | React Hook Form + Zod resolver | Shares schemas with server actions |
-| Validation | Zod everywhere | Inputs, env vars, webhook payloads |
-| UI primitives | shadcn/ui + Tailwind v4 | Sage's existing toolkit; LLM-friendly |
-| Background jobs | Vercel Cron + Vercel Queues | "As many Vercel-native features as we can" |
-| File storage | Vercel Blob | Vercel-native |
-| Observability | Sentry + Vercel Analytics + Speed Insights | Free tier sufficient at this stage |
-| Lint / format | ESLint (`next/core-web-vitals` + `@typescript-eslint/strict-type-checked`) + Prettier | Stable rule coverage; Biome 2 not at parity for Next yet |
-| Tests | Vitest (unit + integration) + Playwright (E2E golden paths) | See §10 |
-| Pre-commit / pre-push | Lefthook | Tiered, see §10 |
-| Env vars | `@t3-oss/env-nextjs` | Zod-validated at boot, build fails on missing |
-| Package manager | pnpm | Strict, fast, lockfile committed |
-| Node | 22 LTS pinned via `.nvmrc` and `engines` | |
+| Concern               | Choice                                                                                | Why                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Framework             | Next.js 16 (App Router) + React 19 + TypeScript strict                                | Latest stable; Sage's prior repo was already on this version                                               |
+| Hosting               | Vercel                                                                                | Original ask; native to Next                                                                               |
+| Database              | Vercel Postgres (Neon)                                                                | Native to Vercel; serverless; branching for dev/test                                                       |
+| ORM                   | Drizzle                                                                               | TS-native schema, plain SQL migrations, no engine binary, Better Auth has a first-class adapter            |
+| Auth                  | Better Auth + organizations plugin                                                    | Open source, lives in our DB, has B2B org primitives, no vendor lock                                       |
+| Email                 | Resend                                                                                | Vercel-native partner; verification, password reset, org invites                                           |
+| Mutations             | Server Actions wrapped with `next-safe-action`                                        | Type-safe end-to-end, validation + auth + org scope enforced at the wrapper, can't define an unsafe action |
+| External HTTP         | Next Route Handlers + Zod                                                             | For webhooks (Better Auth, Resend) and any future external API surface                                     |
+| Client cache          | TanStack Query                                                                        | For non-server-action reads where revalidation isn't enough                                                |
+| Forms                 | React Hook Form + Zod resolver                                                        | Shares schemas with server actions                                                                         |
+| Validation            | Zod everywhere                                                                        | Inputs, env vars, webhook payloads                                                                         |
+| UI primitives         | shadcn/ui + Tailwind v4                                                               | Sage's existing toolkit; LLM-friendly                                                                      |
+| Background jobs       | Vercel Cron + Vercel Queues                                                           | "As many Vercel-native features as we can"                                                                 |
+| File storage          | Vercel Blob                                                                           | Vercel-native                                                                                              |
+| Observability         | Sentry + Vercel Analytics + Speed Insights                                            | Free tier sufficient at this stage                                                                         |
+| Lint / format         | ESLint (`next/core-web-vitals` + `@typescript-eslint/strict-type-checked`) + Prettier | Stable rule coverage; Biome 2 not at parity for Next yet                                                   |
+| Tests                 | Vitest (unit + integration) + Playwright (E2E golden paths)                           | See §10                                                                                                    |
+| Pre-commit / pre-push | Lefthook                                                                              | Tiered, see §10                                                                                            |
+| Env vars              | `@t3-oss/env-nextjs`                                                                  | Zod-validated at boot, build fails on missing                                                              |
+| Package manager       | pnpm                                                                                  | Strict, fast, lockfile committed                                                                           |
+| Node                  | 22 LTS pinned via `.nvmrc` and `engines`                                              |                                                                                                            |
 
 ## 5. Repo Layout
 
@@ -207,18 +207,19 @@ Example (the worked-example pattern):
 
 ```ts
 // src/modules/items/actions.ts
-export const createItem = orgAction
-  .input(createItemSchema)
-  .handler(async ({ input, ctx }) => {
-    const item = await ctx.db.insert(items).values({
+export const createItem = orgAction.input(createItemSchema).handler(async ({ input, ctx }) => {
+  const item = await ctx.db
+    .insert(items)
+    .values({
       ...input,
       orgId: ctx.activeOrg.id,
       createdBy: ctx.session.userId,
-    }).returning()
-    await audit(ctx, 'item.created', { itemId: item.id })
-    revalidatePath('/items')
-    return { ok: true, data: item }
-  })
+    })
+    .returning()
+  await audit(ctx, "item.created", { itemId: item.id })
+  revalidatePath("/items")
+  return { ok: true, data: item }
+})
 ```
 
 ## 8. Database Conventions
@@ -258,12 +259,12 @@ Both handlers use the same context-building helpers as actions (no session, but 
 
 ### 10.3 Tier matrix
 
-| Tier | Trigger | Runs |
-|---|---|---|
-| pre-commit | every commit | typecheck (incremental), lint --fix on staged, `test:unit` |
-| pre-push | every push | full typecheck, lint, `test:unit`, `test:integration`, `build` |
-| CI (PR) | open/update PR | everything pre-push runs + `test:e2e` + `drizzle-kit check` + Vercel preview deploy |
-| CI (main) | merge to main | same as PR + production deploy |
+| Tier       | Trigger        | Runs                                                                                |
+| ---------- | -------------- | ----------------------------------------------------------------------------------- |
+| pre-commit | every commit   | typecheck (incremental), lint --fix on staged, `test:unit`                          |
+| pre-push   | every push     | full typecheck, lint, `test:unit`, `test:integration`, `build`                      |
+| CI (PR)    | open/update PR | everything pre-push runs + `test:e2e` + `drizzle-kit check` + Vercel preview deploy |
+| CI (main)  | merge to main  | same as PR + production deploy                                                      |
 
 A single `pnpm verify` script runs everything. Lefthook tiers are thin wrappers that call `pnpm verify --tier=<n>`. CI invokes the same script. **One source of truth for "what does it mean to be passing"**.
 

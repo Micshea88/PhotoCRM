@@ -21,21 +21,21 @@
 
 ## Phases at a glance
 
-| Phase | What it produces |
-|---|---|
-| 0 | Repo bootstrap — Next 16 app builds, lints, typechecks; lefthook + CI scaffold present but no checks yet |
-| 1 | Env validation + Drizzle DB client; can connect to Neon dev branch |
-| 2 | Better Auth core wired; users can be created via API |
-| 3 | Resend email + react-email templates; Better Auth invokes them |
-| 4 | Auth UI screens (sign-in/up/verify/reset/accept-invite) |
-| 5 | Organizations plugin + members/invites + settings pages |
-| 6 | `next-safe-action` factories + audit log + worked-example `items` module + app shell |
-| 7 | Files via Vercel Blob |
-| 8 | Background jobs (Vercel Cron + Queues) |
-| 9 | Observability (Sentry, Analytics, structured logs) |
-| 10 | Playwright golden-path E2E |
-| 11 | Repo conventions (AGENTS.md, CLAUDE.md, skills, slash commands, docs, setup script) |
-| 12 | Vercel deployment guide (paused for user) |
+| Phase | What it produces                                                                                         |
+| ----- | -------------------------------------------------------------------------------------------------------- |
+| 0     | Repo bootstrap — Next 16 app builds, lints, typechecks; lefthook + CI scaffold present but no checks yet |
+| 1     | Env validation + Drizzle DB client; can connect to Neon dev branch                                       |
+| 2     | Better Auth core wired; users can be created via API                                                     |
+| 3     | Resend email + react-email templates; Better Auth invokes them                                           |
+| 4     | Auth UI screens (sign-in/up/verify/reset/accept-invite)                                                  |
+| 5     | Organizations plugin + members/invites + settings pages                                                  |
+| 6     | `next-safe-action` factories + audit log + worked-example `items` module + app shell                     |
+| 7     | Files via Vercel Blob                                                                                    |
+| 8     | Background jobs (Vercel Cron + Queues)                                                                   |
+| 9     | Observability (Sentry, Analytics, structured logs)                                                       |
+| 10    | Playwright golden-path E2E                                                                               |
+| 11    | Repo conventions (AGENTS.md, CLAUDE.md, skills, slash commands, docs, setup script)                      |
+| 12    | Vercel deployment guide (paused for user)                                                                |
 
 ---
 
@@ -46,15 +46,18 @@
 ### Task 0.1: Initialize pnpm + Node version
 
 **Files:**
+
 - Create: `.nvmrc`
 - Create: `package.json` (initial)
 
 - [ ] **Step 1: Confirm pnpm and Node availability**
 
 Run:
+
 ```bash
 node --version && pnpm --version
 ```
+
 Expected: Node `>=22.x`, pnpm `>=9.x`. If pnpm is missing, install via `corepack enable && corepack prepare pnpm@latest --activate`.
 
 - [ ] **Step 2: Create `.nvmrc`**
@@ -70,6 +73,7 @@ pnpm init
 ```
 
 Then edit the generated `package.json` to:
+
 ```json
 {
   "name": "pathway-foundation",
@@ -97,6 +101,7 @@ git commit -m "chore: initialize pnpm project on Node 22"
 ### Task 0.2: Install Next.js 16 + React 19 + TypeScript
 
 **Files:**
+
 - Modify: `package.json`
 - Create: `tsconfig.json`
 - Create: `next.config.ts`
@@ -178,9 +183,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-background text-foreground antialiased">
-        {children}
-      </body>
+      <body className="bg-background text-foreground min-h-screen antialiased">{children}</body>
     </html>
   )
 }
@@ -194,7 +197,7 @@ export default function HomePage() {
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="text-center">
         <h1 className="text-4xl font-semibold">Pathway</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-2 text-sm">
           Foundation ready. Replace this page with your product.
         </p>
       </div>
@@ -274,15 +277,19 @@ next-env.d.ts
 - [ ] **Step 9: Verify typecheck and dev start**
 
 Run:
+
 ```bash
 pnpm typecheck
 ```
+
 Expected: passes (no output, exit 0).
 
 Run (briefly, then Ctrl-C):
+
 ```bash
 pnpm dev
 ```
+
 Expected: `Ready in <ms>`. Hit `http://localhost:3000`, see "Pathway / Foundation ready."
 
 - [ ] **Step 10: Commit**
@@ -295,6 +302,7 @@ git commit -m "feat: install Next 16 + React 19 + TS strict; minimal layout and 
 ### Task 0.3: Tailwind v4 + base CSS variables
 
 **Files:**
+
 - Modify: `package.json`
 - Create: `postcss.config.mjs`
 - Modify: `app/globals.css`
@@ -383,6 +391,7 @@ export default config
 ```bash
 pnpm build
 ```
+
 Expected: build succeeds.
 
 - [ ] **Step 5: Commit**
@@ -395,6 +404,7 @@ git commit -m "feat: add Tailwind v4 with light/dark color tokens"
 ### Task 0.4: shadcn primitives base + utils
 
 **Files:**
+
 - Create: `components.json`
 - Create: `src/lib/utils.ts`
 - Create: `components/ui/button.tsx`
@@ -466,8 +476,7 @@ const buttonVariants = cva(
           "border border-[var(--color-border)] bg-[var(--color-background)] shadow-sm hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
         secondary:
           "bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] shadow-sm hover:opacity-90",
-        ghost:
-          "hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+        ghost: "hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
         link: "text-[var(--color-primary)] underline-offset-4 hover:underline",
       },
       size: {
@@ -485,8 +494,7 @@ const buttonVariants = cva(
 )
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean
 }
 
@@ -494,11 +502,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
     return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        {...props}
-      />
+      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
     )
   },
 )
@@ -526,7 +530,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     <input
       type={type}
       className={cn(
-        "flex h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
       ref={ref}
@@ -553,14 +557,9 @@ const labelVariants = cva(
 
 export const Label = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> &
-    VariantProps<typeof labelVariants>
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> & VariantProps<typeof labelVariants>
 >(({ className, ...props }, ref) => (
-  <LabelPrimitive.Root
-    ref={ref}
-    className={cn(labelVariants(), className)}
-    {...props}
-  />
+  <LabelPrimitive.Root ref={ref} className={cn(labelVariants(), className)} {...props} />
 ))
 Label.displayName = LabelPrimitive.Root.displayName
 ```
@@ -576,6 +575,7 @@ pnpm add @radix-ui/react-label
 ```bash
 pnpm typecheck
 ```
+
 Expected: passes.
 
 - [ ] **Step 10: Commit**
@@ -588,6 +588,7 @@ git commit -m "feat: add shadcn baseline (utils, button, input, label)"
 ### Task 0.5: ESLint + Prettier
 
 **Files:**
+
 - Create: `eslint.config.mjs`
 - Create: `prettier.config.mjs`
 - Create: `.prettierignore`
@@ -727,6 +728,7 @@ pnpm-lock.yaml
 - [ ] **Step 6: Add lint/format scripts**
 
 Modify `package.json` scripts:
+
 ```json
 {
   "scripts": {
@@ -743,11 +745,13 @@ Modify `package.json` scripts:
 ```bash
 pnpm lint
 ```
+
 Expected: 0 errors, 0 warnings (or fix any).
 
 ```bash
 pnpm format
 ```
+
 Expected: rewrites tracked files in canonical format.
 
 - [ ] **Step 8: Commit**
@@ -760,6 +764,7 @@ git commit -m "chore: add ESLint strict + Prettier config"
 ### Task 0.6: Vitest + tsconfig path resolution
 
 **Files:**
+
 - Create: `vitest.config.ts`
 - Create: `vitest.setup.ts`
 - Create: `tests/unit/.gitkeep`
@@ -839,6 +844,7 @@ afterEach(() => {
 - [ ] **Step 5: Add a sanity test**
 
 `tests/unit/sanity.test.ts`:
+
 ```ts
 import { describe, it, expect } from "vitest"
 
@@ -852,6 +858,7 @@ describe("sanity", () => {
 - [ ] **Step 6: Add test scripts**
 
 Modify `package.json`:
+
 ```json
 {
   "scripts": {
@@ -868,6 +875,7 @@ Modify `package.json`:
 ```bash
 pnpm test:unit
 ```
+
 Expected: 1 test passes.
 
 - [ ] **Step 8: Create empty integration + e2e dirs**
@@ -887,6 +895,7 @@ git commit -m "chore: add Vitest with unit and integration projects"
 ### Task 0.7: Playwright skeleton
 
 **Files:**
+
 - Create: `playwright.config.ts`
 - Create: `tests/e2e/sanity.spec.ts`
 - Modify: `package.json`
@@ -938,6 +947,7 @@ export default defineConfig({
 - [ ] **Step 3: Write a sanity E2E**
 
 `tests/e2e/sanity.spec.ts`:
+
 ```ts
 import { test, expect } from "@playwright/test"
 
@@ -950,6 +960,7 @@ test("home page renders", async ({ page }) => {
 - [ ] **Step 4: Add e2e script**
 
 Modify `package.json`:
+
 ```json
 {
   "scripts": {
@@ -964,6 +975,7 @@ Modify `package.json`:
 ```bash
 pnpm test:e2e
 ```
+
 Expected: 1 test passes (Playwright spins up `pnpm build && pnpm start`).
 
 - [ ] **Step 6: Commit**
@@ -976,6 +988,7 @@ git commit -m "chore: add Playwright with single sanity E2E"
 ### Task 0.8: Lefthook tiers
 
 **Files:**
+
 - Create: `lefthook.yml`
 - Modify: `package.json`
 
@@ -1015,6 +1028,7 @@ pre-push:
 - [ ] **Step 3: Add verify script**
 
 Modify `package.json`:
+
 ```json
 {
   "scripts": {
@@ -1087,6 +1101,7 @@ console.log(`\n=== verify --tier=${tier} passed ===\n`)
 ```bash
 pnpm exec lefthook install
 ```
+
 Expected: confirms hooks installed.
 
 - [ ] **Step 6: Run tier 1 to verify**
@@ -1094,6 +1109,7 @@ Expected: confirms hooks installed.
 ```bash
 pnpm verify --tier=1
 ```
+
 Expected: typecheck, lint, test:unit all pass.
 
 - [ ] **Step 7: Commit**
@@ -1108,11 +1124,13 @@ Expected: pre-commit hook fires; runs typecheck + lint + format + unit on staged
 ### Task 0.9: GitHub Actions CI scaffold
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Write CI workflow**
 
 `.github/workflows/ci.yml`:
+
 ```yaml
 name: CI
 
@@ -1229,6 +1247,7 @@ git commit -m "ci: add GitHub Actions CI (verify + e2e against postgres service)
 ### Task 0.10: README and root .env.example skeleton
 
 **Files:**
+
 - Modify: `README.md`
 - Create: `.env.example`
 
@@ -1297,6 +1316,7 @@ git commit -m "docs: README + .env.example skeleton"
 ### Task 1.1: t3-env env schema
 
 **Files:**
+
 - Create: `src/lib/env.ts`
 
 - [ ] **Step 1: Install**
@@ -1343,8 +1363,7 @@ export const env = createEnv({
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   emptyStringAsUndefined: true,
-  skipValidation:
-    !!process.env.SKIP_ENV_VALIDATION || process.env.npm_lifecycle_event === "lint",
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION || process.env.npm_lifecycle_event === "lint",
 })
 ```
 
@@ -1355,6 +1374,7 @@ export const env = createEnv({
 ### Task 1.2: Drizzle setup
 
 **Files:**
+
 - Create: `drizzle.config.ts`
 - Create: `src/lib/db.ts`
 - Create: `src/db/schema.ts`
@@ -1442,6 +1462,7 @@ export {}
 ### Task 1.3: Local Postgres for tests
 
 **Files:**
+
 - Create: `tests/helpers/db.ts`
 - Create: `tests/integration/db.test.ts`
 - Modify: `vitest.config.ts` (env loading)
@@ -1457,7 +1478,9 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 import * as schema from "@/db/schema"
 
-export async function withTestDb<T>(fn: (db: ReturnType<typeof drizzle<typeof schema>>) => Promise<T>): Promise<T> {
+export async function withTestDb<T>(
+  fn: (db: ReturnType<typeof drizzle<typeof schema>>) => Promise<T>,
+): Promise<T> {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required for integration tests")
   }
@@ -1481,6 +1504,7 @@ export async function withTestDb<T>(fn: (db: ReturnType<typeof drizzle<typeof sc
 - [ ] **Step 3: Sanity integration test**
 
 `tests/integration/db.test.ts`:
+
 ```ts
 import { describe, it, expect } from "vitest"
 import { withTestDb } from "../helpers/db"
@@ -1511,6 +1535,7 @@ Document fallback: skip if `DATABASE_URL` unset (already covered by env validati
 ### Task 2.1: Install + configure Better Auth
 
 **Files:**
+
 - Create: `src/lib/auth.ts`
 - Create: `app/api/auth/[...all]/route.ts`
 - Create: `src/lib/auth-client.ts`
@@ -1579,6 +1604,7 @@ export const { signIn, signUp, signOut, useSession } = authClient
 - [ ] **Step 5: Generate Better Auth schema**
 
 Run:
+
 ```bash
 pnpm exec better-auth generate --output src/modules/auth/schema.ts --config src/lib/auth.ts
 ```
@@ -1588,6 +1614,7 @@ This creates `src/modules/auth/schema.ts` with `user`, `session`, `account`, `ve
 - [ ] **Step 6: Wire schema into root db**
 
 Modify `src/db/schema.ts`:
+
 ```ts
 export * from "@/modules/auth/schema"
 ```
@@ -1597,6 +1624,7 @@ export * from "@/modules/auth/schema"
 ```bash
 pnpm db:generate
 ```
+
 Inspect generated SQL in `src/db/migrations/0000_*.sql`; commit it.
 
 **Acceptance:** `pnpm db:push` to a clean local pg creates `user`, `session`, `account`, `verification` tables.
@@ -1606,6 +1634,7 @@ Inspect generated SQL in `src/db/migrations/0000_*.sql`; commit it.
 ### Task 2.2: Session helper + protected route middleware
 
 **Files:**
+
 - Create: `src/modules/auth/session.ts`
 - Create: `middleware.ts`
 - Create: `src/lib/auth-routes.ts`
@@ -1708,6 +1737,7 @@ export const config = {
 ### Task 3.1: Resend wrapper + base templates
 
 **Files:**
+
 - Create: `src/lib/email.ts`
 - Create: `src/emails/_layout.tsx`
 - Create: `src/emails/verify-email.tsx`
@@ -1739,13 +1769,7 @@ export interface SendEmailParams {
   replyTo?: string
 }
 
-export async function sendEmail({
-  to,
-  subject,
-  react,
-  from,
-  replyTo,
-}: SendEmailParams) {
+export async function sendEmail({ to, subject, react, from, replyTo }: SendEmailParams) {
   const result = await resend.emails.send({
     from: from ?? env.RESEND_FROM_EMAIL,
     to,
@@ -1775,13 +1799,7 @@ import {
 } from "@react-email/components"
 import type { ReactNode } from "react"
 
-export function EmailLayout({
-  preview,
-  children,
-}: {
-  preview: string
-  children: ReactNode
-}) {
+export function EmailLayout({ preview, children }: { preview: string; children: ReactNode }) {
   return (
     <Html>
       <Head />
@@ -1790,9 +1808,7 @@ export function EmailLayout({
         <Body className="bg-white font-sans">
           <Container className="mx-auto max-w-xl px-6 py-10">
             <Section className="border-b border-neutral-200 pb-6">
-              <Text className="m-0 text-2xl font-semibold text-neutral-900">
-                Pathway
-              </Text>
+              <Text className="m-0 text-2xl font-semibold text-neutral-900">Pathway</Text>
             </Section>
             <Section className="pt-6">{children}</Section>
             <Section className="mt-10 border-t border-neutral-200 pt-6">
@@ -1811,6 +1827,7 @@ export function EmailLayout({
 - [ ] **Step 4: Write each template**
 
 `src/emails/verify-email.tsx`:
+
 ```tsx
 import { Button, Heading, Text } from "@react-email/components"
 import { EmailLayout } from "./_layout"
@@ -1824,7 +1841,9 @@ export function VerifyEmail({ url, userName }: VerifyEmailProps) {
   return (
     <EmailLayout preview="Verify your email to start using Pathway">
       <Heading className="text-xl">Verify your email{userName ? `, ${userName}` : ""}</Heading>
-      <Text>Click the button below to verify your email address. This link expires in 24 hours.</Text>
+      <Text>
+        Click the button below to verify your email address. This link expires in 24 hours.
+      </Text>
       <Button
         href={url}
         className="mt-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
@@ -1845,6 +1864,7 @@ export default VerifyEmail
 - [ ] **Step 5: Wire Better Auth callbacks**
 
 Modify `src/lib/auth.ts` to add:
+
 ```ts
 import { sendEmail } from "@/lib/email"
 import { VerifyEmail } from "@/emails/verify-email"
@@ -1852,6 +1872,7 @@ import { ResetPasswordEmail } from "@/emails/reset-password"
 ```
 
 In the `betterAuth({...})` config:
+
 ```ts
 emailAndPassword: {
   enabled: true,
@@ -1891,6 +1912,7 @@ emailVerification: {
 ### Task 4.1: shadcn additions used by forms
 
 **Files:**
+
 - Create: `components/ui/form.tsx`
 - Create: `components/ui/card.tsx`
 - Create: `components/ui/alert.tsx`
@@ -1915,6 +1937,7 @@ pnpm add @radix-ui/react-separator @radix-ui/react-slot react-hook-form @hookfor
 ### Task 4.2: Sign-in page
 
 **Files:**
+
 - Create: `app/(auth)/layout.tsx`
 - Create: `app/(auth)/sign-in/page.tsx`
 - Create: `src/modules/auth/ui/sign-in-form.tsx`
@@ -1922,6 +1945,7 @@ pnpm add @radix-ui/react-separator @radix-ui/react-slot react-hook-form @hookfor
 - [ ] **Step 1: Auth layout** (centered card)
 
 `app/(auth)/layout.tsx`:
+
 ```tsx
 import type { ReactNode } from "react"
 
@@ -1937,6 +1961,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 - [ ] **Step 2: Sign-in form (client component)**
 
 `src/modules/auth/ui/sign-in-form.tsx`:
+
 ```tsx
 "use client"
 import { useState } from "react"
@@ -2015,6 +2040,7 @@ export function SignInForm() {
 - [ ] **Step 3: Sign-in page**
 
 `app/(auth)/sign-in/page.tsx`:
+
 ```tsx
 import Link from "next/link"
 import { SignInForm } from "@/modules/auth/ui/sign-in-form"
@@ -2024,7 +2050,7 @@ export default function SignInPage() {
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h1 className="text-2xl font-semibold">Welcome back</h1>
-        <p className="text-sm text-muted-foreground">Sign in to your Pathway account</p>
+        <p className="text-muted-foreground text-sm">Sign in to your Pathway account</p>
       </div>
       <SignInForm />
       <div className="space-y-2 text-center text-sm">
@@ -2056,6 +2082,7 @@ Each form follows the same structure: zod schema, RHF, authClient call, error di
 **Acceptance:** Manual smoke: full flow through sign-up → email-sent placeholder → verify → land on dashboard.
 
 **Commit (one per page):**
+
 - `feat: sign-up page`
 - `feat: verify-email page`
 - `feat: forgot-password page`
@@ -2076,6 +2103,7 @@ Each form follows the same structure: zod schema, RHF, authClient call, error di
 ### Task 5.1: Enable organization plugin
 
 **Files:**
+
 - Modify: `src/lib/auth.ts`
 - Modify: `src/lib/auth-client.ts`
 - Create: `src/modules/org/schema.ts` (re-export from generated Better Auth output)
@@ -2085,6 +2113,7 @@ Each form follows the same structure: zod schema, RHF, authClient call, error di
 - [ ] **Step 1: Enable plugin**
 
 In `src/lib/auth.ts`:
+
 ```ts
 import { organization } from "better-auth/plugins"
 import { sendEmail } from "@/lib/email"
@@ -2121,6 +2150,7 @@ export const auth = betterAuth({
 - [ ] **Step 2: Add `organizationClient` plugin**
 
 In `src/lib/auth-client.ts`:
+
 ```ts
 import { organizationClient } from "better-auth/client/plugins"
 
@@ -2141,11 +2171,7 @@ This adds `organization`, `member`, `invitation` tables.
 - [ ] **Step 4: Re-export under `src/modules/org/schema.ts`**
 
 ```ts
-export {
-  organization,
-  member,
-  invitation,
-} from "@/modules/auth/schema"
+export { organization, member, invitation } from "@/modules/auth/schema"
 ```
 
 - [ ] **Step 5: Add to `src/db/schema.ts`** (already covered by single auth re-export — no change needed).
@@ -2163,6 +2189,7 @@ pnpm db:generate
 ### Task 5.2: First-login org creation flow
 
 **Files:**
+
 - Create: `app/(app)/onboarding/create-organization/page.tsx`
 - Create: `src/modules/org/ui/create-organization-form.tsx`
 - Modify: `middleware.ts` (redirect users without an active org to onboarding)
@@ -2186,6 +2213,7 @@ In `app/(app)/layout.tsx` (created in Phase 6), if `session.session.activeOrgani
 ### Task 5.3: Org switcher + members + invites + settings
 
 **Files:**
+
 - Create: `src/modules/org/ui/org-switcher.tsx` (combobox)
 - Create: `src/modules/org/queries.ts`
 - Create: `src/modules/org/actions.ts`
@@ -2226,6 +2254,7 @@ export async function getOrganizationMembers(orgId: string) {
 Use `next-safe-action` (Phase 6). For Phase 5, all org mutations go through `authClient.organization.*` directly (Better Auth's plugin already exposes them). Once `next-safe-action` is wired, we'll add typed wrappers for invariants like role checks.
 
 Stub file:
+
 ```ts
 // Org actions are exposed via authClient.organization.* (Better Auth plugin).
 // Add server-action wrappers here when adding business logic beyond what the plugin provides.
@@ -2244,6 +2273,7 @@ export {}
 - [ ] **Step 5: Accept invite page**
 
 `app/(auth)/accept-invite/[token]/page.tsx`:
+
 ```tsx
 "use client"
 import { useEffect, useState } from "react"
@@ -2270,12 +2300,14 @@ export default function AcceptInvitePage() {
     router.refresh()
   }
 
-  useEffect(() => { /* could auto-accept; for now require button press */ }, [])
+  useEffect(() => {
+    /* could auto-accept; for now require button press */
+  }, [])
 
   return (
     <div className="space-y-4 text-center">
       <h1 className="text-2xl font-semibold">You've been invited</h1>
-      <p className="text-sm text-muted-foreground">Click below to join the organization.</p>
+      <p className="text-muted-foreground text-sm">Click below to join the organization.</p>
       <Button onClick={accept} disabled={state === "loading"}>
         {state === "loading" ? "Accepting…" : "Accept invitation"}
       </Button>
@@ -2288,6 +2320,7 @@ export default function AcceptInvitePage() {
 **Acceptance:** Manual smoke: create org, invite member by email (logged via Resend test mode), accept-invite link works, members list reflects new member, role change persists.
 
 **Commit (one per area):**
+
 - `feat: org queries`
 - `feat: settings/account page`
 - `feat: settings/organization pages with members and invites`
@@ -2302,6 +2335,7 @@ export default function AcceptInvitePage() {
 ### Task 6.1: Audit log primitive
 
 **Files:**
+
 - Create: `src/modules/audit/schema.ts`
 - Create: `src/modules/audit/audit.ts`
 - Modify: `src/db/schema.ts`
@@ -2309,6 +2343,7 @@ export default function AcceptInvitePage() {
 - [ ] **Step 1: Schema**
 
 `src/modules/audit/schema.ts`:
+
 ```ts
 import { pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core"
 import { user } from "@/modules/auth/schema"
@@ -2341,11 +2376,13 @@ export type NewAuditLog = typeof auditLog.$inferInsert
 - [ ] **Step 2: Helper**
 
 Install `@paralleldrive/cuid2` for IDs:
+
 ```bash
 pnpm add @paralleldrive/cuid2
 ```
 
 `src/modules/audit/audit.ts`:
+
 ```ts
 import "server-only"
 import { createId } from "@paralleldrive/cuid2"
@@ -2364,11 +2401,7 @@ export interface AuditPayload {
   metadata?: Record<string, unknown>
 }
 
-export async function audit(
-  ctx: AuditContext,
-  action: string,
-  payload: AuditPayload = {},
-) {
+export async function audit(ctx: AuditContext, action: string, payload: AuditPayload = {}) {
   await ctx.db.insert(auditLog).values({
     id: createId(),
     organizationId: ctx.organizationId,
@@ -2384,6 +2417,7 @@ export async function audit(
 - [ ] **Step 3: Re-export schema**
 
 `src/db/schema.ts`:
+
 ```ts
 export * from "@/modules/auth/schema"
 export * from "@/modules/audit/schema"
@@ -2402,6 +2436,7 @@ pnpm db:generate
 ### Task 6.2: next-safe-action factories
 
 **Files:**
+
 - Create: `src/lib/safe-action.ts`
 
 - [ ] **Step 1: Install**
@@ -2414,10 +2449,7 @@ pnpm add next-safe-action
 
 ```ts
 import "server-only"
-import {
-  createSafeActionClient,
-  DEFAULT_SERVER_ERROR_MESSAGE,
-} from "next-safe-action"
+import { createSafeActionClient, DEFAULT_SERVER_ERROR_MESSAGE } from "next-safe-action"
 import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
@@ -2499,6 +2531,7 @@ export const orgAction = authAction.use(async ({ next, ctx }) => {
 ### Task 6.3: items module (worked example)
 
 **Files:**
+
 - Create: `src/modules/items/schema.ts`
 - Create: `src/modules/items/types.ts`
 - Create: `src/modules/items/queries.ts`
@@ -2536,9 +2569,7 @@ export const items = pgTable(
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
   },
-  (t) => [
-    index("items_org_created_idx").on(t.organizationId, t.createdAt.desc()),
-  ],
+  (t) => [index("items_org_created_idx").on(t.organizationId, t.createdAt.desc())],
 )
 
 export type Item = typeof items.$inferSelect
@@ -2603,11 +2634,7 @@ import { and, eq } from "drizzle-orm"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { items } from "./schema"
-import {
-  createItemInput,
-  deleteItemInput,
-  updateItemInput,
-} from "./types"
+import { createItemInput, deleteItemInput, updateItemInput } from "./types"
 
 export const createItem = orgAction
   .metadata({ actionName: "items.create" })
@@ -2714,6 +2741,7 @@ feature should follow:
 - [ ] **Step 8: Integration tests** (`tests/integration/items.test.ts`)
 
 Test that:
+
 - `createItem` requires session + active org (throws otherwise).
 - `createItem` writes audit log row.
 - `listItemsForOrg` only returns rows for the given org (creates two orgs, verifies isolation).
@@ -2722,6 +2750,7 @@ Test that:
 **Acceptance:** All four scenarios pass; tier-2 verify succeeds.
 
 **Commit (one per slice):**
+
 - `feat: items module schema + queries`
 - `feat: items module actions with audit and org scoping`
 - `feat: items module UI + routes`
@@ -2730,6 +2759,7 @@ Test that:
 ### Task 6.4: App shell (sidebar + topbar + org switcher + theme)
 
 **Files:**
+
 - Create: `app/(app)/layout.tsx`
 - Create: `src/modules/org/ui/app-sidebar.tsx`
 - Create: `src/modules/org/ui/app-topbar.tsx`
@@ -2808,6 +2838,7 @@ export default function DashboardPage() {
 **Acceptance:** Authenticated user sees app shell; org switcher swaps orgs; theme toggle persists across reloads.
 
 **Commit (one per slice):**
+
 - `feat: theme provider + theme toggle`
 - `feat: app shell layout, sidebar, topbar, org switcher`
 - `feat: dashboard placeholder page`
@@ -2821,6 +2852,7 @@ export default function DashboardPage() {
 ### Task 7.1: Files schema + Blob client
 
 **Files:**
+
 - Create: `src/modules/files/schema.ts`
 - Create: `src/modules/files/queries.ts`
 - Create: `src/modules/files/actions.ts`
@@ -2867,16 +2899,18 @@ import { put, del, list } from "@vercel/blob"
 import { env } from "@/lib/env"
 
 export const blob = {
-  put: (pathname: string, body: Buffer | Blob | ReadableStream | string, opts?: { contentType?: string }) =>
+  put: (
+    pathname: string,
+    body: Buffer | Blob | ReadableStream | string,
+    opts?: { contentType?: string },
+  ) =>
     put(pathname, body, {
       access: "public",
       token: env.BLOB_READ_WRITE_TOKEN,
       contentType: opts?.contentType,
     }),
-  del: (urlOrUrls: string | string[]) =>
-    del(urlOrUrls, { token: env.BLOB_READ_WRITE_TOKEN }),
-  list: (opts?: Parameters<typeof list>[0]) =>
-    list({ ...opts, token: env.BLOB_READ_WRITE_TOKEN }),
+  del: (urlOrUrls: string | string[]) => del(urlOrUrls, { token: env.BLOB_READ_WRITE_TOKEN }),
+  list: (opts?: Parameters<typeof list>[0]) => list({ ...opts, token: env.BLOB_READ_WRITE_TOKEN }),
 }
 ```
 
@@ -2987,6 +3021,7 @@ pnpm db:generate
 Integration test: insert a file row, list files for that org, delete file, verify audit row.
 
 **Commit (one per slice):**
+
 - `feat: files schema + blob client wrapper`
 - `feat: file upload action and api route`
 - `feat: file delete action`
@@ -3001,6 +3036,7 @@ Integration test: insert a file row, list files for that org, delete file, verif
 ### Task 8.1: Cron infrastructure
 
 **Files:**
+
 - Create: `vercel.json`
 - Create: `src/modules/jobs/cron-auth.ts`
 - Create: `app/api/jobs/cron/heartbeat/route.ts`
@@ -3009,15 +3045,14 @@ Integration test: insert a file row, list files for that org, delete file, verif
 
 ```json
 {
-  "crons": [
-    { "path": "/api/jobs/cron/heartbeat", "schedule": "0 * * * *" }
-  ]
+  "crons": [{ "path": "/api/jobs/cron/heartbeat", "schedule": "0 * * * *" }]
 }
 ```
 
 - [ ] **Step 2: Auth helper**
 
 `src/modules/jobs/cron-auth.ts`:
+
 ```ts
 import "server-only"
 import { env } from "@/lib/env"
@@ -3054,6 +3089,7 @@ export async function GET(request: Request) {
 ### Task 8.2: Queue producer + consumer template
 
 **Files:**
+
 - Create: `src/modules/jobs/queue.ts` (producer)
 - Create: `app/api/jobs/queue/example/route.ts` (consumer)
 
@@ -3122,6 +3158,7 @@ export async function POST(request: Request) {
 ### Task 9.1: Sentry
 
 **Files:**
+
 - Create: `instrumentation.ts`
 - Create: `instrumentation-client.ts`
 - Create: `sentry.server.config.ts`
@@ -3163,11 +3200,12 @@ pnpm add @vercel/analytics @vercel/speed-insights
 ```
 
 In `app/layout.tsx`:
+
 ```tsx
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 // ...
-<body>
+;<body>
   {children}
   <Analytics />
   <SpeedInsights />
@@ -3179,6 +3217,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 ### Task 9.2: Structured logger
 
 **Files:**
+
 - Create: `src/lib/log.ts`
 
 - [ ] **Step 1: Install**
@@ -3200,7 +3239,7 @@ export const log = pino({
 })
 ```
 
-- [ ] **Step 3: Add ESLint rule blocking `console.log` in `src/**`**
+- [ ] **Step 3: Add ESLint rule blocking `console.log` in `src/**`\*\*
 
 (Already present in Phase 0 ESLint config — confirm.)
 
@@ -3215,6 +3254,7 @@ export const log = pino({
 ### Task 10.1: Test setup with seeded fixtures
 
 **Files:**
+
 - Create: `tests/e2e/fixtures.ts`
 - Create: `tests/e2e/auth.spec.ts`
 - Create: `tests/e2e/organization.spec.ts`
@@ -3254,20 +3294,23 @@ Expected: all 5 tests pass.
 ### Task 11.1: AGENTS.md + CLAUDE.md
 
 **Files:**
+
 - Create: `AGENTS.md`
 - Create: `CLAUDE.md`
 
 `AGENTS.md` — short and prescriptive:
 
-```markdown
+````markdown
 # Pathway Foundation — Agent Guide
 
 ## Read first
+
 1. This file.
 2. `docs/architecture.md` for layout and conventions.
 3. The README of the module you're touching (e.g., `src/modules/items/README.md`).
 
 ## Layout
+
 - `app/` — routes only. Layouts, pages, route handlers. Never put business logic here.
 - `components/ui/` — shadcn primitives only. Never product-specific UI.
 - `src/modules/<name>/` — product code lives here. Each module has `schema.ts`, `queries.ts`, `actions.ts`, `types.ts`, optional `ui/`, and a `README.md`.
@@ -3276,39 +3319,49 @@ Expected: all 5 tests pass.
 - `tests/` — unit, integration, e2e.
 
 ## Adding a feature
+
 Use the `/new-module <name>` slash command, or copy `src/modules/items/` and rename. Always:
+
 1. Add `export * from "@/modules/<name>/schema"` to `src/db/schema.ts`.
 2. Run `pnpm db:generate` and review the generated SQL.
 3. Add an integration test in `tests/integration/<name>.test.ts`.
 4. Run `pnpm verify --tier=2` before committing.
 
 ## Mutation rules
+
 - All mutations go through server actions defined in `src/modules/<name>/actions.ts`.
 - Never write Drizzle inserts/updates/deletes from `app/`.
 - Always use `orgAction` (or `authAction`) — never `action` directly except for things that legitimately don't need auth.
 - Every state-changing action must call `audit()` and `revalidatePath()` (or `revalidateTag()`).
 
 ## Read rules
+
 - `app/` server components can call `queries.ts` functions.
 - Client components can call server actions or use TanStack Query against route handlers.
 - Never import from `drizzle-orm` or `@/lib/db` outside `src/modules/**` and `src/lib/**`.
 
 ## Validation
+
 Before declaring work done:
+
 ```bash
 pnpm verify --tier=2
 ```
+````
 
 For schema changes, also:
+
 ```bash
 pnpm db:generate && pnpm db:check
 ```
 
 ## Style
+
 - No default exports in `src/modules/**` and `src/lib/**`. Named only.
 - No `console.log`. Use `import { log } from "@/lib/log"`.
 - Files focused: one clear responsibility per file. Split when in doubt.
-```
+
+````
 
 `CLAUDE.md`:
 ```markdown
@@ -3321,19 +3374,21 @@ pnpm db:generate && pnpm db:check
 - Use `/new-migration <description>` to generate a migration after editing schema.
 - Use `/seed` to load development data.
 - Hooks in `.claude/settings.json` enforce post-edit reminders for schema changes.
-```
+````
 
 **Commit:** `docs: AGENTS.md and CLAUDE.md`
 
 ### Task 11.2: Slash commands
 
 **Files:**
+
 - Create: `.claude/commands/new-module.md`
 - Create: `.claude/commands/new-migration.md`
 - Create: `.claude/commands/seed.md`
 - Create: `.claude/commands/deploy-preview.md`
 
 Each `.md` file is a Claude Code slash command. Format:
+
 ```markdown
 ---
 description: Scaffold a new feature module from the items template
@@ -3356,6 +3411,7 @@ Create a new module under `src/modules/$ARGUMENTS/` by copying `src/modules/item
 ### Task 11.3: Repo-local skills
 
 **Files:**
+
 - Create: `.claude/skills/add-module/SKILL.md`
 - Create: `.claude/skills/add-migration/SKILL.md`
 - Create: `.claude/skills/add-cron/SKILL.md`
@@ -3368,6 +3424,7 @@ Each skill is a checklist with concrete file paths and commands; no placeholders
 ### Task 11.4: Hooks
 
 **Files:**
+
 - Create: `.claude/settings.json`
 
 ```json
@@ -3400,6 +3457,7 @@ Each skill is a checklist with concrete file paths and commands; no placeholders
 ```
 
 `.claude/hooks/post-edit.mjs`:
+
 ```js
 #!/usr/bin/env node
 // Reads $CLAUDE_TOOL_INPUT from env (a JSON object including `file_path`).
@@ -3413,6 +3471,7 @@ process.exit(0)
 ```
 
 `.claude/hooks/stop-reminder.mjs`:
+
 ```js
 #!/usr/bin/env node
 console.error("[stop] Run `pnpm verify --tier=2` before declaring work complete.")
@@ -3424,6 +3483,7 @@ process.exit(0)
 ### Task 11.5: Setup + seed scripts
 
 **Files:**
+
 - Create: `scripts/setup.ts`
 - Create: `scripts/seed.ts`
 
@@ -3457,10 +3517,11 @@ Creates a demo user, demo org, sample items. Idempotent — checks for existence
 ### Task 11.6: Architecture + handoff docs
 
 **Files:**
+
 - Create: `docs/architecture.md`
 - Create: `docs/handoff-checklist.md`
 
-`docs/architecture.md` — long-form companion to AGENTS.md. Explains *why* the conventions exist (so Claude Code can choose when an exception is reasonable). Covers: routing model, server actions vs route handlers, multi-tenancy enforcement, audit conventions, testing layers.
+`docs/architecture.md` — long-form companion to AGENTS.md. Explains _why_ the conventions exist (so Claude Code can choose when an exception is reasonable). Covers: routing model, server actions vs route handlers, multi-tenancy enforcement, audit conventions, testing layers.
 
 `docs/handoff-checklist.md` — Sage's first-day setup steps as a checklist:
 
@@ -3468,18 +3529,21 @@ Creates a demo user, demo org, sample items. Idempotent — checks for existence
 # First-day setup
 
 ## 1. Accounts
+
 - [ ] GitHub account
 - [ ] Vercel account (sign in with GitHub)
 - [ ] Resend account (verify a sender domain or use the test domain initially)
 - [ ] (Optional) Sentry account
 
 ## 2. Repo
+
 - [ ] Clone this repo into your GitHub account
 - [ ] In GitHub repo settings → Branches → add a rule for `main`:
   - [ ] Require status checks to pass: `verify`, `e2e`
   - [ ] Require pull request before merging
 
 ## 3. Vercel
+
 - [ ] Import the repo into Vercel
 - [ ] In Project Settings → Storage → add Postgres (Neon) integration
 - [ ] In Project Settings → Storage → add Blob integration
@@ -3493,13 +3557,16 @@ Creates a demo user, demo org, sample items. Idempotent — checks for existence
   - `NEXT_PUBLIC_APP_URL` — your production URL
 
 ## 4. Local
+
 - [ ] `pnpm install`
 - [ ] `pnpm setup` — fills `.env.local` interactively
 - [ ] `pnpm db:push` — applies the schema to your dev DB
 - [ ] `pnpm dev` — runs locally on http://localhost:3000
 
 ## 5. First feature
+
 Open Claude Code in this repo. Try:
+
 - `/new-module todos` — scaffolds a new feature
 - Then prompt: "Add a `priority` field to todos with values low/medium/high; add UI for it."
 - Run `pnpm verify --tier=2` before committing.
@@ -3516,6 +3583,7 @@ Open Claude Code in this repo. Try:
 The plan stops here and surfaces a short companion doc:
 
 `docs/deployment.md` — written collaboratively when the user returns. Covers:
+
 1. Importing the repo into Vercel.
 2. Wiring Neon + Blob integrations.
 3. Setting env vars (with the exact list from `.env.example`).
@@ -3527,7 +3595,7 @@ The plan stops here and surfaces a short companion doc:
 
 ## Self-Review
 
-- Spec coverage: every section of the spec maps to one or more phases. Auth (§6) → Phases 2/4/5. Server actions (§7) → Phase 6. DB conventions (§8) → Phases 1/6 and migrations throughout. Jobs (§9) → Phase 8. Files (§12) → Phase 7. Email (§13) → Phase 3. Observability (§14) → Phase 9. Conventions (§15) → Phase 11. Out-of-scope (§18) is explicitly *not* implemented and the plan respects it.
+- Spec coverage: every section of the spec maps to one or more phases. Auth (§6) → Phases 2/4/5. Server actions (§7) → Phase 6. DB conventions (§8) → Phases 1/6 and migrations throughout. Jobs (§9) → Phase 8. Files (§12) → Phase 7. Email (§13) → Phase 3. Observability (§14) → Phase 9. Conventions (§15) → Phase 11. Out-of-scope (§18) is explicitly _not_ implemented and the plan respects it.
 - Placeholder scan: clean — every step has either concrete code or a clear, named acceptance criterion. The Vercel Queues step has an explicit fallback (DB-backed queue) flagged as a contingency, not a placeholder.
 - Type consistency: factory names (`authAction`, `orgAction`), helper names (`audit`, `getSession`, `requireSession`, `verifyCronAuth`), table names (`items`, `files`, `auditLog`) are consistent across phases.
 - Scope: large but cohesive. Single plan is appropriate; phases are sequenced with clear dependencies.

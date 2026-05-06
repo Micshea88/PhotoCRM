@@ -71,7 +71,28 @@ const VARS: Var[] = [
   },
   {
     name: "SENTRY_DSN",
-    description: "Sentry DSN. Leave blank to disable.",
+    description: "Sentry DSN (server). Leave blank to disable.",
+    defaultValue: "",
+  },
+  {
+    name: "NEXT_PUBLIC_SENTRY_DSN",
+    description: "Sentry DSN (browser). Same value as SENTRY_DSN. Required for client errors.",
+    defaultValue: "",
+  },
+  {
+    name: "SENTRY_AUTH_TOKEN",
+    description: "Sentry auth token (build-time only, for source-map upload).",
+    defaultValue: "",
+    hidden: true,
+  },
+  {
+    name: "SENTRY_ORG",
+    description: "Sentry org slug (find it in your Sentry project URL).",
+    defaultValue: "",
+  },
+  {
+    name: "SENTRY_PROJECT",
+    description: "Sentry project slug.",
     defaultValue: "",
   },
   {
@@ -161,9 +182,6 @@ async function main() {
       ? await password({ ...promptOpts, mask: "*" })
       : await input(promptOpts)
   }
-
-  // Always lock test/staging-only flag to "true" via setup; explicit override is documented.
-  values.AUTH_REQUIRE_EMAIL_VERIFICATION = existing.AUTH_REQUIRE_EMAIL_VERIFICATION ?? "true"
 
   writeEnv(values)
   console.log(`\n✓ Wrote ${ENV_LOCAL}`)

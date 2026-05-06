@@ -50,22 +50,12 @@ export default tseslint.config(
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
-      "no-console": ["error", { allow: ["warn", "error"] }],
+      // Banned everywhere; pino is the structured logger. Tests/scripts/
+      // instrumentation files are unbanned by overrides below.
+      "no-console": "error",
       "@typescript-eslint/no-misused-promises": [
         "error",
         { checksVoidReturn: { attributes: false } },
-      ],
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["@/db/*", "drizzle-orm/*"],
-              message:
-                "Do not import the database directly from app/. Use queries.ts or actions.ts in the relevant module.",
-            },
-          ],
-        },
       ],
     },
     settings: {
@@ -73,19 +63,54 @@ export default tseslint.config(
       next: { rootDir: "./" },
     },
   },
+  // -------- Layered import rules --------
+  // No DB access from `app/**` — routes go through queries.ts / actions.ts.
+  // Documented exception in AGENTS.md hard rule #1: cron, queue, and the
+  // file-download proxy are deliberate escape hatches.
   {
-    files: [
-      "src/modules/**/*.ts",
-      "src/lib/**/*.ts",
-      "src/db/**/*.ts",
-      "tests/**/*.ts",
-      "tests/**/*.tsx",
-      "scripts/**/*.ts",
+    files: ["app/**/*.ts", "app/**/*.tsx"],
+    ignores: [
+      "app/api/jobs/**",
+      "app/api/files/**",
+      "app/api/blob/**",
+      "app/api/auth/**",
     ],
     rules: {
-      "no-restricted-imports": "off",
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/db", "@/db/*", "drizzle-orm", "drizzle-orm/*", "@/lib/db"],
+              message:
+                "Do not import the database directly from app/. Use queries.ts or actions.ts in the relevant module. (See AGENTS.md hard rule #1.)",
+            },
+            {
+              group: ["@/modules/*/schema"],
+              message:
+                "Do not import schemas from app/. Use the module's queries.ts / actions.ts.",
+            },
+          ],
+        },
+      ],
     },
   },
+  // No default exports in `src/modules/**` and `src/lib/**`. Named only.
+  // Implements AGENTS.md hard rule #7 — enforced by lint, not just docs.
+  {
+    files: ["src/modules/**/*.ts", "src/modules/**/*.tsx", "src/lib/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ExportDefaultDeclaration",
+          message:
+            "Use named exports in src/modules/** and src/lib/**. (See AGENTS.md hard rule #7.)",
+        },
+      ],
+    },
+  },
+  // -------- Test / script overrides --------
   {
     files: ["tests/**/*.ts", "tests/**/*.tsx", "**/*.test.ts", "**/*.test.tsx"],
     rules: {
@@ -95,6 +120,12 @@ export default tseslint.config(
   },
   {
     files: ["scripts/**/*.ts", "scripts/**/*.mjs"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  {
+    files: ["instrumentation.ts", "instrumentation-client.ts", "sentry.*.config.ts"],
     rules: {
       "no-console": "off",
     },

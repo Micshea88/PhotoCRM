@@ -1,60 +1,66 @@
 # First-day setup
 
-This is your day-one checklist when you receive this repo. Work top-down.
+Day-one checklist for `pathway-foundation`. Work top-down. The deployment runbook is at [`docs/deployment.md`](deployment.md) — this checklist is the human-side prep.
 
 ## 1. Accounts
 
 - [ ] **GitHub** account
 - [ ] **Vercel** account (sign in with GitHub)
-- [ ] **Resend** account (verify a sender domain or use the test domain initially)
-- [ ] **Sentry** account (optional but recommended)
+- [ ] **Resend** account, sender domain verified BEFORE first sign-up
+- [ ] **Sentry** account (recommended — without it, prod errors are invisible)
+- [ ] (Optional) BetterUptime or Checkly for synthetic monitoring
 
 ## 2. Repo
 
-- [ ] Clone this repo into your GitHub account.
-- [ ] In **GitHub repo settings → Branches**, add a rule for `main`:
-  - [ ] Require status checks to pass: `verify`, `e2e`
-  - [ ] Require pull request before merging
+- [ ] Push this repo to your GitHub account.
+- [ ] In **GitHub → Settings → Branches → Branch ruleset for `main`** (see `docs/deployment.md` §4 for the exact list):
+  - Require PR + 1 review before merging
+  - Require status checks: `Verify` and `E2E` to pass
+  - Require linear history
+  - Disallow bypass for non-admins
 
 ## 3. Local environment
 
-- [ ] Install Node 22 LTS (`nvm install 22 && nvm use 22`)
-- [ ] Install pnpm (`corepack enable && corepack prepare pnpm@latest --activate`)
-- [ ] Install Docker Desktop (used for local Postgres)
+- [ ] Install **Node 22 LTS** (`nvm install 22 && nvm use 22`)
+- [ ] Install **pnpm** (`corepack enable && corepack prepare pnpm@latest --activate`)
+- [ ] Install **Docker Desktop** (used for local Postgres)
 - [ ] `pnpm install`
-- [ ] `pnpm setup` — interactive, fills `.env.local`
 - [ ] `docker compose up -d` — starts local Postgres on `localhost:5432`
+- [ ] `pnpm setup` — interactive, fills `.env.local`
 - [ ] `pnpm db:migrate` — applies migrations to your dev DB
-- [ ] `pnpm dev` — runs locally on http://localhost:3000
+- [ ] `pnpm seed` — optional: creates a demo user (`demo@pathway.local` / `demopassword12345`) and an org with three sample items
+- [ ] `pnpm dev` — runs on http://localhost:3000
 
-If something breaks at `pnpm dev`, check that `DATABASE_URL` in `.env.local` points at `localhost`. The app refuses to start in development against any other host.
+If `pnpm dev` complains about `DATABASE_URL`, confirm `.env.local` points at `localhost`. The app refuses to start in development against any other host (`src/lib/db.ts` parses the URL and rejects non-local hostnames).
 
-## 4. Vercel
+## 4. Vercel + production
 
-- [ ] Import the repo into Vercel.
-- [ ] In Project Settings → **Storage**, add Postgres (Neon) integration. This auto-populates `DATABASE_URL`.
-- [ ] In Project Settings → **Storage**, add Blob integration. This auto-populates `BLOB_READ_WRITE_TOKEN`.
-- [ ] In Project Settings → **Environment Variables**, fill the values from `.env.example` for Production (and Preview if you want previews to use the same):
-  - `BETTER_AUTH_SECRET` — 32+ char random string. Generate with: `openssl rand -hex 32`
-  - `BETTER_AUTH_URL` — your production URL (e.g., `https://pathway.example.com`)
-  - `RESEND_API_KEY` — from your Resend dashboard
-  - `RESEND_FROM_EMAIL` — your verified sender (e.g., `noreply@yourdomain.com`)
-  - `CRON_SECRET` — 32+ char random string. Generate with: `openssl rand -hex 32`
-  - `QUEUE_SECRET` — 32+ char random string
-  - `SENTRY_DSN`, `SENTRY_AUTH_TOKEN` (optional)
-  - `NEXT_PUBLIC_APP_URL` — same as `BETTER_AUTH_URL`
-- [ ] In Project Settings → **Build & Development**, set **Build Command** to `pnpm vercel-build`. This runs `drizzle-kit migrate && next build` so migrations apply atomically before the new app version goes live.
-- [ ] In Project Settings → **Cron Jobs**, confirm the two scheduled jobs from `vercel.json` (`heartbeat` hourly, `purge-deleted` daily 04:00 UTC) appear.
+Follow [`docs/deployment.md`](deployment.md) end-to-end. The short version:
+
+- [ ] Import the repo. Build Command = `pnpm vercel-build`.
+- [ ] Add Vercel Postgres (Neon). Pick the same region as your Functions region (`iad1` matches `vercel.json`).
+- [ ] Add Vercel Blob.
+- [ ] Set env vars (see deployment runbook table). All 14 of them.
+- [ ] Decide on Preview DB isolation — separate Neon for Preview, OR accept that previews share prod data (migrations are gated to production-only either way).
+- [ ] First deploy. Confirm migrations ran. Confirm cron jobs appear under **Cron Jobs**.
 
 ## 5. First sign-up
 
 - [ ] Visit your production URL.
-- [ ] Sign up. You'll receive a verification email from Resend.
-- [ ] Click the verification link. You'll land on the org-create page.
-- [ ] Create your first organization.
-- [ ] Land on the dashboard. The foundation is live.
+- [ ] Sign up. Verification email lands (check Resend logs if not).
+- [ ] Click verify link. Land on `/onboarding`.
+- [ ] Create your first organization. Land on `/dashboard`.
+- [ ] Smoke test: create an item, delete it, restore it.
 
-## 6. First feature with Claude Code
+## 6. Billing alerts
+
+- [ ] Vercel — Functions / Bandwidth alerts
+- [ ] Neon — Compute / Storage alerts
+- [ ] Vercel Blob — Bandwidth / Storage alerts
+- [ ] Resend — monthly send count alert
+- [ ] Sentry — event quota alert
+
+## 7. First feature with Claude Code
 
 Open Claude Code in this repo. Try:
 
@@ -62,16 +68,20 @@ Open Claude Code in this repo. Try:
 /new-module todos
 ```
 
-This scaffolds a new feature module from the items template. Then prompt:
+This delegates to the `add-module` skill, which walks the full checklist (copy items template, rename, regenerate migration, update reset-db + purge cron lists, scaffold routes + integration tests). Then prompt:
 
 > Add a `priority` field to todos with values low/medium/high; add UI for it.
 
-Claude Code will edit the schema, generate a migration, update the form, and run `pnpm verify`. Review the diff, commit, push.
+Claude will edit the schema, generate a migration, update the form, and run `pnpm verify`. Review the diff, commit, push.
 
-## 7. When something breaks
+## 8. When something breaks
 
-- Check Sentry first if SENTRY_DSN is set.
-- Check Vercel deployment logs.
-- Check Vercel function logs for the specific route.
-- If a migration fails on deploy, Vercel keeps the previous version live. Look at `drizzle-kit migrate` output to understand why.
-- If you need to inspect production data, ask Mike (consulting moment).
+- Check **Sentry** first if `SENTRY_DSN` is set.
+- Check **Vercel deployment logs**.
+- Check the specific route's **Vercel function logs**.
+- Migration failed on deploy? Vercel keeps the previous version live. Look at `drizzle-kit migrate` output to understand why. Then generate a NEW migration that fixes it (never edit committed migrations).
+- For ad-hoc data inspection in production, use `vercel env pull .env.production.local` then `pnpm db:studio` — and **delete `.env.production.local` immediately afterward**.
+
+## 9. Outstanding work
+
+The repo ships with [`TODO.md`](../TODO.md) at the root — a punch list of hardening items still open. The Critical block is fixed, but several High-priority items (rate limit storage for multi-region, audit-on-mutate static enforcement, password breach-corpus check) are flagged for follow-up.

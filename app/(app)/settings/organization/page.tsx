@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
-import { db } from "@/lib/db"
+import { getOrganizationById } from "@/modules/org/queries"
 import { OrganizationSettingsForm } from "@/modules/org/ui/organization-settings-form"
 
 export default async function OrganizationSettingsPage() {
@@ -9,9 +9,7 @@ export default async function OrganizationSettingsPage() {
   const orgId = session.session.activeOrganizationId
   if (!orgId) redirect("/onboarding/create-organization")
 
-  const org = await db.query.organization.findFirst({
-    where: (o, { eq }) => eq(o.id, orgId),
-  })
+  const org = await getOrganizationById(orgId)
   if (!org) redirect("/onboarding/create-organization")
 
   return (

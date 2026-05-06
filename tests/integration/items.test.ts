@@ -88,14 +88,14 @@ describe("items module — db-level invariants", () => {
           ipAddress: "127.0.0.1",
           userAgent: "vitest",
         },
-        "item.created",
+        "items.created",
         { resourceType: "item", resourceId: "abc123" },
       )
 
       const rows = await db.select().from(auditLog).where(eq(auditLog.organizationId, orgId))
 
       expect(rows.length).toBe(1)
-      expect(rows[0]?.action).toBe("item.created")
+      expect(rows[0]?.action).toBe("items.created")
       expect(rows[0]?.actorUserId).toBe(userId)
       expect(rows[0]?.ipAddress).toBe("127.0.0.1")
     })

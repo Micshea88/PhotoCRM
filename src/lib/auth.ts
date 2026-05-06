@@ -14,8 +14,12 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification:
-      env.NODE_ENV === "production" && env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true",
+    // Required in real production. The PLAYWRIGHT_E2E escape hatch is set
+    // only by `playwright.config.ts` so the e2e suite (which runs the prod
+    // build via `pnpm build && pnpm start`) can complete sign-up without
+    // an email round-trip. Vercel never sets PLAYWRIGHT_E2E, so this can't
+    // be triggered in real deployments.
+    requireEmailVerification: env.NODE_ENV === "production" && process.env.PLAYWRIGHT_E2E !== "1",
     minPasswordLength: 12,
     sendResetPassword: async ({ user, url }) => {
       await sendEmail({
@@ -42,6 +46,26 @@ export const auth = betterAuth({
     cookieCache: {
       enabled: true,
       maxAge: 60 * 5,
+    },
+  },
+  // Better Auth's built-in rate limiter. Enabled by default in production with
+  // window=10s/max=100. Sensitive paths get stricter custom rules so credential
+  // stuffing and password-reset spam are bounded. Storage is in-memory by
+  // default — if you scale beyond one Vercel region, switch `storage` to a
+  // shared store (Upstash) so limits apply across instances.
+  rateLimit: {
+    enabled: env.NODE_ENV === "production",
+    window: 10,
+    max: 100,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 5 },
+      "/forget-password": { window: 300, max: 3 },
+      "/reset-password": { window: 300, max: 5 },
+      "/verify-email": { window: 60, max: 10 },
+      "/send-verification-email": { window: 300, max: 3 },
+      "/organization/invite-member": { window: 60, max: 10 },
+      "/organization/accept-invitation": { window: 60, max: 10 },
     },
   },
   plugins: [

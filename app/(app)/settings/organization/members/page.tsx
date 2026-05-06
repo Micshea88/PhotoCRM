@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
-import { db } from "@/lib/db"
-import { getOrganizationMembers, getPendingInvitations } from "@/modules/org/queries"
+import {
+  getCurrentMember,
+  getOrganizationMembers,
+  getPendingInvitations,
+} from "@/modules/org/queries"
 import { InviteMemberForm } from "@/modules/org/ui/invite-member-form"
 import { MembersList } from "@/modules/org/ui/members-list"
 import { PendingInvitations } from "@/modules/org/ui/pending-invitations"
@@ -13,9 +16,7 @@ export default async function OrgMembersPage() {
   const orgId = session.session.activeOrganizationId
   if (!orgId) redirect("/onboarding/create-organization")
 
-  const currentMember = await db.query.member.findFirst({
-    where: (m, { and, eq }) => and(eq(m.organizationId, orgId), eq(m.userId, session.user.id)),
-  })
+  const currentMember = await getCurrentMember(orgId, session.user.id)
   if (!currentMember) redirect("/dashboard")
 
   const [members, pending] = await Promise.all([

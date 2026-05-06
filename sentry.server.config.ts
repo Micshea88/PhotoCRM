@@ -6,5 +6,7 @@ if (env.SENTRY_DSN) {
     dsn: env.SENTRY_DSN,
     tracesSampleRate: env.NODE_ENV === "production" ? 0.1 : 0,
     environment: env.NODE_ENV,
+    // Server runtime — full integration set including Node-only profiling.
+    sendDefaultPii: false,
   })
 }

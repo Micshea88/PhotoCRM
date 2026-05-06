@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache"
 import { and, eq, isNull } from "drizzle-orm"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
-import { blob } from "@/lib/blob"
 import { files } from "./schema"
 
 export const deleteFile = orgAction
@@ -36,14 +35,9 @@ export const deleteFile = orgAction
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
-      "file.deleted",
+      "files.deleted",
       { resourceType: "file", resourceId: file.id, metadata: { url: file.url } },
     )
     revalidatePath("/files")
     return { id: file.id }
   })
-
-// Hard-delete from blob storage. Used by the purge cron only.
-export async function purgeBlob(url: string) {
-  await blob.del(url)
-}

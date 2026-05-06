@@ -5,6 +5,7 @@ export const PUBLIC_ROUTES = [
   "/verify-email",
   "/forgot-password",
   "/reset-password",
+  "/accept-invite",
 ] as const
 
 export const AUTH_ONLY_ROUTES = [

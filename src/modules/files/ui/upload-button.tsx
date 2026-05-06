@@ -19,7 +19,7 @@ export function UploadButton() {
     setError(null)
     try {
       await upload(file.name, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: "/api/blob/upload",
       })
       router.refresh()
@@ -36,7 +36,7 @@ export function UploadButton() {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*,application/pdf,text/*"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,text/plain,text/csv"
         onChange={(e) => {
           void onChange(e)
         }}

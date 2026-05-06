@@ -21,6 +21,7 @@ import { config as loadEnv } from "dotenv"
 import { hashPassword } from "better-auth/crypto"
 import { account, member, organization, user } from "@/modules/auth/schema"
 import { items } from "@/modules/items/schema"
+import { assertDatabaseIsLocal } from "@/lib/db"
 import * as schema from "@/db/schema"
 
 loadEnv({ path: ".env.local" })
@@ -28,6 +29,16 @@ loadEnv({ path: ".env.local" })
 const url = process.env.DATABASE_URL
 if (!url) {
   console.error("DATABASE_URL is required (set it in .env.local).")
+  process.exit(1)
+}
+
+// Refuse to seed against anything but a local Postgres. The seed inserts a
+// real user with a known password; running this against staging/prod would
+// create a backdoor account.
+try {
+  assertDatabaseIsLocal(url)
+} catch (e) {
+  console.error(e instanceof Error ? e.message : String(e))
   process.exit(1)
 }
 

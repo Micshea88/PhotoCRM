@@ -1,68 +1,109 @@
-import { and, isNotNull, lt } from "drizzle-orm"
+import { and, isNotNull, lt, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { verifyCronAuth } from "@/modules/jobs/cron-auth"
 import { items } from "@/modules/items/schema"
 import { files } from "@/modules/files/schema"
 import { audit } from "@/modules/audit/audit"
 import { blob } from "@/lib/blob"
+import { log } from "@/lib/log"
 
-const RETENTION_DAYS = 90
+const RETENTION_DAYS = Number(process.env.RETENTION_DAYS ?? 90)
+const BATCH_LIMIT = Number(process.env.PURGE_BATCH_LIMIT ?? 1000)
+const PURGE_ENABLED = (process.env.PURGE_ENABLED ?? "true") !== "false"
 
 /**
- * Purges soft-deleted rows older than RETENTION_DAYS. This is the ONLY place
- * hard deletes happen (and the only place blob storage gets `del()`'d).
+ * Hard-deletes soft-deleted rows older than RETENTION_DAYS. This is the ONLY
+ * place hard deletes happen, and the only place blob storage gets `del()`'d.
  *
- * Each purge writes an `audit_log` row per-org so the deletion is traceable.
+ * Safety properties:
+ *   - PURGE_ENABLED env can be set to "false" as a kill-switch without a deploy.
+ *   - Each invocation processes at most BATCH_LIMIT rows per resource type;
+ *     larger backlogs are drained over multiple cron runs.
+ *   - Audit row is written BEFORE the DB delete so even a crash mid-run leaves
+ *     a forensic trail.
+ *   - Blob deletes are best-effort and run after the DB delete; orphan blobs
+ *     can be reaped by a separate sweep if any fail.
  */
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return new Response("Unauthorized", { status: 401 })
   }
+  if (!PURGE_ENABLED) {
+    log.warn("[purge] PURGE_ENABLED=false — skipping")
+    return Response.json({ ok: true, skipped: true, reason: "PURGE_ENABLED=false" })
+  }
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000)
 
-  const purgedFiles = await db
-    .delete(files)
-    .where(and(isNotNull(files.deletedAt), lt(files.deletedAt, cutoff)))
-    .returning()
-
-  const purgedItems = await db
-    .delete(items)
+  // -------- Items --------
+  const itemRows = await db
+    .select({ id: items.id, organizationId: items.organizationId })
+    .from(items)
     .where(and(isNotNull(items.deletedAt), lt(items.deletedAt, cutoff)))
-    .returning({ id: items.id, organizationId: items.organizationId })
+    .limit(BATCH_LIMIT)
 
-  // Best-effort blob cleanup — failures here are logged but don't block the
-  // DB purge (the orphan blobs can be reaped later by a separate sweep).
-  for (const f of purgedFiles) {
-    try {
-      await blob.del(f.url)
-    } catch (e) {
-      console.error("[purge] blob delete failed for", f.url, e)
-    }
+  const itemOrgCounts = new Map<string, number>()
+  for (const r of itemRows) {
+    itemOrgCounts.set(r.organizationId, (itemOrgCounts.get(r.organizationId) ?? 0) + 1)
   }
-
-  // Audit one row per-org for each kind of resource purged.
-  const orgItemCounts = new Map<string, number>()
-  for (const it of purgedItems) {
-    orgItemCounts.set(it.organizationId, (orgItemCounts.get(it.organizationId) ?? 0) + 1)
-  }
-  const orgFileCounts = new Map<string, number>()
-  for (const f of purgedFiles) {
-    orgFileCounts.set(f.organizationId, (orgFileCounts.get(f.organizationId) ?? 0) + 1)
-  }
-  for (const [orgId, count] of orgItemCounts) {
+  for (const [orgId, count] of itemOrgCounts) {
     await audit({ db, organizationId: orgId, actorUserId: null }, "purge.items", {
       metadata: { count, retentionDays: RETENTION_DAYS },
     })
   }
-  for (const [orgId, count] of orgFileCounts) {
+  if (itemRows.length > 0) {
+    await db.delete(items).where(
+      inArray(
+        items.id,
+        itemRows.map((r) => r.id),
+      ),
+    )
+  }
+
+  // -------- Files --------
+  const fileRows = await db
+    .select({
+      id: files.id,
+      url: files.url,
+      organizationId: files.organizationId,
+    })
+    .from(files)
+    .where(and(isNotNull(files.deletedAt), lt(files.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const fileOrgCounts = new Map<string, number>()
+  for (const r of fileRows) {
+    fileOrgCounts.set(r.organizationId, (fileOrgCounts.get(r.organizationId) ?? 0) + 1)
+  }
+  for (const [orgId, count] of fileOrgCounts) {
     await audit({ db, organizationId: orgId, actorUserId: null }, "purge.files", {
       metadata: { count, retentionDays: RETENTION_DAYS },
     })
   }
+  if (fileRows.length > 0) {
+    await db.delete(files).where(
+      inArray(
+        files.id,
+        fileRows.map((r) => r.id),
+      ),
+    )
+  }
+
+  // Best-effort blob cleanup AFTER the DB delete commits. A failure here leaves
+  // an orphan blob (cheap, reapable) rather than an orphan DB row pointing at a
+  // deleted blob (which would 404 on next read).
+  for (const f of fileRows) {
+    try {
+      await blob.del(f.url)
+    } catch (e) {
+      log.error({ err: e, url: f.url }, "[purge] blob delete failed")
+    }
+  }
 
   return Response.json({
     ok: true,
-    purged: { items: purgedItems.length, files: purgedFiles.length },
+    purged: { items: itemRows.length, files: fileRows.length },
     cutoff: cutoff.toISOString(),
+    batchLimit: BATCH_LIMIT,
+    moreToProcess: itemRows.length === BATCH_LIMIT || fileRows.length === BATCH_LIMIT,
   })
 }

@@ -30,7 +30,7 @@ export const createItem = orgAction
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
-      "item.created",
+      "items.created",
       { resourceType: "item", resourceId: id },
     )
     revalidatePath("/items")
@@ -64,7 +64,7 @@ export const updateItem = orgAction
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
-      "item.updated",
+      "items.updated",
       { resourceType: "item", resourceId: id, metadata: rest },
     )
     revalidatePath("/items")
@@ -101,7 +101,7 @@ export const deleteItem = orgAction
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
-      "item.deleted",
+      "items.deleted",
       { resourceType: "item", resourceId: parsedInput.id },
     )
     revalidatePath("/items")
@@ -134,7 +134,7 @@ export const restoreItem = orgAction
         ipAddress: ctx.ipAddress,
         userAgent: ctx.userAgent,
       },
-      "item.restored",
+      "items.restored",
       { resourceType: "item", resourceId: parsedInput.id },
     )
     revalidatePath("/items")

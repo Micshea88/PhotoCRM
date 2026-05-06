@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
-import { db } from "@/lib/db"
+import { getCurrentMember, getOrganizationById } from "@/modules/org/queries"
 import { DangerZone } from "@/modules/org/ui/danger-zone"
 
 export default async function DangerPage() {
@@ -9,16 +9,12 @@ export default async function DangerPage() {
   const orgId = session.session.activeOrganizationId
   if (!orgId) redirect("/onboarding/create-organization")
 
-  const member = await db.query.member.findFirst({
-    where: (m, { and, eq }) => and(eq(m.organizationId, orgId), eq(m.userId, session.user.id)),
-  })
+  const member = await getCurrentMember(orgId, session.user.id)
   if (member?.role !== "owner") {
     redirect("/settings/organization")
   }
 
-  const org = await db.query.organization.findFirst({
-    where: (o, { eq }) => eq(o.id, orgId),
-  })
+  const org = await getOrganizationById(orgId)
   if (!org) redirect("/onboarding/create-organization")
 
   return (

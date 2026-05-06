@@ -1,7 +1,21 @@
 import "server-only"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { invitation, member, organization } from "@/modules/auth/schema"
+
+export async function getOrganizationById(orgId: string) {
+  const [row] = await db.select().from(organization).where(eq(organization.id, orgId)).limit(1)
+  return row ?? null
+}
+
+export async function getCurrentMember(orgId: string, userId: string) {
+  const [row] = await db
+    .select()
+    .from(member)
+    .where(and(eq(member.organizationId, orgId), eq(member.userId, userId)))
+    .limit(1)
+  return row ?? null
+}
 
 export async function getUserOrganizations(userId: string) {
   return db

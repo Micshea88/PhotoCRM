@@ -2,8 +2,10 @@ import "server-only"
 import { createSafeActionClient, DEFAULT_SERVER_ERROR_MESSAGE } from "next-safe-action"
 import { z } from "zod"
 import { headers } from "next/headers"
+import * as Sentry from "@sentry/nextjs"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { log } from "@/lib/log"
 import { member } from "@/modules/auth/schema"
 import { and, eq } from "drizzle-orm"
 
@@ -33,11 +35,26 @@ const baseClient = createSafeActionClient({
     if (e instanceof ActionError) {
       return e.message
     }
-    // Sentry capture lands in Phase 9; for now console.error surfaces locally + Vercel logs.
-    console.error("[safe-action]", e)
+    // Unexpected errors: capture to Sentry AND log structured. The user gets
+    // the generic DEFAULT_SERVER_ERROR_MESSAGE so internals don't leak.
+    Sentry.captureException(e)
+    log.error(
+      { err: e instanceof Error ? { message: e.message, stack: e.stack } : e },
+      "safe-action error",
+    )
     return DEFAULT_SERVER_ERROR_MESSAGE
   },
 })
+
+/**
+ * IMPORTANT — every action chain MUST include `.inputSchema(zodSchema)`.
+ *
+ * `next-safe-action` does NOT enforce input validation by itself; skipping
+ * `.inputSchema()` means the action accepts any shape from the client. The
+ * `scripts/check-actions.mjs` static check (run by `pnpm verify --tier=1`)
+ * will fail the build if you forget. See `src/modules/items/actions.ts` for
+ * the canonical pattern.
+ */
 
 /** Action with no auth requirements (rare — only for genuinely public mutations). */
 export const action = baseClient

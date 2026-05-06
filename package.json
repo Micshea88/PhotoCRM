@@ -1,0 +1,14 @@
+{
+  "name": "pathway-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.10.0",
+  "scripts": {},
+  "dependencies": {},
+  "devDependencies": {}
+}

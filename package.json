@@ -34,6 +34,7 @@
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-slot": "^1.2.4",
+    "@react-email/components": "^1.0.12",
     "@t3-oss/env-nextjs": "^0.13.11",
     "better-auth": "^1.6.9",
     "class-variance-authority": "^0.7.1",
@@ -44,6 +45,8 @@
     "pg": "^8.20.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-email": "^6.1.1",
+    "resend": "^6.12.3",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.4.3"

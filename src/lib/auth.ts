@@ -2,6 +2,9 @@ import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
+import { sendEmail } from "@/lib/email"
+import { ResetPasswordEmail } from "@/emails/reset-password"
+import { VerifyEmail } from "@/emails/verify-email"
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
@@ -11,7 +14,24 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: env.NODE_ENV === "production",
     minPasswordLength: 12,
-    // sendResetPassword wired in Phase 3
+    sendResetPassword: async ({ user, url }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Reset your Pathway password",
+        react: ResetPasswordEmail({ url, userName: user.name }),
+      })
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Verify your Pathway email",
+        react: VerifyEmail({ url, userName: user.name }),
+      })
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days

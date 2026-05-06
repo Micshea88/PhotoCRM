@@ -224,10 +224,12 @@ export const createItem = orgAction.input(createItemSchema).handler(async ({ inp
 
 ## 8. Database Conventions
 
-- All **app-side** tables have: `id` (cuid2), `orgId` (where org-scoped), `createdAt`, `updatedAt`, `createdBy`, `updatedBy` (where user-attributable). Better Auth's own tables follow Better Auth's schema and are not subject to this rule.
-- Soft delete only where Sage explicitly needs it; default is hard delete with cascading FKs and `audit()` records as the receipt.
-- Migrations: `drizzle-kit generate` produces SQL files committed to `src/db/migrations/`. CI runs `drizzle-kit check` to catch drift. `drizzle-kit migrate` runs in a Vercel build hook.
-- Indexes: ship with sensible defaults (FKs indexed, `(orgId, createdAt)` composite where lists are time-ordered).
+- All **app-side** tables have: `id` (cuid2), `orgId` (where org-scoped), `createdAt`, `updatedAt`, `createdBy`, `updatedBy` (where user-attributable), `deletedAt`, `deletedBy` (always — see soft-delete rule below). Better Auth's own tables follow Better Auth's schema and are not subject to this rule.
+- **Soft delete is the default and only delete path for app-side tables.** Delete server actions set `deletedAt = now()` and `deletedBy = userId`; they never run `DELETE FROM`. A `restore<Resource>(id)` action template exists alongside `delete<Resource>(id)`.
+- All queries go through a `softDeleteFilter()` helper that automatically adds `WHERE deleted_at IS NULL`. To include deleted rows you must explicitly pass `{ withDeleted: true }`.
+- Foreign keys to soft-deletable parents use `ON DELETE RESTRICT` — accidental hard deletes are impossible.
+- A `purgeDeletedOlderThan(days)` cron job (default 90 days) is the **only** place hard deletes happen. It requires `CRON_SECRET` and writes an `audit_log` entry per purged row.
+- Indexes: ship with sensible defaults (FKs indexed, `(orgId, deletedAt, createdAt)` composite where lists are time-ordered).
 - No raw SQL in `app/` or `modules/<name>/ui/`. All DB access via `queries.ts` / `actions.ts`.
 
 ## 9. Background Jobs
@@ -276,8 +278,8 @@ Documented in `docs/handoff-checklist.md`: Sage toggles "require status checks" 
 
 `modules/audit/` ships:
 
-- `audit_log` table: `id, orgId, actorUserId, action, resourceType, resourceId, metadata jsonb, createdAt`.
-- `audit(ctx, action, payload)` helper — every state-changing action and job calls this.
+- `audit_log` table: `id, orgId, actorUserId, action, resourceType, resourceId, metadata jsonb, ipAddress, userAgent, createdAt`.
+- `audit(ctx, action, payload)` helper — every state-changing action and job calls this. The safe-action middleware extracts `ipAddress` and `userAgent` from request headers and passes them through `ctx` automatically; helpers don't need to thread them manually.
 - A `/settings/organization/audit` page (owners + admins) for the worked-example demonstration. Sage extends or hides as he wishes.
 
 ## 12. Files
@@ -342,9 +344,52 @@ Documented in `docs/handoff-checklist.md`:
 4. Get a Resend account; add domain; copy API key.
 5. Get a Sentry account (optional but recommended).
 6. Locally: `pnpm install`, then `pnpm setup` — interactive walkthrough fills `.env.local`.
-7. `pnpm db:push` — creates dev DB schema on your Neon dev branch.
-8. `pnpm dev` — runs locally on `:3000`.
-9. Open Claude Code; prompt your first feature.
+7. `docker compose up -d` — starts your local Postgres (this is the only DB Sage interacts with locally; production credentials live only in Vercel project env).
+8. `pnpm db:migrate` — applies migrations to your local DB.
+9. `pnpm dev` — runs locally on `:3000`.
+10. Open Claude Code; prompt your first feature.
+
+## 16a. Local Development Database
+
+**Sage never connects to the production database from his machine.** This is a hard rule.
+
+- The repo ships a `docker-compose.yml` that runs Postgres 16 on `localhost:5432` with a fixed dev password. `pnpm setup` walks Sage through `docker compose up -d` and writes `DATABASE_URL=postgres://postgres:postgres@localhost:5432/pathway_dev` to `.env.local`. He never sees a production connection string.
+- Production `DATABASE_URL` lives in Vercel project env vars only. Mike has access; Sage doesn't until/unless he needs to.
+- Integration tests use a separate `pathway_test` database on the same local container.
+- CI runs against a Postgres service container (already wired in `.github/workflows/ci.yml`).
+- A small startup guard in `src/lib/db.ts` warns if a non-`localhost` URL is detected with `NODE_ENV=development` — catches accidental misconfiguration.
+
+When Sage needs to inspect production data, he comes to Mike. That's the consulting moment.
+
+## 16b. Schema Migration Strategy
+
+Drizzle's file-based migration model + a Vercel build hook + a small set of conventions delivers clean, obvious, hard-to-break schema evolution.
+
+**The flow:**
+
+1. **Edit `src/db/schema.ts`** — Sage edits the schema (or copies a module template via the slash command).
+2. **`pnpm db:generate`** — drizzle-kit produces a new SQL file in `src/db/migrations/0XXX_descriptive_name.sql`. The file is plain SQL, reviewable by humans and Claude alike.
+3. **Sage reads the SQL.** This is the moment to catch surprises (column drops, table renames). The slash command `/migration-review` invokes Claude Code to scan the new migration and flag destructive operations.
+4. **`pnpm db:migrate`** — applies pending migrations to his local DB. Drizzle tracks applied migrations in a `__drizzle_migrations` table; only unapplied files run.
+5. **Commit + push.** CI runs the same migration against its test Postgres before tests; CI fails if migration fails.
+6. **Vercel deploy** — `vercel-build` script runs `drizzle-kit migrate` _before_ `next build`. If migration fails, the deploy fails atomically and the previous version stays live. There is no "half-deployed" state.
+
+**Conventions enforced in AGENTS.md and pre-commit hooks:**
+
+- **Migrations on `main` are immutable.** Never edit a committed migration file. Instead, create a new migration that fixes the issue.
+- **No destructive operations without a deploy cycle.** Dropping a column or renaming a table requires:
+  1. Migration A: add new column / new table; deploy code that writes to both.
+  2. Migration B (later release): backfill data; deploy code that reads from new only.
+  3. Migration C (later release): drop old column / rename / cleanup.
+     This is the "expand → migrate → contract" pattern. Documented as the rule with examples in `docs/architecture.md`.
+- **`drizzle-kit check` runs in CI.** Detects schema drift (i.e., schema.ts edited without a migration generated, or vice versa) and blocks merges.
+- **Local rollback is always possible.** `pnpm db:reset` drops + recreates the local dev DB and replays all migrations. Useful when an in-progress migration goes sideways during development.
+
+**What's deliberately NOT in scope:**
+
+- Automatic rollback of failed prod migrations. Drizzle migrations are single-file transactional where Postgres allows; if one fails mid-way, the transaction rolls back (Postgres-level). For migrations that genuinely need irreversible operations, the expand-migrate-contract pattern keeps risk minimal.
+- Zero-downtime guarantees for breaking schema changes. The expand-migrate-contract pattern handles this; we don't ship tooling beyond convention.
+- Online schema migration tools (gh-ost, pt-online-schema-change). Postgres's online ALTER is fast enough at expected scale; revisit if Pathway hits 100M+ rows.
 
 ## 17. Open Questions / Risks
 

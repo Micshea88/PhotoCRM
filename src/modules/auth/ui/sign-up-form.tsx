@@ -39,17 +39,21 @@ export function SignUpForm() {
       password: values.password,
       name: values.name,
     })
-    setSubmitting(false)
     if (result.error) {
+      setSubmitting(false)
       setError(result.error.message ?? "Sign-up failed")
       return
     }
-    if (process.env.NODE_ENV === "production") {
-      setVerificationSent(true)
+    // If a session/token came back, the user is signed in — proceed to onboarding.
+    // Otherwise email verification is required; surface the inbox prompt.
+    const session = await authClient.getSession()
+    setSubmitting(false)
+    if (session.data?.session) {
+      router.push("/onboarding/create-organization")
+      router.refresh()
       return
     }
-    router.push("/onboarding/create-organization")
-    router.refresh()
+    setVerificationSent(true)
   }
 
   if (verificationSent) {

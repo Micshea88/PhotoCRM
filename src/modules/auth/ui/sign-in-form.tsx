@@ -38,11 +38,23 @@ export function SignInForm() {
       email: values.email,
       password: values.password,
     })
-    setSubmitting(false)
     if (result.error) {
+      setSubmitting(false)
       setError(result.error.message ?? "Sign-in failed")
       return
     }
+    // Restore an active organization from the user's memberships if none is set.
+    // Better Auth doesn't persist activeOrganizationId across sign-out/sign-in.
+    const orgs = await authClient.organization.list()
+    const session = await authClient.getSession()
+    const hasActive = !!session.data?.session.activeOrganizationId
+    if (!hasActive && orgs.data && orgs.data.length > 0) {
+      const first = orgs.data[0]
+      if (first) {
+        await authClient.organization.setActive({ organizationId: first.id })
+      }
+    }
+    setSubmitting(false)
     router.push(redirectTo)
     router.refresh()
   }

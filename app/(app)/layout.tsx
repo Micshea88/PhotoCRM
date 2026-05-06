@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation"
+import { headers } from "next/headers"
 import type { ReactNode } from "react"
+import { auth } from "@/lib/auth"
 import { getSession } from "@/modules/auth/session"
 import { getUserOrganizations } from "@/modules/org/queries"
 import { AppSidebar } from "@/modules/org/ui/app-sidebar"
@@ -10,18 +12,24 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!session?.user) redirect("/sign-in")
 
   const organizations = await getUserOrganizations(session.user.id)
-  const activeOrgId = session.session.activeOrganizationId
+  let activeOrgId = session.session.activeOrganizationId
 
-  // The onboarding page handles its own "no active org" path; the rest of (app)
-  // requires one. We check by route: any nested route except /onboarding/* must
-  // have an active org.
-  // Layouts can't read the pathname server-side, so onboarding pages do their
-  // own redirect when an active org IS set, and other pages redirect to onboarding
-  // when one is NOT set. The app shell only renders when both auth + active org
-  // are present.
+  // After sign-out + sign-in, Better Auth doesn't restore the previous active
+  // organization. If the user is a member of one, auto-set it so we don't
+  // bounce them back to onboarding every login.
+  if (!activeOrgId && organizations.length > 0) {
+    const first = organizations[0]
+    if (first) {
+      await auth.api.setActiveOrganization({
+        headers: await headers(),
+        body: { organizationId: first.id },
+      })
+      activeOrgId = first.id
+    }
+  }
 
   if (!activeOrgId) {
-    // Render minimal shell-less layout — onboarding owns its own UI.
+    // No memberships — render shell-less so onboarding owns its UI.
     return <>{children}</>
   }
 

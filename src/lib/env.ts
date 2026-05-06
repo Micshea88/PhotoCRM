@@ -14,6 +14,9 @@ export const env = createEnv({
     QUEUE_SECRET: z.string().min(16),
     SENTRY_DSN: z.url().optional().or(z.literal("")),
     SENTRY_AUTH_TOKEN: z.string().optional(),
+    // Set to "false" in test/staging to bypass email verification on sign-up.
+    // Defaults to "true"; auth.ts only requires verification in production builds.
+    AUTH_REQUIRE_EMAIL_VERIFICATION: z.enum(["true", "false"]).default("true"),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -30,6 +33,7 @@ export const env = createEnv({
     QUEUE_SECRET: process.env.QUEUE_SECRET,
     SENTRY_DSN: process.env.SENTRY_DSN,
     SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
+    AUTH_REQUIRE_EMAIL_VERIFICATION: process.env.AUTH_REQUIRE_EMAIL_VERIFICATION,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   emptyStringAsUndefined: true,

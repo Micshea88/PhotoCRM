@@ -3,3 +3,4 @@
 export * from "@/modules/auth/schema"
 export * from "@/modules/audit/schema"
 export * from "@/modules/items/schema"
+export * from "@/modules/files/schema"

@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22
+  PNPM_VERSION: 10.10.0
+
+jobs:
+  verify:
+    name: Verify (typecheck, lint, unit, integration, build)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pathway_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/pathway_test
+      BETTER_AUTH_SECRET: test_secret_at_least_thirty_two_chars_long
+      BETTER_AUTH_URL: http://localhost:3000
+      RESEND_API_KEY: re_test_key
+      RESEND_FROM_EMAIL: noreply@example.com
+      BLOB_READ_WRITE_TOKEN: vercel_blob_test
+      CRON_SECRET: test_cron_secret_at_least_sixteen
+      QUEUE_SECRET: test_queue_secret_at_least_sixteen
+      SENTRY_DSN: ""
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify --tier=2
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: verify
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pathway_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/pathway_test
+      BETTER_AUTH_SECRET: test_secret_at_least_thirty_two_chars_long
+      BETTER_AUTH_URL: http://localhost:3000
+      RESEND_API_KEY: re_test_key
+      RESEND_FROM_EMAIL: noreply@example.com
+      BLOB_READ_WRITE_TOKEN: vercel_blob_test
+      CRON_SECRET: test_cron_secret_at_least_sixteen
+      QUEUE_SECRET: test_queue_secret_at_least_sixteen
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

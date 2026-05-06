@@ -1,8 +1,10 @@
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
+import { organization } from "better-auth/plugins"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
 import { sendEmail } from "@/lib/email"
+import { OrgInviteEmail } from "@/emails/org-invite"
 import { ResetPasswordEmail } from "@/emails/reset-password"
 import { VerifyEmail } from "@/emails/verify-email"
 
@@ -41,7 +43,23 @@ export const auth = betterAuth({
       maxAge: 60 * 5,
     },
   },
-  // organization plugin added in Phase 5
+  plugins: [
+    organization({
+      cancelPendingInvitationsOnReInvite: true,
+      sendInvitationEmail: async (data) => {
+        const inviteUrl = `${env.NEXT_PUBLIC_APP_URL}/accept-invite/${data.id}`
+        await sendEmail({
+          to: data.email,
+          subject: `You've been invited to ${data.organization.name}`,
+          react: OrgInviteEmail({
+            url: inviteUrl,
+            organizationName: data.organization.name,
+            inviterName: data.inviter.user.name,
+          }),
+        })
+      },
+    }),
+  ],
 })
 
 export type Auth = typeof auth

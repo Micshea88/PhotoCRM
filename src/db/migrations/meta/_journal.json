@@ -8,6 +8,13 @@
       "when": 1778095692113,
       "tag": "0000_white_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778096145755,
+      "tag": "0001_funny_guardsmen",
+      "breakpoints": true
     }
   ]
 }

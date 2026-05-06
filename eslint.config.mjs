@@ -17,6 +17,7 @@ export default tseslint.config(
       "*.config.mjs",
       "*.config.ts",
       "scripts/**/*.mjs",
+      ".claude/**",
     ],
   },
   js.configs.recommended,
@@ -79,6 +80,7 @@ export default tseslint.config(
       "src/db/**/*.ts",
       "tests/**/*.ts",
       "tests/**/*.tsx",
+      "scripts/**/*.ts",
     ],
     rules: {
       "no-restricted-imports": "off",
@@ -89,6 +91,12 @@ export default tseslint.config(
     rules: {
       "no-console": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
+    },
+  },
+  {
+    files: ["scripts/**/*.ts", "scripts/**/*.mjs"],
+    rules: {
+      "no-console": "off",
     },
   },
 )

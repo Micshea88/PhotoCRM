@@ -50,6 +50,10 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "no-console": ["error", { allow: ["warn", "error"] }],
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksVoidReturn: { attributes: false } },
+      ],
       "no-restricted-imports": [
         "error",
         {

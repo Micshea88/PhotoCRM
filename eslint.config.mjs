@@ -69,7 +69,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/modules/**/*.ts", "src/lib/**/*.ts", "src/db/**/*.ts"],
+    files: [
+      "src/modules/**/*.ts",
+      "src/lib/**/*.ts",
+      "src/db/**/*.ts",
+      "tests/**/*.ts",
+      "tests/**/*.tsx",
+    ],
     rules: {
       "no-restricted-imports": "off",
     },

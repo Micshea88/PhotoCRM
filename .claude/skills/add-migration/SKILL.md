@@ -62,5 +62,5 @@ When you've edited `src/db/schema.ts` (or a module's `schema.ts` re-exported fro
 ## Hard rules
 
 - **Migrations on `main` are immutable.** Never edit a committed migration. Always create a new one.
-- **Never run `db:push` against production.** That's the dev-only "blow away and reapply" command.
-- **Vercel runs `drizzle-kit migrate` on every deploy.** Migrations must be idempotent and reversible at the connection level (transactional where Postgres allows).
+- **The `db:push` script does NOT exist.** It was deliberately removed (see `TODO.md` C10) — using it would skip the migration trail entirely and silently diverge a developer's local DB from the migration files. Use `pnpm db:generate` + `pnpm db:migrate`.
+- **Vercel runs `drizzle-kit migrate` only on production deploys** (gated by `scripts/vercel-build.mjs`). Preview deploys do NOT run migrations against the prod DB. Migrations must be idempotent and reversible at the connection level (transactional where Postgres allows).

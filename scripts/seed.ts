@@ -21,7 +21,6 @@ import { config as loadEnv } from "dotenv"
 import { hashPassword } from "better-auth/crypto"
 import { account, member, organization, user } from "@/modules/auth/schema"
 import { items } from "@/modules/items/schema"
-import { assertDatabaseIsLocal } from "@/lib/db"
 import * as schema from "@/db/schema"
 
 loadEnv({ path: ".env.local" })
@@ -32,11 +31,33 @@ if (!url) {
   process.exit(1)
 }
 
-// Refuse to seed against anything but a local Postgres. The seed inserts a
-// real user with a known password; running this against staging/prod would
-// create a backdoor account.
+/**
+ * Refuse to seed against anything but a local Postgres. The seed inserts a
+ * real user with a known password; running this against staging/prod would
+ * create a backdoor account.
+ *
+ * Inlined here (not imported from `@/lib/db`) because importing `@/lib/db`
+ * transitively loads `@/lib/env`, which validates env vars at module-load
+ * time — and ESM imports run before this script's `loadEnv` call, so the
+ * validator would see an empty environment.
+ */
+function assertLocalDbUrl(connectionString: string): void {
+  let host: string
+  try {
+    host = new URL(connectionString).hostname
+  } catch {
+    throw new Error(`[seed] DATABASE_URL is not a valid URL: ${connectionString}`)
+  }
+  const allowed = new Set(["localhost", "127.0.0.1", "::1", "db", "postgres"])
+  if (!allowed.has(host)) {
+    throw new Error(
+      `[seed] refuses to run: DATABASE_URL host "${host}" is not local. Seed inserts a known-password user.`,
+    )
+  }
+}
+
 try {
-  assertDatabaseIsLocal(url)
+  assertLocalDbUrl(url)
 } catch (e) {
   console.error(e instanceof Error ? e.message : String(e))
   process.exit(1)

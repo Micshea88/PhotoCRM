@@ -1,18 +1,24 @@
 #!/usr/bin/env tsx
 /**
- * Idempotent seed script for local development.
- * - Creates a demo user (if not present).
- * - Creates a demo organization with the demo user as owner.
- * - Creates a few demo items.
+ * Idempotent dev seed.
  *
- * Run via: pnpm seed
+ * Creates:
+ *   - Demo user (demo@pathway.local) with a working scrypt password hash
+ *     that matches Better Auth's default scheme — sign in via /sign-in works.
+ *   - Credential account for the demo user
+ *   - Demo organization with the demo user as owner
+ *   - Three sample items
+ *
+ * Re-running is safe — skips anything that already exists, and rewrites the
+ * demo password if a previous seed left a placeholder hash.
  */
 
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { config as loadEnv } from "dotenv"
+import { hashPassword } from "better-auth/crypto"
 import { account, member, organization, user } from "@/modules/auth/schema"
 import { items } from "@/modules/items/schema"
 import * as schema from "@/db/schema"
@@ -26,29 +32,54 @@ if (!url) {
 }
 
 const DEMO_EMAIL = "demo@pathway.local"
-const DEMO_PASSWORD_HASH =
-  // bcrypt of "demopassword12345" — used so the demo account can sign in locally.
-  // Better Auth uses scrypt by default; in practice you'll sign up via the UI.
-  "$2a$10$placeholder.demoseed.bcrypt.hash"
+const DEMO_PASSWORD = "demopassword12345"
+const DEMO_NAME = "Demo User"
+const DEMO_ORG_SLUG = "demo-co"
+const DEMO_ORG_NAME = "Demo Co"
 
 async function main() {
   const pool = new Pool({ connectionString: url })
   const db = drizzle(pool, { schema })
 
   try {
-    // 1. Demo user
+    const passwordHash = await hashPassword(DEMO_PASSWORD)
+
+    // 1. Demo user + credential account
     let demoUserId: string
     const existingUser = await db.query.user.findFirst({
       where: eq(user.email, DEMO_EMAIL),
     })
+
     if (existingUser) {
       demoUserId = existingUser.id
-      console.log(`User ${DEMO_EMAIL} already exists (${demoUserId})`)
+      console.log(`✓ User ${DEMO_EMAIL} already exists (${demoUserId})`)
+      // Refresh the credential password so a previous broken seed becomes usable.
+      const existingCredential = await db.query.account.findFirst({
+        where: and(eq(account.userId, demoUserId), eq(account.providerId, "credential")),
+      })
+      if (existingCredential) {
+        await db
+          .update(account)
+          .set({ password: passwordHash, updatedAt: new Date() })
+          .where(eq(account.id, existingCredential.id))
+        console.log(`  → Refreshed credential password`)
+      } else {
+        await db.insert(account).values({
+          id: createId(),
+          userId: demoUserId,
+          accountId: demoUserId,
+          providerId: "credential",
+          password: passwordHash,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        console.log(`  → Added credential account`)
+      }
     } else {
       demoUserId = createId()
       await db.insert(user).values({
         id: demoUserId,
-        name: "Demo User",
+        name: DEMO_NAME,
         email: DEMO_EMAIL,
         emailVerified: true,
       })
@@ -57,26 +88,28 @@ async function main() {
         userId: demoUserId,
         accountId: demoUserId,
         providerId: "credential",
-        password: DEMO_PASSWORD_HASH,
+        password: passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
-      console.log(`Created user ${DEMO_EMAIL} (${demoUserId})`)
-      console.log("  → Sign in via /sign-up to set a real password")
+      console.log(`✓ Created user ${DEMO_EMAIL} with credential account`)
     }
 
-    // 2. Demo org
+    // 2. Demo organization + membership
     let demoOrgId: string
     const existingOrg = await db.query.organization.findFirst({
-      where: eq(organization.slug, "demo-co"),
+      where: eq(organization.slug, DEMO_ORG_SLUG),
     })
+
     if (existingOrg) {
       demoOrgId = existingOrg.id
-      console.log(`Org demo-co already exists (${demoOrgId})`)
+      console.log(`✓ Org ${DEMO_ORG_SLUG} already exists (${demoOrgId})`)
     } else {
       demoOrgId = createId()
       await db.insert(organization).values({
         id: demoOrgId,
-        name: "Demo Co",
-        slug: "demo-co",
+        name: DEMO_ORG_NAME,
+        slug: DEMO_ORG_SLUG,
         createdAt: new Date(),
       })
       await db.insert(member).values({
@@ -86,19 +119,21 @@ async function main() {
         role: "owner",
         createdAt: new Date(),
       })
-      console.log(`Created org demo-co (${demoOrgId})`)
+      console.log(`✓ Created org ${DEMO_ORG_NAME} (${demoOrgId}) with ${DEMO_EMAIL} as owner`)
     }
 
     // 3. Demo items
     const existingItems = await db.query.items.findMany({
       where: eq(items.organizationId, demoOrgId),
     })
+
     if (existingItems.length === 0) {
-      for (const sample of [
+      const samples = [
         { name: "Welcome to Pathway", status: "active" as const },
         { name: "First draft idea", status: "draft" as const },
         { name: "An archived thought", status: "archived" as const },
-      ]) {
+      ]
+      for (const sample of samples) {
         await db.insert(items).values({
           id: createId(),
           organizationId: demoOrgId,
@@ -109,10 +144,14 @@ async function main() {
           updatedBy: demoUserId,
         })
       }
-      console.log("Inserted 3 demo items.")
+      console.log(`✓ Inserted ${String(samples.length)} demo items`)
     } else {
-      console.log(`${String(existingItems.length)} items already in demo-co.`)
+      console.log(`✓ ${String(existingItems.length)} items already in ${DEMO_ORG_SLUG}`)
     }
+
+    console.log("\nSeed complete. Sign in with:")
+    console.log(`  email:    ${DEMO_EMAIL}`)
+    console.log(`  password: ${DEMO_PASSWORD}`)
   } finally {
     await pool.end()
   }

@@ -5,6 +5,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     tsconfigPaths: true,
+    alias: {
+      "server-only": new URL("./tests/helpers/server-only-shim.ts", import.meta.url).pathname,
+    },
   },
   test: {
     setupFiles: ["./vitest.setup.ts"],

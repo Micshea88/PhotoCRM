@@ -15,6 +15,13 @@
       "when": 1778096145755,
       "tag": "0001_funny_guardsmen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778096469935,
+      "tag": "0002_aromatic_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

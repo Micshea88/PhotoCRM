@@ -43,10 +43,17 @@ const pool =
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
-    // Per-session timeouts: prevents a runaway query from holding a connection
-    // (and any locks it took) indefinitely. 30s statement, 5s lock.
-    options: "-c statement_timeout=30000 -c lock_timeout=5000",
   })
+
+// Per-session timeouts: prevents a runaway query from holding a connection
+// (and any locks it took) indefinitely. 30s statement, 5s lock. Applied via
+// SET after connect rather than startup `options` so Neon's pooled endpoint
+// (pgbouncer) doesn't reject the parameter.
+if (!globalForDb.pool) {
+  pool.on("connect", (client) => {
+    void client.query("SET statement_timeout = 30000; SET lock_timeout = 5000;")
+  })
+}
 
 if (env.NODE_ENV !== "production") globalForDb.pool = pool
 

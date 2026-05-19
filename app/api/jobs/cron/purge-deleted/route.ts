@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { verifyCronAuth } from "@/modules/jobs/cron-auth"
 import { items } from "@/modules/items/schema"
 import { files } from "@/modules/files/schema"
+import { paymentInstallments } from "@/modules/invoices/schema"
 import { audit } from "@/modules/audit/audit"
 import { blob } from "@/lib/blob"
 import { log } from "@/lib/log"
@@ -99,11 +100,49 @@ export async function GET(request: Request) {
     }
   }
 
+  // -------- Payment installments --------
+  const installmentRows = await db
+    .select({
+      id: paymentInstallments.id,
+      organizationId: paymentInstallments.organizationId,
+    })
+    .from(paymentInstallments)
+    .where(and(isNotNull(paymentInstallments.deletedAt), lt(paymentInstallments.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const installmentOrgCounts = new Map<string, number>()
+  for (const r of installmentRows) {
+    installmentOrgCounts.set(
+      r.organizationId,
+      (installmentOrgCounts.get(r.organizationId) ?? 0) + 1,
+    )
+  }
+  for (const [orgId, count] of installmentOrgCounts) {
+    await audit({ db, organizationId: orgId, actorUserId: null }, "purge.payment_installments", {
+      metadata: { count, retentionDays: RETENTION_DAYS },
+    })
+  }
+  if (installmentRows.length > 0) {
+    await db.delete(paymentInstallments).where(
+      inArray(
+        paymentInstallments.id,
+        installmentRows.map((r) => r.id),
+      ),
+    )
+  }
+
   return Response.json({
     ok: true,
-    purged: { items: itemRows.length, files: fileRows.length },
+    purged: {
+      items: itemRows.length,
+      files: fileRows.length,
+      paymentInstallments: installmentRows.length,
+    },
     cutoff: cutoff.toISOString(),
     batchLimit: BATCH_LIMIT,
-    moreToProcess: itemRows.length === BATCH_LIMIT || fileRows.length === BATCH_LIMIT,
+    moreToProcess:
+      itemRows.length === BATCH_LIMIT ||
+      fileRows.length === BATCH_LIMIT ||
+      installmentRows.length === BATCH_LIMIT,
   })
 }

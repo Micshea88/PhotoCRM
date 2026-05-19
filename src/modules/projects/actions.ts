@@ -17,6 +17,7 @@ import {
   instantiateProjectFromTemplate as instantiateProjectFromTemplateFn,
   recomputeProjectTaskDueDates,
 } from "./instantiation"
+import { recomputeProjectPaymentSchedule } from "@/modules/invoices/recompute-payment-schedule"
 import {
   addProjectContactInput,
   addProjectPhotographerInput,
@@ -236,9 +237,27 @@ export const updateProject = orgAction
     }
     // If primary_date moved, shift every non-overridden templated task's
     // due_date in the same transaction (Tech Arch §4 recompute pass).
-    let recomputeStats: Awaited<ReturnType<typeof recomputeProjectTaskDueDates>> | null = null
+    let taskRecomputeStats: Awaited<ReturnType<typeof recomputeProjectTaskDueDates>> | null = null
     if (rest.primaryDate !== undefined) {
-      recomputeStats = await recomputeProjectTaskDueDates(ctx.db, id)
+      taskRecomputeStats = await recomputeProjectTaskDueDates(ctx.db, id)
+    }
+    // If any money input changed OR primary_date moved, recompute the
+    // payment schedule (Tech Arch §4 — the second half of the recompute
+    // engine; primitives shared, orchestration separate per
+    // src/lib/recompute/README.md). Touches project.*_cents AND the
+    // payment_installments rows for non-overridden installments.
+    let paymentRecomputeStats: Awaited<ReturnType<typeof recomputeProjectPaymentSchedule>> | null =
+      null
+    if (
+      rest.lineItems !== undefined ||
+      rest.packageBasePriceCents !== undefined ||
+      rest.discountType !== undefined ||
+      rest.discountValue !== undefined ||
+      rest.taxRateBps !== undefined ||
+      rest.taxSign !== undefined ||
+      rest.primaryDate !== undefined
+    ) {
+      paymentRecomputeStats = await recomputeProjectPaymentSchedule(ctx.db, id)
     }
     await audit(
       {
@@ -252,7 +271,11 @@ export const updateProject = orgAction
       {
         resourceType: "project",
         resourceId: id,
-        metadata: recomputeStats ? { ...rest, recompute: recomputeStats } : rest,
+        metadata: {
+          ...rest,
+          ...(taskRecomputeStats ? { taskRecompute: taskRecomputeStats } : {}),
+          ...(paymentRecomputeStats ? { paymentRecompute: paymentRecomputeStats } : {}),
+        },
       },
     )
     revalidatePath("/events")

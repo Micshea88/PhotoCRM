@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { log } from "@/lib/log"
 import { seedTerminologyForOrg } from "@/modules/terminology/seed"
 import { seedMemberRoleForOrgOwner } from "@/modules/rbac/seed"
+import { seedDefaultPipelines } from "@/modules/pipelines/seed"
 
 /**
  * Runs once per newly-created organization, from Better Auth's
@@ -38,6 +39,7 @@ export async function seedNewOrganization(orgId: string, creatorUserId: string):
       await tx.execute(sql`SELECT set_config('app.current_role', 'owner', true)`)
       await seedTerminologyForOrg(tx, orgId)
       await seedMemberRoleForOrgOwner(tx, orgId, creatorUserId)
+      await seedDefaultPipelines(tx, orgId)
     })
     log.info({ orgId, creatorUserId }, "seedNewOrganization: complete")
   } catch (err) {

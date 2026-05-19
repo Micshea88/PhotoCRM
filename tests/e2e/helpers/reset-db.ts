@@ -16,6 +16,8 @@ const TABLES_TO_TRUNCATE = [
   "items",
   "member_permission_override",
   "member_role",
+  "pipeline_stages",
+  "pipelines",
   "terminology_map",
   "invitation",
   "member",

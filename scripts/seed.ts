@@ -23,6 +23,7 @@ import { account, member, organization, user } from "@/modules/auth/schema"
 import { items } from "@/modules/items/schema"
 import { seedTerminologyForOrg } from "@/modules/terminology/seed"
 import { seedMemberRoleForOrgOwner } from "@/modules/rbac/seed"
+import { seedDefaultPipelines } from "@/modules/pipelines/seed"
 import * as schema from "@/db/schema"
 
 loadEnv({ path: ".env.local" })
@@ -171,7 +172,11 @@ async function main() {
     await seedMemberRoleForOrgOwner(db, demoOrgId, demoUserId)
     console.log(`✓ Seeded rbac owner row for ${DEMO_ORG_SLUG}`)
 
-    // 5. Demo items
+    // 5. Default pipelines + stages (5 pipelines, ~60 stages, idempotent).
+    await seedDefaultPipelines(db, demoOrgId)
+    console.log(`✓ Seeded default pipelines for ${DEMO_ORG_SLUG}`)
+
+    // 6. Demo items
     const existingItems = await db.query.items.findMany({
       where: eq(items.organizationId, demoOrgId),
     })

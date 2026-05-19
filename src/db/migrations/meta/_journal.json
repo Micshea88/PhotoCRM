@@ -71,6 +71,13 @@
       "when": 1779163285343,
       "tag": "0009_tranquil_tiger_shark",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779164887292,
+      "tag": "0010_curvy_blizzard",
+      "breakpoints": true
     }
   ]
 }

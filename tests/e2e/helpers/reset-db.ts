@@ -23,6 +23,8 @@ const TABLES_TO_TRUNCATE = [
   "project_photographers",
   "project_stages",
   "project_sub_events",
+  "project_template_task_items",
+  "project_templates",
   "projects",
   "task_checklist_items",
   "task_dependencies",

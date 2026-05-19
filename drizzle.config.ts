@@ -4,9 +4,14 @@ import { defineConfig } from "drizzle-kit"
 loadEnv({ path: ".env.local" })
 loadEnv({ path: ".env" })
 
-const url = process.env.DATABASE_URL
+// drizzle-kit runs DDL. In local dev we connect as the docker superuser
+// (DATABASE_URL_ADMIN) because the app's runtime URL is a non-privileged
+// role that can't CREATE TABLE / ALTER POLICY. In production (Vercel build)
+// only DATABASE_URL is set, against a Neon role that owns the schema — that
+// role can do DDL too, so we fall back to DATABASE_URL there.
+const url = process.env.DATABASE_URL_ADMIN ?? process.env.DATABASE_URL
 if (!url) {
-  throw new Error("DATABASE_URL is required for drizzle-kit. Set it in .env.local.")
+  throw new Error("Set DATABASE_URL_ADMIN (preferred for local dev) or DATABASE_URL in .env.local.")
 }
 
 export default defineConfig({

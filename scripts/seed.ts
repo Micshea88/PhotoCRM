@@ -25,9 +25,14 @@ import * as schema from "@/db/schema"
 
 loadEnv({ path: ".env.local" })
 
-const url = process.env.DATABASE_URL
+// Seed runs as the admin role. The runtime DATABASE_URL is a non-privileged
+// role subject to RLS; seeding cross-org demo data + RLS-protected rows
+// requires the BYPASSRLS-equipped admin role (or per-row SET LOCAL
+// app.current_org gymnastics, which would be needless complexity for a dev
+// seed). Refuses if the admin URL is missing.
+const url = process.env.DATABASE_URL_ADMIN
 if (!url) {
-  console.error("DATABASE_URL is required (set it in .env.local).")
+  console.error("DATABASE_URL_ADMIN is required (set it in .env.local).")
   process.exit(1)
 }
 

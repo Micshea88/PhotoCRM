@@ -21,6 +21,7 @@ import { config as loadEnv } from "dotenv"
 import { hashPassword } from "better-auth/crypto"
 import { account, member, organization, user } from "@/modules/auth/schema"
 import { items } from "@/modules/items/schema"
+import { seedTerminologyForOrg } from "@/modules/terminology/seed"
 import * as schema from "@/db/schema"
 
 loadEnv({ path: ".env.local" })
@@ -159,7 +160,11 @@ async function main() {
       console.log(`✓ Created org ${DEMO_ORG_NAME} (${demoOrgId}) with ${DEMO_EMAIL} as owner`)
     }
 
-    // 3. Demo items
+    // 3. Terminology pack (idempotent; photographer pack — see modules/terminology/seed.ts)
+    await seedTerminologyForOrg(db, demoOrgId)
+    console.log(`✓ Seeded terminology pack for ${DEMO_ORG_SLUG}`)
+
+    // 4. Demo items
     const existingItems = await db.query.items.findMany({
       where: eq(items.organizationId, demoOrgId),
     })

@@ -5,9 +5,12 @@ import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
+import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { companies } from "@/modules/companies/schema"
+import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
+import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
 import { contacts } from "./schema"
 import {
   createContactInput,
@@ -16,8 +19,42 @@ import {
   updateContactInput,
 } from "./types"
 
+const CONTACT_RECORD_TYPE = "contact"
+
 /** Loose db type — accepts the pool-backed db or a PgTransaction. */
 type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Validate custom_fields payload against the org's custom_field_definitions
+ * for `record_type='contact'`. Returns the parsed payload (with unknown
+ * keys dropped) or throws ActionError("VALIDATION") with the offending
+ * field name.
+ *
+ * Skips the DB roundtrip entirely when the payload is empty/null —
+ * common case for contacts created without custom data.
+ */
+async function validateContactCustomFields(
+  customFields: Record<string, unknown> | null | undefined,
+): Promise<Record<string, unknown> | null> {
+  if (!customFields || Object.keys(customFields).length === 0) return null
+  const defs = await listFieldDefinitionsForRecordType(CONTACT_RECORD_TYPE)
+  const defMap = new Map(defs.map((d) => [d.id, d]))
+  try {
+    return validateCustomFieldsPayload(defMap, customFields, {
+      onUnknownKey: (defId) => {
+        log.warn(
+          { defId, recordType: CONTACT_RECORD_TYPE },
+          "custom_fields: dropped value for unknown definition id (likely soft-deleted)",
+        )
+      },
+    })
+  } catch (err) {
+    throw new ActionError(
+      "VALIDATION",
+      err instanceof Error ? err.message : "Invalid custom field value",
+    )
+  }
+}
 
 /**
  * Verify a company reference points at a non-deleted company in the active
@@ -53,6 +90,7 @@ export const createContact = orgAction
   .inputSchema(createContactInput)
   .action(async ({ parsedInput, ctx }) => {
     await assertCompanyInOrg(ctx.db, parsedInput.companyId, ctx.activeOrg.id)
+    const validatedCustomFields = await validateContactCustomFields(parsedInput.customFields)
     const id = createId()
     await ctx.db.insert(contacts).values({
       id,
@@ -79,7 +117,7 @@ export const createContact = orgAction
       ownerUserId: parsedInput.ownerUserId ?? ctx.session.user.id,
       notes: parsedInput.notes ?? null,
       internalNotes: parsedInput.internalNotes ?? null,
-      customFields: parsedInput.customFields ?? null,
+      customFields: validatedCustomFields,
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
@@ -114,10 +152,20 @@ export const updateContact = orgAction
     if (rest.companyId !== undefined) {
       await assertCompanyInOrg(ctx.db, rest.companyId, ctx.activeOrg.id)
     }
+    // Only re-validate when the caller is actually mutating custom_fields.
+    // If `customFields` is omitted from the update payload, leave existing
+    // values untouched.
+    let patchedRest: typeof rest = rest
+    if ("customFields" in rest) {
+      patchedRest = {
+        ...rest,
+        customFields: await validateContactCustomFields(rest.customFields),
+      }
+    }
     const result = await ctx.db
       .update(contacts)
       .set({
-        ...rest,
+        ...patchedRest,
         updatedAt: new Date(),
         updatedBy: ctx.session.user.id,
       })

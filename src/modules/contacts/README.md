@@ -61,20 +61,6 @@ deferred" §3.
 
 ## What's deferred (named consumers)
 
-- **Per-field-type `custom_fields` value validation.** Today
-  `custom_fields jsonb` accepts any shape; only the schema's loose
-  jsonb constraint is enforced. The custom-fields module README flags
-  this as "lands when the first host module needs it" — that's
-  literally this module, and the contracts module + the events module
-  will both want it for full client-data correctness. The
-  `validateCustomFieldValue(def, value)` helper goes in
-  `src/modules/custom-fields/types.ts` or a sibling `validators.ts`;
-  it maps each `FieldType` → a Zod schema and returns the parsed
-  value or throws an `ActionError("VALIDATION")`. Hooks in:
-  `createContact` and `updateContact` actions iterate `customFields`
-  and validate each entry against `getFieldDefinition(id)`. Likely a
-  half-day of focused work; tracked as the next immediate followup
-  after contacts ships.
 - **Activity timeline.** Sourced from messages / payments /
   workflow_executions / etc., not a separate table. The detail page
   renders it by querying those tables filtered to this contact_id.
@@ -103,11 +89,16 @@ deferred" §3.
 3. **`referred_by_contact_id` is self-referential + ON DELETE SET
    NULL.** A referring contact being purged null-fills the pointer
    on the referred contact rather than cascading.
-4. **`custom_fields` accepts arbitrary shape in V1.** Once the
-   per-field-type validator lands (next followup), the action
-   inputs gain `.superRefine` that checks each entry against
-   `getFieldDefinition(id)`. Until then, callers are trusted to write
-   well-formed values.
+4. **`custom_fields` values are validated per-FieldType at write time.**
+   `createContact` and `updateContact` look up
+   `custom_field_definitions` for `record_type='contact'` and run each
+   value through `validateCustomFieldsPayload` (in
+   `src/modules/custom-fields/validators.ts`). A bad value throws
+   `ActionError("VALIDATION")` with the field name; an unknown
+   definition id is dropped with a log warning (handles the
+   soft-deleted-between-render-and-submit case). When a future module
+   ships its own `custom_fields` writes, it must follow the same
+   pattern — there is no DB-side enforcement.
 5. **Domain values are NOT subject to terminology resolution.**
    "Engagement Shoot" as a future event type, contact types like
    "Vendor"/"Active Client", lifecycle statuses like "Do Not Contact"

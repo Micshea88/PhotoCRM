@@ -17,6 +17,10 @@ the definition's `id`. Per Requirements §4.3 and Build Spec §2.
 - `queries.ts` — `listFieldDefinitionsForRecordType(recordType)` returns
   ordered definitions for one record type; `getFieldDefinition(id)`
   resolves a single definition for value validation.
+- `validators.ts` — `validateCustomFieldValue(definition, value)` returns
+  the parsed value or throws per-FieldType; `validateCustomFieldsPayload(defMap, payload, opts?)`
+  validates an entire `custom_fields jsonb` payload (drops unknown keys,
+  throws on value mismatch). Pure functions; no infra dependencies.
 
 ## Architecture (read this before touching values)
 
@@ -57,10 +61,6 @@ the definition's `id`. Per Requirements §4.3 and Build Spec §2.
 - **Formula evaluator.** STEP 2 Q8 flagged this as a Phase 4 stretch.
   Adding it requires: expression parser, type system, dependency tracking
   for recompute on input change, cycle detection. Substantial.
-- **Per-host-table validation helpers.** A `validateCustomFieldValue(def,
-value)` helper that maps each `FieldType` to a Zod schema lands when the
-  contacts module ships and needs it. Until then, this module is read-only
-  to the rest of the codebase.
 - **`actions.ts`.** No user-facing mutations in V1 from this module. When
   the admin UI lands, its server actions go in Phase 4's settings module
   (or — if simpler — in `src/modules/custom-fields/actions.ts` with

@@ -8,6 +8,7 @@ import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { projectTemplates, projectTemplateTaskItems } from "./schema"
+import { workflows } from "@/modules/workflows/schema"
 import {
   addTemplateTaskItemInput,
   createProjectTemplateInput,
@@ -20,6 +21,39 @@ import {
 } from "./types"
 
 type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Validate every workflow id in the array exists in the same org and is
+ * not soft-deleted. Defers to the workflows table (lives in the
+ * workflows module). Closes the deferral named in
+ * `project-templates/README.md` "What's deferred — Default-workflow
+ * validation" — landed alongside module 15.
+ */
+async function assertWorkflowsExistInOrg(
+  db: DbHandle,
+  workflowIds: string[] | null | undefined,
+  orgId: string,
+) {
+  if (!workflowIds || workflowIds.length === 0) return
+  const rows = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(
+      and(
+        inArray(workflows.id, workflowIds),
+        eq(workflows.organizationId, orgId),
+        isNull(workflows.deletedAt),
+      ),
+    )
+  const foundIds = new Set(rows.map((r) => r.id))
+  const missing = workflowIds.filter((id) => !foundIds.has(id))
+  if (missing.length > 0) {
+    throw new ActionError(
+      "VALIDATION",
+      `defaultWorkflowIds references unknown or deleted workflows: ${missing.join(", ")}`,
+    )
+  }
+}
 
 async function assertTemplateInOrg(db: DbHandle, templateId: string, orgId: string) {
   const [row] = await db
@@ -72,6 +106,9 @@ export const createProjectTemplate = orgAction
   .metadata({ actionName: "project_templates.create" })
   .inputSchema(createProjectTemplateInput)
   .action(async ({ parsedInput, ctx }) => {
+    // defaultWorkflowIds FK validation — closes the project-templates
+    // README deferral named alongside module 15.
+    await assertWorkflowsExistInOrg(ctx.db, parsedInput.defaultWorkflowIds, ctx.activeOrg.id)
     const id = createId()
     await ctx.db.insert(projectTemplates).values({
       id,
@@ -121,7 +158,10 @@ export const updateProjectTemplate = orgAction
     if (rest.packageDefaults !== undefined) patch.packageDefaults = rest.packageDefaults
     if (rest.paymentScheduleDefaults !== undefined)
       patch.paymentScheduleDefaults = rest.paymentScheduleDefaults
-    if (rest.defaultWorkflowIds !== undefined) patch.defaultWorkflowIds = rest.defaultWorkflowIds
+    if (rest.defaultWorkflowIds !== undefined) {
+      await assertWorkflowsExistInOrg(ctx.db, rest.defaultWorkflowIds, ctx.activeOrg.id)
+      patch.defaultWorkflowIds = rest.defaultWorkflowIds
+    }
     if (rest.questionnaireId !== undefined) patch.questionnaireId = rest.questionnaireId
     if (rest.contractTemplateId !== undefined) patch.contractTemplateId = rest.contractTemplateId
     if ("customFields" in rest) patch.customFields = rest.customFields ?? null

@@ -3,6 +3,8 @@
   "regions": ["iad1"],
   "crons": [
     { "path": "/api/jobs/cron/heartbeat", "schedule": "0 * * * *" },
-    { "path": "/api/jobs/cron/purge-deleted", "schedule": "0 4 * * *" }
+    { "path": "/api/jobs/cron/purge-deleted", "schedule": "0 4 * * *" },
+    { "path": "/api/jobs/cron/workflow-trigger-matcher", "schedule": "* * * * *" },
+    { "path": "/api/jobs/cron/workflow-execute", "schedule": "* * * * *" }
   ]
 }

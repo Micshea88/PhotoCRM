@@ -115,6 +115,12 @@ Strike-through + the closing commit hash when complete.
 | AsyncLocalStorage → RSC end-to-end propagation test                                                                              | summary of pre-compaction work        |
 | Pipelines admin role-gate (manager-and-above write) if config drift becomes an issue                                             | `pipelines/README.md` "Deferred"      |
 
+### Phased integration strategy (lightweight V1 → full later)
+
+| Strategy                                                                                                                                                                     | Source                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Email / Instagram / e-sign — locked V1 vs LATER decisions (Resend outbound only; manual IG lead entry; OSS contract templates + OSS e-sign with 4-point capture requirement) | [`docs/INTEGRATION_STRATEGY.md`](./INTEGRATION_STRATEGY.md) |
+
 ### Externally-blocked items (user-owned, not buildable by an agent)
 
 | Item                                                           | Owner                        |

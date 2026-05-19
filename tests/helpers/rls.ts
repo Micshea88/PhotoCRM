@@ -19,7 +19,7 @@ import { Pool, type PoolClient } from "pg"
  *   - The transaction always ROLLBACKs at the end; tests cannot mutate state.
  */
 export async function withRawOrgContext<T>(
-  args: { orgId: string; role: string },
+  args: { orgId: string; role: string; userId?: string | null },
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   if (!process.env.DATABASE_URL) {
@@ -32,6 +32,7 @@ export async function withRawOrgContext<T>(
     try {
       await client.query("SELECT set_config('app.current_org', $1, true)", [args.orgId])
       await client.query("SELECT set_config('app.current_role', $1, true)", [args.role])
+      await client.query("SELECT set_config('app.current_user_id', $1, true)", [args.userId ?? ""])
       return await fn(client)
     } finally {
       await client.query("ROLLBACK")

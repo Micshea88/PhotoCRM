@@ -1,8 +1,12 @@
 import "server-only"
 import { and, eq } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { withOrgContext } from "@/lib/org-context"
+import type * as schema from "@/db/schema"
 import { memberRole, memberPermissionOverride } from "./schema"
 import { type ExtendedRole, type PermissionKey, EXTENDED_ROLES, PERMISSION_KEYS } from "./types"
+
+type DbHandle = NodePgDatabase<typeof schema>
 
 /**
  * Role-defaults table: which permissions each role grants by default. The
@@ -70,6 +74,31 @@ export async function getExtendedMemberRole(userId: string): Promise<ExtendedRol
       ? (row.role as ExtendedRole)
       : null
   })
+}
+
+/**
+ * Parametric variant of `getExtendedMemberRole` for callers that already
+ * have a transaction handle with `app.current_org` set — specifically
+ * `orgAction` in src/lib/safe-action.ts, which needs to look up the
+ * extended role mid-middleware (before `ctx.activeOrg` is finalized).
+ *
+ * Returns null if no member_role row exists; callers should fall back via
+ * `extendedFromBetterAuth(m.role)` per the documented Layer 2 in
+ * `rbac/README.md`.
+ */
+export async function lookupExtendedMemberRole(
+  tx: DbHandle,
+  userId: string,
+): Promise<ExtendedRole | null> {
+  const [row] = await tx
+    .select({ role: memberRole.role })
+    .from(memberRole)
+    .where(eq(memberRole.userId, userId))
+    .limit(1)
+  if (!row) return null
+  return (EXTENDED_ROLES as readonly string[]).includes(row.role)
+    ? (row.role as ExtendedRole)
+    : null
 }
 
 /**

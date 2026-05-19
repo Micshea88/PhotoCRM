@@ -79,19 +79,29 @@ dissociate first. (Soft-deleting the contact still works; the
 association just points at a tombstoned contact until the cron skips
 that contact too.)
 
-## RLS — single org-isolation policy on each of the 4 tables
+## RLS — org-isolation + assignment-scoped overlay (as of commit 14a)
 
-Same shape as companies/contacts/pipelines. **Phase 4 (invoices
-module commit) will add the assignment-scoped overlay**:
+The `projects` table now carries four per-operation policies
+(`projects_select` / `projects_insert` / `projects_update` /
+`projects_delete`) replacing the single `projects_org_isolation`
+policy. Per migration `0015_assignment_scoped_rls_overlay`:
 
-- Photographer / contractor / editor sees only the projects they're
-  assigned to (via `project_photographers`).
-- And only the contacts on those projects (a second policy on
-  `contacts` joining through `project_contacts`).
+- Owner / admin / manager / accountant / client_limited: full
+  org-scoped read + write (unchanged).
+- Photographer / contractor / editor: **read** only projects they
+  are assigned to (via `project_photographers.user_id`); **write**
+  blocked entirely.
 
-That overlay is **explicitly deferred per scope discipline** — the
-user's last instruction said "do not pull it forward." The data and
-foreign keys for it are in place; only the SQL policies are missing.
+The three sub-tables (`project_contacts`, `project_photographers`,
+`project_sub_events`) continue to use their original single
+org-isolation policy. The overlay scopes through them via JOINs but
+their own policies are unchanged.
+
+The org-isolation predicate is the OUTER AND-clamp on every new
+projects policy, so the overlay cannot loosen cross-org isolation —
+proven by the cross-org attack test in
+`tests/integration/assignment-scoped-rls.test.ts` and by the DO-block
+probe inside the migration.
 
 ## Hard rules
 
@@ -121,12 +131,10 @@ foreign keys for it are in place; only the SQL policies are missing.
   `primary_date` and writes sunrise/sunset/golden hour.
 - **Geocoding fill** — `primary_venue_coordinates` is null until the
   geocoder runs against `primary_venue_address`. Phase 2.
-- **Assignment-scoped RLS overlay** — second policy on this + contacts
-  tables, joining through `project_photographers`. Lands with the
-  invoices module commit (financial-table RLS). Until then,
-  photographer/contractor/editor roles see the whole org's projects;
-  the application UI can pre-filter for them via
-  `listProjectsByPhotographer`.
+- ~~**Assignment-scoped RLS overlay**~~ — **CLOSED** in commit 14a (migration
+  `0015_assignment_scoped_rls_overlay`). Photographer/contractor/editor now
+  see only projects they're project-photographer-assigned to, and only the
+  contacts on those projects. See "RLS" section above.
 - **Opportunities** — the per-pipeline tracking records that point at
   a project. Next Phase 2 module.
 - **Tasks + dependencies + checklists** — Phase 2, sits on top of

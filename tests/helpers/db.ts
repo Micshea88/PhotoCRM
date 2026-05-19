@@ -30,12 +30,21 @@ export async function withTestDb<T>(fn: (db: TestDb) => Promise<T>): Promise<T> 
  * must be set before any INSERT/UPDATE/DELETE on a table whose RLS policy
  * uses it (i.e., every org-scoped table). `app.current_role` is required
  * by tables with an admin-write gate (rbac); defaults to "owner" so tests
- * pass the gate.
+ * pass the gate. `app.current_user_id` is read by the assignment-scoped
+ * RLS overlay (photographer/contractor/editor) on contacts/projects/tasks;
+ * passing `null` (the default) means "no user" — assignment-scoped role
+ * probes will see zero rows by design (fail-closed).
  *
  * `set_config(..., true)` is transaction-local. The test's BEGIN/ROLLBACK
  * envelope means these settings vanish at end of test — no leak.
  */
-export async function setOrgContext(db: TestDb, orgId: string, role = "owner") {
+export async function setOrgContext(
+  db: TestDb,
+  orgId: string,
+  role = "owner",
+  userId: string | null = null,
+) {
   await db.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)
   await db.execute(sql`SELECT set_config('app.current_role', ${role}, true)`)
+  await db.execute(sql`SELECT set_config('app.current_user_id', ${userId ?? ""}, true)`)
 }

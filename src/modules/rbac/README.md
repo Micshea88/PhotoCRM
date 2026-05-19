@@ -136,15 +136,14 @@ results from day one. The seed is idempotent; re-firing the hook
   `member` hide them naturally, but the rows accumulate. The Phase 4
   admin UI's "remove member" action will handle cleanup; until then,
   orphans are harmless but cosmetic.
-- **`app.current_role` is currently the Better Auth 3-role**, not the
-  extended 8-role. The RLS policies that exist today only need
-  owner/admin distinction, so this works. When financial-table RLS
-  lands (Phase 2 invoices module), the layout's `runWithOrgContext`
-  call and `orgAction` will need to set `app.current_role` to the
-  extended role — at which point the `OrgContext.role` type must widen
-  and both call sites refactor. Helper for that pre-ALS lookup:
-  add a `lookupExtendedMemberRole(orgId, userId)` to `queries.ts`
-  when the refactor lands.
+- ~~**`app.current_role` is currently the Better Auth 3-role**~~ — **CLOSED**
+  in commit 14a. `OrgContext.role` is now `ExtendedRole` (8-role); `orgAction`
+  and `runWithOrgContext` both set `app.current_role` to the extended value
+  via `lookupExtendedMemberRole(tx, userId)` (parametric helper in
+  `rbac/queries.ts`). New `app.current_user_id` setting plumbed alongside
+  for the assignment-scoped RLS overlay on contacts/projects/tasks. Fallback
+  to `extendedFromBetterAuth(baRole)` when no `member_role` row exists
+  (Layer 2 default; documented above).
 - **Admin UI for editing roles + overrides.** Phase 4 Settings module 4.34.
 - **`actions.ts`.** No user-facing mutations from this module in V1.
   Admin-only mutations land with the Phase 4 admin UI.

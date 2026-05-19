@@ -128,5 +128,9 @@ future projects from the same template.
 - **Checklist item bulk reorder** — V1 ships individual item update.
   A batched reorder action (like `reorderPipelineStages`) lands when
   the UI needs it.
-- **Assignment-scoped RLS on tasks** — same overlay as projects +
-  contacts. Lands with the invoices financial-RLS commit.
+- ~~**Assignment-scoped RLS on tasks**~~ — **CLOSED** in commit 14a (migration
+  `0015_assignment_scoped_rls_overlay`). Photographer/contractor/editor see
+  tasks on projects they're project-photographer-assigned to OR tasks where
+  they are the direct `assignee_user_id` (the markTaskDone carve-out). The
+  per-operation update policy allows assignees to mutate their own tasks
+  even when not project-assigned. See `tests/integration/assignment-scoped-rls.test.ts`.

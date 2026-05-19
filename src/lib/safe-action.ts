@@ -7,6 +7,12 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { log } from "@/lib/log"
 import { member } from "@/modules/auth/schema"
+import { lookupExtendedMemberRole } from "@/modules/rbac/queries"
+import {
+  extendedFromBetterAuth,
+  type ExtendedRole,
+  type BetterAuthRole,
+} from "@/modules/rbac/types"
 import { and, eq, sql } from "drizzle-orm"
 
 export class ActionError extends Error {
@@ -97,15 +103,31 @@ export const orgAction = authAction.use(async ({ next, ctx }) => {
     if (!m) {
       throw new ActionError("FORBIDDEN", "You are not a member of this organization.")
     }
+    // Set app.current_org first so the member_role lookup below is RLS-allowed.
+    // Set BA role provisionally so the FOR-SELECT policy on member_role passes
+    // (member_role's SELECT policy is any-member-of-org; BA role is irrelevant
+    // to it but app.current_role still has to be set for downstream RLS reads).
     await tx.execute(sql`SELECT set_config('app.current_org', ${activeOrgId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', ${m.role}, true)`)
+    await tx.execute(sql`SELECT set_config('app.current_user_id', ${ctx.session.user.id}, true)`)
+
+    // Resolve the extended 8-role for the assignment-scoped RLS overlay on
+    // contacts/projects/tasks + the financial-role gate on payment tables.
+    // Fall back to the BA→extended mapping if member_role hasn't been seeded
+    // (the documented Layer 2 in rbac/README.md).
+    const extendedRole: ExtendedRole =
+      (await lookupExtendedMemberRole(tx, ctx.session.user.id)) ??
+      extendedFromBetterAuth(m.role as BetterAuthRole)
+    await tx.execute(sql`SELECT set_config('app.current_role', ${extendedRole}, true)`)
+
     return next({
       ctx: {
         ...ctx,
         db: tx,
         activeOrg: {
           id: activeOrgId,
-          role: m.role as "owner" | "admin" | "member",
+          role: extendedRole,
+          userId: ctx.session.user.id,
         },
       },
     })

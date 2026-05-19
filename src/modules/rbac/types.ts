@@ -35,6 +35,20 @@ export function extendedToBetterAuth(role: ExtendedRole): BetterAuthRole {
 }
 
 /**
+ * Reverse mapping for code paths that have only the Better Auth 3-role
+ * (e.g., a fresh seedNewMember invocation that hasn't read member_role yet,
+ * or a defense-in-depth fallback when the extended row is missing). Mirror
+ * the documented Layer 2 fallback in `rbac/README.md`: BA owner→admin
+ * (defensive downgrade — only org creators get extended `owner`); BA
+ * admin→admin; BA member→photographer (lowest productive role).
+ */
+export function extendedFromBetterAuth(role: BetterAuthRole): ExtendedRole {
+  if (role === "owner") return "admin"
+  if (role === "admin") return "admin"
+  return "photographer"
+}
+
+/**
  * The granular permission keys from Requirements §5. Stored as text in
  * `member_permission_override.permission_key`. The Phase 4 admin UI will
  * surface these as toggleable per-user overrides on top of each role's

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { db } from "@/lib/db"
 import type * as schema from "@/db/schema"
+import type { ExtendedRole } from "@/modules/rbac/types"
 
 /**
  * Loose handle type that accepts both the pool-backed `db` and a
@@ -14,14 +15,15 @@ import type * as schema from "@/db/schema"
 type DbHandle = NodePgDatabase<typeof schema>
 
 /**
- * Per-request org/role context, plumbed through AsyncLocalStorage so that
- * read-path functions in `queries.ts` files don't have to thread `orgId`
- * through every signature.
+ * Per-request org/role/user context, plumbed through AsyncLocalStorage so
+ * that read-path functions in `queries.ts` files don't have to thread
+ * `orgId` / `userId` through every signature.
  *
  * - WRITE PATH: `orgAction` (src/lib/safe-action.ts) opens a transaction
- *   and sets `app.current_org` / `app.current_role` as transaction-local
- *   settings. Action code uses `ctx.db` (the tx client) directly. RLS
- *   policies on org-scoped tables read those settings via current_setting().
+ *   and sets `app.current_org` / `app.current_role` / `app.current_user_id`
+ *   as transaction-local settings. Action code uses `ctx.db` (the tx
+ *   client) directly. RLS policies on org-scoped tables read those settings
+ *   via current_setting().
  *
  * - READ PATH: `queries.ts` functions called from RSCs, route handlers,
  *   or cron jobs use `withOrgContext(fn)` below. It pulls the context from
@@ -33,11 +35,17 @@ type DbHandle = NodePgDatabase<typeof schema>
  * `runWithOrgContext` in scope and no `override`), `withOrgContext` throws.
  * This is intentional: silent fallthrough would silently return zero rows
  * once RLS is enabled, hiding the wiring bug.
+ *
+ * `role` is the extended 8-role (Requirements §5). `userId` is plumbed so
+ * the assignment-scoped RLS overlay on contacts/projects/tasks can join
+ * to project_photographers / tasks.assignee_user_id via
+ * `current_setting('app.current_user_id', true)`.
  */
 
 export interface OrgContext {
   orgId: string
-  role: "owner" | "admin" | "member"
+  role: ExtendedRole
+  userId: string
 }
 
 const storage = new AsyncLocalStorage<OrgContext>()
@@ -82,6 +90,7 @@ export async function withOrgContext<T>(
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.current_org', ${ctx.orgId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', ${ctx.role}, true)`)
+    await tx.execute(sql`SELECT set_config('app.current_user_id', ${ctx.userId}, true)`)
     return fn(tx)
   })
 }

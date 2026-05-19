@@ -45,19 +45,29 @@ this; PR review must.
 The 6 tests in `tests/integration/contacts.test.ts > contactLabel`
 exercise every path including edge cases.
 
-## RLS — single org-isolation policy in V1
+## RLS — org-isolation + assignment-scoped overlay
 
-Same shape as companies. `app.current_role` is not consulted. Any
-member of the org can read and write all contacts.
+As of commit 14a (migration `0015_assignment_scoped_rls_overlay`), the
+single `contacts_org_isolation` policy is replaced by four per-operation
+policies (`contacts_select` / `contacts_insert` / `contacts_update` /
+`contacts_delete`) that AND-clamp on the org-isolation predicate as the
+OUTER condition, with an assignment-scope inner OR for the
+photographer/contractor/editor roles:
 
-**Deferred — Phase 4 (invoices module triggers it):** the
-photographer / contractor / editor roles should only see contacts
-they're assigned to (via `project_photographers` / `project_contacts`,
-which exist in a later Phase 2 module). When those tables ship, a
-second permissive policy joins to them and restricts visibility for
-the assignment-scoped roles. The current policy stays as the baseline
-for owner/admin/manager/accountant. See the rbac README's "What's
-deferred" §3.
+| Probe role                                            | SELECT                                                                                           | INSERT / UPDATE / DELETE |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------ |
+| owner / admin / manager / accountant / client_limited | All in-org contacts                                                                              | All in-org contacts      |
+| photographer / contractor / editor                    | Only contacts on projects the user is assigned to (`project_photographers` ⋈ `project_contacts`) | **Blocked** at the gate  |
+
+Empty / unset `app.current_role` is treated as a non-assignment-scoped
+role (COALESCE to empty string). orgAction and runWithOrgContext both
+always set the role explicitly; the COALESCE is for raw-pg test helpers
+and defense-in-depth, not a production code path.
+
+The org-isolation outer AND-clamp is the proof that the overlay cannot
+loosen cross-org isolation — verified by the cross-org attack test in
+`tests/integration/assignment-scoped-rls.test.ts` AND by the DO-block
+probe inside the migration itself.
 
 ## What's deferred (named consumers)
 

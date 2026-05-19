@@ -26,6 +26,7 @@ const TABLES_TO_TRUNCATE = [
   "project_template_task_items",
   "project_templates",
   "projects",
+  "saved_views",
   "task_checklist_items",
   "task_dependencies",
   "tasks",

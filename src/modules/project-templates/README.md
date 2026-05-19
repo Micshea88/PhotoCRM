@@ -39,9 +39,9 @@ inert: created, edited, but never realized.
 | "Back up files"       |      2 | 2 days AFTER event date   |
 | "Deliver sneaks"      |      5 | 5 days AFTER event date   |
 
-The instantiation engine computes `task.due_date = project.primary_date
-
-- offset_days`. On recompute (event-date change), it skips tasks whose
+The instantiation engine computes
+`task.due_date = project.primary_date + offset_days` (in days).
+On recompute (event-date change), it skips tasks whose
 `due_date_overridden=true` per Tech Arch §4.
 
 ## What's here

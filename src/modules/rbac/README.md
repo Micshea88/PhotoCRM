@@ -73,14 +73,63 @@ that assert `app.current_role='owner'` before inserting. Two callers:
 route handler.** The bootstrap-trust assertion is only safe when the
 caller is provably the creator of the org-being-seeded.
 
+## Invitee role-seeding (afterAcceptInvitation)
+
+Wired in `src/lib/auth.ts`. When a user accepts an invitation, the BA
+hook fires `seedNewMember(orgId, userId, member.role)`.
+
+This module operates at two layers, and the distinction is load-bearing:
+
+### Layer 1 — Phase 4 invite UI (HARD REQUIREMENT)
+
+When the admin UI ships (Phase 4 Settings module 4.34), the invite form
+**MUST** require an explicit role selection before the "Send invite"
+button is enabled:
+
+- No default role on the form.
+- "Send invite" is blocked/disabled until a role is explicitly chosen.
+- No invite can be created or sent without a role.
+- The form selects from the extended 8-role enum (manager, photographer,
+  contractor, editor, accountant, etc.) — not the BA 3-role.
+- The selected extended role is persisted on the invitation (custom
+  column / metadata field) and read by `seedNewMember` directly when
+  the invitee accepts.
+
+This is to ensure every invitee gets their intended permissions — the
+backend mapping below should never fire from the form path.
+
+### Layer 2 — Backend defense-in-depth (V1 path; Phase 4 fallback)
+
+In V1, Better Auth's invitation flow only carries the 3-role enum, so
+`seedNewMember` derives the extended role from `member.role`:
+
+| BA `member.role` | →   | extended role                                                 |
+| ---------------- | --- | ------------------------------------------------------------- |
+| owner            | →   | admin (defensive — only org creators are extended `owner`)    |
+| admin            | →   | admin                                                         |
+| member           | →   | photographer (productive default; an admin can promote later) |
+
+**This mapping exists as a fail-safe fallback only**, for code paths
+that reach `seedNewMember` without an explicit extended role:
+
+- V1: the only path — the invite UI doesn't exist yet, so the mapping
+  always runs.
+- Phase 4+: bugs in the invite UI, future programmatic invite APIs
+  that bypass the form, internal admin tools, BA core changes that
+  reset the custom field, etc.
+
+The fail-safe lands on the LOWEST productive role (`photographer`)
+rather than failing closed (`hasPermission() === false`) because a
+silently-permissionless invitee is harder to rescue than one who can
+at least see contacts/events and ping an admin. **The fallback must
+never be the normal path for an invite created through the UI.**
+
+Each invitee lands with `hasPermission()` returning role-appropriate
+results from day one. The seed is idempotent; re-firing the hook
+(e.g., a rare BA retry) is a no-op via the (org, user) unique index.
+
 ## What's deferred
 
-- **`afterAcceptInvitation` hook.** When a user accepts an invitation,
-  no `member_role` row is created — they get the Better Auth role only.
-  `hasPermission()` returns `false` for these users until an admin
-  explicitly seeds their extended role through the Phase 4 admin UI.
-  Workaround until then: the Phase 4 admin UI's "edit member" action
-  inserts the missing `member_role` row.
 - **`afterRemoveMember` hook / cleanup.** When Better Auth removes a
   member, our `member_role` and `member_permission_override` rows for
   that user are orphaned. Queries that join through Better Auth's
@@ -113,3 +162,9 @@ caller is provably the creator of the org-being-seeded.
 4. **`ROLE_DEFAULTS` is the source of truth for role-permission baselines.**
    Changing a role's defaults requires a code change reviewed in PR; it
    is not runtime-mutable.
+5. **The invite UI (Phase 4) must hard-block sending without a role.**
+   See "Invitee role-seeding" §"Layer 1" — the form must not allow a
+   default and must not let "Send invite" fire until a role is
+   explicitly chosen. The backend mapping is fail-safe, not normal
+   flow; any code path that exercises the mapping from a UI-originated
+   invite is a bug.

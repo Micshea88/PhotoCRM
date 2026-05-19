@@ -4,6 +4,7 @@ import { organization } from "better-auth/plugins"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
 import { sendEmail } from "@/lib/email"
+import { seedNewOrganization } from "@/lib/seed-new-org"
 import { OrgInviteEmail } from "@/emails/org-invite"
 import { ResetPasswordEmail } from "@/emails/reset-password"
 import { VerifyEmail } from "@/emails/verify-email"
@@ -82,6 +83,16 @@ export const auth = betterAuth({
             inviterName: data.inviter.user.name,
           }),
         })
+      },
+      // Cross-module seed for new orgs. Better Auth has already inserted
+      // the organization and member rows by the time this fires, so we
+      // can rely on the ids and the user being a real member. Errors are
+      // captured in seedNewOrganization (logged + Sentry); the hook
+      // never throws so a partial-seed doesn't fail the signup.
+      organizationHooks: {
+        afterCreateOrganization: async ({ organization: org, user: usr }) => {
+          await seedNewOrganization(org.id, usr.id)
+        },
       },
     }),
   ],

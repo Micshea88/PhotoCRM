@@ -12,6 +12,8 @@ const TABLES_TO_TRUNCATE = [
   "custom_field_definitions",
   "files",
   "items",
+  "member_permission_override",
+  "member_role",
   "terminology_map",
   "invitation",
   "member",

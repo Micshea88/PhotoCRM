@@ -127,6 +127,13 @@
       "when": 1779216507244,
       "tag": "0017_loud_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779227633979,
+      "tag": "0018_amazing_mephistopheles",
+      "breakpoints": true
     }
   ]
 }

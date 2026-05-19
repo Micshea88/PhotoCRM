@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { log } from "@/lib/log"
 import { member } from "@/modules/auth/schema"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 export class ActionError extends Error {
   constructor(
@@ -72,25 +72,42 @@ export const authAction = baseClient.use(async ({ next }) => {
   return next({ ctx: { session, db, ipAddress, userAgent } })
 })
 
-/** Action requiring an authenticated session AND an active organization. */
+/**
+ * Action requiring an authenticated session AND an active organization.
+ *
+ * RLS load-bearing: the action body runs inside a Postgres transaction so
+ * `app.current_org` and `app.current_role` can be set as TRANSACTION-LOCAL
+ * settings (third arg = is_local=true). Outside a tx those settings would
+ * leak to the next pool checkout. Per-table RLS policies read these via
+ * current_setting() to enforce org/role scoping.
+ *
+ * `ctx.db` is REPLACED by the tx client inside the action; code that bypasses
+ * `ctx.db` (e.g. importing `db` from `@/lib/db` directly) bypasses the RLS
+ * context and will see zero rows from any RLS-protected table.
+ */
 export const orgAction = authAction.use(async ({ next, ctx }) => {
   const activeOrgId = ctx.session.session.activeOrganizationId
   if (!activeOrgId) {
     throw new ActionError("NO_ACTIVE_ORG", "Select or create an organization first.")
   }
-  const m = await ctx.db.query.member.findFirst({
-    where: and(eq(member.userId, ctx.session.user.id), eq(member.organizationId, activeOrgId)),
-  })
-  if (!m) {
-    throw new ActionError("FORBIDDEN", "You are not a member of this organization.")
-  }
-  return next({
-    ctx: {
-      ...ctx,
-      activeOrg: {
-        id: activeOrgId,
-        role: m.role as "owner" | "admin" | "member",
+  return ctx.db.transaction(async (tx) => {
+    const m = await tx.query.member.findFirst({
+      where: and(eq(member.userId, ctx.session.user.id), eq(member.organizationId, activeOrgId)),
+    })
+    if (!m) {
+      throw new ActionError("FORBIDDEN", "You are not a member of this organization.")
+    }
+    await tx.execute(sql`SELECT set_config('app.current_org', ${activeOrgId}, true)`)
+    await tx.execute(sql`SELECT set_config('app.current_role', ${m.role}, true)`)
+    return next({
+      ctx: {
+        ...ctx,
+        db: tx,
+        activeOrg: {
+          id: activeOrgId,
+          role: m.role as "owner" | "admin" | "member",
+        },
       },
-    },
+    })
   })
 })

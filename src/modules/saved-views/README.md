@@ -79,7 +79,7 @@ grouping is not in V1.
 
 ## Vendor Matrix and Team This Week (as saved-view configs)
 
-Per Requirements §4.11 — these are deliberately not bespoke features:
+Per Requirements §4.10 + §4.11 — these are deliberately not bespoke features:
 
 ```
 Vendor Matrix:
@@ -95,14 +95,47 @@ Team This Week:
   shared:       true
   filters:      [{ field: "dueDate", op: "gte", value: "<startOfWeek>" },
                  { field: "dueDate", op: "lte", value: "<endOfWeek>" }]
+  sort:         { field: "dueDate", direction: "asc" }
   visibleColumns: ["assigneeUserId", "title", "dueDate", "status", "priority"]
   grouping:     "assigneeUserId"
 ```
 
-These are **not seeded** by this module — the Phase 4 list-view
-renderer for each object type knows its column keys and will seed
-default views when it ships. Seeding here would couple the seed to
-column keys that don't yet exist.
+**Team This Week is now SEEDED** by this module (Phase 2). Its column
+keys (`assigneeUserId`, `title`, `dueDate`, `status`, `priority`) all
+exist on the tasks schema today, so the prior "seeding-would-couple-to-
+nonexistent-keys" concern doesn't apply. See `seed.ts` —
+`seedDefaultSavedViewsForOrg` is wired into `seedNewOrganization`
+(production BA hook) and `scripts/seed.ts` (dev).
+
+Vendor Matrix is NOT yet seeded — its column keys (`primaryEmail`,
+`primaryPhone`, `instagramHandle`, `company`) reference contact fields
+that exist, but until the contacts list-view renderer ships and confirms
+the final column-key spelling, seeding it would risk a key/renderer
+mismatch. Land Vendor Matrix in the contacts list-view module commit.
+
+### Seeded-default semantics (the `is_default` + null-owner pattern)
+
+The seeded Team This Week row is special-shaped:
+
+| Column          | Value          | Effect                                                                                                                       |
+| --------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `owner_user_id` | `NULL`         | Owner-only mutation rule (`assertOwnsSavedView`) throws FORBIDDEN for any caller — the seeded default is IMMUTABLE           |
+| `shared`        | `true`         | Visible to every member of the org                                                                                           |
+| `is_default`    | `true`         | Marker for the list-view renderer to pin it / distinguish from user-created views                                            |
+| (mutation)      | (none allowed) | Users who want a tweaked variant call `duplicateSavedView` — clone is private + owned by caller (standard V1 customize path) |
+
+Date-window filters use the placeholder strings `<startOfWeek>` /
+`<endOfWeek>`. The list-view renderer (Phase 4) resolves them at render
+time against the caller's timezone — storing concrete dates at seed
+time would freeze the window to org-create day.
+
+### Idempotency
+
+The partial unique index on (org, owner_user_id, object_type, name) is
+ineffective for null-owner rows (Postgres treats NULL as distinct in
+unique indexes by default). The seed uses an explicit existence check
+on (org, object_type, name, is_default=true, owner_user_id IS NULL,
+deleted_at IS NULL) instead of `onConflictDoNothing`.
 
 ## Hard rules
 

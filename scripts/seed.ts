@@ -24,6 +24,7 @@ import { items } from "@/modules/items/schema"
 import { seedTerminologyForOrg } from "@/modules/terminology/seed"
 import { seedMemberRoleForOrgOwner } from "@/modules/rbac/seed"
 import { seedDefaultPipelines } from "@/modules/pipelines/seed"
+import { seedDefaultSavedViewsForOrg } from "@/modules/saved-views/seed"
 import * as schema from "@/db/schema"
 
 loadEnv({ path: ".env.local" })
@@ -176,7 +177,11 @@ async function main() {
     await seedDefaultPipelines(db, demoOrgId)
     console.log(`✓ Seeded default pipelines for ${DEMO_ORG_SLUG}`)
 
-    // 6. Demo items
+    // 6. Default saved views — Team This Week. Idempotent.
+    await seedDefaultSavedViewsForOrg(db, demoOrgId)
+    console.log(`✓ Seeded default saved views for ${DEMO_ORG_SLUG}`)
+
+    // 7. Demo items
     const existingItems = await db.query.items.findMany({
       where: eq(items.organizationId, demoOrgId),
     })

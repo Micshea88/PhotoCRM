@@ -6,6 +6,7 @@ import { log } from "@/lib/log"
 import { seedTerminologyForOrg } from "@/modules/terminology/seed"
 import { seedMemberRoleForOrgOwner } from "@/modules/rbac/seed"
 import { seedDefaultPipelines } from "@/modules/pipelines/seed"
+import { seedDefaultSavedViewsForOrg } from "@/modules/saved-views/seed"
 
 /**
  * Runs once per newly-created organization, from Better Auth's
@@ -40,6 +41,7 @@ export async function seedNewOrganization(orgId: string, creatorUserId: string):
       await seedTerminologyForOrg(tx, orgId)
       await seedMemberRoleForOrgOwner(tx, orgId, creatorUserId)
       await seedDefaultPipelines(tx, orgId)
+      await seedDefaultSavedViewsForOrg(tx, orgId)
     })
     log.info({ orgId, creatorUserId }, "seedNewOrganization: complete")
   } catch (err) {

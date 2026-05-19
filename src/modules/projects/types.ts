@@ -152,6 +152,14 @@ export const updateProjectInput = createProjectInput.partial().extend({ id: z.st
 export const deleteProjectInput = z.object({ id: z.string() })
 export const restoreProjectInput = z.object({ id: z.string() })
 
+export const instantiateProjectFromTemplateInput = z.object({
+  projectId: z.string().min(1),
+  templateId: z.string().min(1),
+})
+export type InstantiateProjectFromTemplateInput = z.infer<
+  typeof instantiateProjectFromTemplateInput
+>
+
 // Association actions
 export const addProjectContactInput = z.object({
   projectId: z.string(),

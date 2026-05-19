@@ -14,11 +14,16 @@ import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queri
 import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
 import { projects, projectContacts, projectPhotographers, projectSubEvents } from "./schema"
 import {
+  instantiateProjectFromTemplate as instantiateProjectFromTemplateFn,
+  recomputeProjectTaskDueDates,
+} from "./instantiation"
+import {
   addProjectContactInput,
   addProjectPhotographerInput,
   addProjectSubEventInput,
   createProjectInput,
   deleteProjectInput,
+  instantiateProjectFromTemplateInput,
   removeProjectContactInput,
   removeProjectPhotographerInput,
   removeProjectSubEventInput,
@@ -229,6 +234,12 @@ export const updateProject = orgAction
     if (result.length === 0) {
       throw new ActionError("NOT_FOUND", "Project not found")
     }
+    // If primary_date moved, shift every non-overridden templated task's
+    // due_date in the same transaction (Tech Arch §4 recompute pass).
+    let recomputeStats: Awaited<ReturnType<typeof recomputeProjectTaskDueDates>> | null = null
+    if (rest.primaryDate !== undefined) {
+      recomputeStats = await recomputeProjectTaskDueDates(ctx.db, id)
+    }
     await audit(
       {
         db: ctx.db,
@@ -238,11 +249,44 @@ export const updateProject = orgAction
         userAgent: ctx.userAgent,
       },
       "projects.updated",
-      { resourceType: "project", resourceId: id, metadata: rest },
+      {
+        resourceType: "project",
+        resourceId: id,
+        metadata: recomputeStats ? { ...rest, recompute: recomputeStats } : rest,
+      },
     )
     revalidatePath("/events")
     revalidatePath(`/events/${id}`)
     return { id }
+  })
+
+export const instantiateProjectFromTemplate = orgAction
+  .metadata({ actionName: "projects.instantiate_from_template" })
+  .inputSchema(instantiateProjectFromTemplateInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await instantiateProjectFromTemplateFn(ctx.db, {
+      projectId: parsedInput.projectId,
+      templateId: parsedInput.templateId,
+      organizationId: ctx.activeOrg.id,
+      userId: ctx.session.user.id,
+    })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "projects.instantiated_from_template",
+      {
+        resourceType: "project",
+        resourceId: parsedInput.projectId,
+        metadata: { templateId: parsedInput.templateId, ...result },
+      },
+    )
+    revalidatePath(`/events/${parsedInput.projectId}`)
+    return { projectId: parsedInput.projectId, ...result }
   })
 
 export const deleteProject = orgAction

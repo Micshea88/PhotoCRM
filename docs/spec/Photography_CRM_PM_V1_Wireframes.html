@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photography CRM/PM — Phase 1 Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4f1ea;
+    --paper-2: #ece7db;
+    --card: #fffdf8;
+    --ink: #2a2620;
+    --ink-soft: #6b6356;
+    --ink-faint: #9a9183;
+    --line: #ddd6c6;
+    --line-soft: #e8e2d4;
+    --accent: #3d5240;
+    --accent-soft: #6b8470;
+    --accent-bg: #e3e8e0;
+    --clay: #b5683f;
+    --clay-bg: #f0ddd1;
+    --gold: #c2942f;
+    --blue-tag: #3a5a78;
+    --blue-bg: #dde7ef;
+    --shadow: 0 1px 2px rgba(42,38,32,0.04), 0 4px 16px rgba(42,38,32,0.06);
+    --shadow-lg: 0 4px 12px rgba(42,38,32,0.08), 0 16px 48px rgba(42,38,32,0.12);
+    --radius: 14px;
+    --radius-sm: 9px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { font-family: 'Fraunces', serif; font-weight: 600; line-height: 1.15; }
+
+  /* ---------- DOC SHELL ---------- */
+  .doc-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 54px 40px 48px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .doc-header::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle at 20% 30%, rgba(107,132,112,0.18), transparent 45%),
+                      radial-gradient(circle at 82% 70%, rgba(181,104,63,0.14), transparent 42%);
+  }
+  .doc-header > * { position: relative; z-index: 1; }
+  .doc-kicker {
+    font-size: 12px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent-soft); font-weight: 600; margin-bottom: 18px;
+  }
+  .doc-header h1 { font-size: 44px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-header h1 em { font-style: italic; color: var(--accent-soft); }
+  .doc-header p {
+    color: #bdb6a8; max-width: 540px; margin: 16px auto 0; font-size: 15px;
+  }
+  .doc-meta {
+    margin-top: 26px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+  }
+  .doc-meta span {
+    font-size: 11.5px; letter-spacing: 0.04em; padding: 6px 13px;
+    border: 1px solid rgba(244,241,234,0.2); border-radius: 100px; color: #cfc8ba;
+  }
+
+  /* ---------- LAYOUT ---------- */
+  .layout { display: flex; max-width: 1400px; margin: 0 auto; }
+  .toc {
+    width: 248px; flex-shrink: 0; padding: 32px 18px 60px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--line);
+  }
+  .toc-title {
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 600; padding: 0 12px; margin-bottom: 12px;
+  }
+  .toc a {
+    display: flex; align-items: center; gap: 9px; padding: 8px 12px;
+    border-radius: var(--radius-sm); color: var(--ink-soft); text-decoration: none;
+    font-size: 13.5px; font-weight: 500; margin-bottom: 1px; transition: all 0.15s;
+  }
+  .toc a:hover { background: var(--paper-2); color: var(--ink); }
+  .toc a.active { background: var(--accent); color: var(--card); }
+  .toc a .n {
+    font-size: 11px; width: 20px; height: 20px; border-radius: 6px;
+    display: grid; place-items: center; flex-shrink: 0;
+    background: var(--paper-2); color: var(--ink-faint); font-weight: 600;
+  }
+  .toc a.active .n { background: rgba(255,255,255,0.18); color: var(--card); }
+  .toc-sep {
+    margin: 16px 12px 10px; font-size: 10.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-faint); font-weight: 600;
+  }
+
+  .content { flex: 1; min-width: 0; padding: 36px 40px 120px; }
+
+  /* ---------- SCREEN BLOCKS ---------- */
+  .screen { margin-bottom: 64px; scroll-margin-top: 20px; }
+  .screen-head { margin-bottom: 18px; }
+  .screen-head .label {
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--clay); font-weight: 600; margin-bottom: 6px;
+  }
+  .screen-head h2 { font-size: 27px; }
+  .screen-head p { color: var(--ink-soft); font-size: 14.5px; margin-top: 5px; max-width: 720px; }
+
+  .annot {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-top: 16px; font-size: 13px; color: var(--ink); line-height: 1.6;
+  }
+  .annot strong { font-weight: 600; }
+  .annot.clay { background: var(--clay-bg); border-color: var(--clay); }
+
+  /* ---------- BROWSER FRAME ---------- */
+  .frame {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg);
+    overflow: hidden; border: 1px solid var(--line);
+  }
+  .frame-bar {
+    background: var(--paper-2); padding: 10px 14px; display: flex; align-items: center;
+    gap: 8px; border-bottom: 1px solid var(--line);
+  }
+  .frame-dots { display: flex; gap: 5px; }
+  .frame-dots i {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: block;
+  }
+  .frame-url {
+    flex: 1; background: var(--card); border-radius: 6px; padding: 4px 12px;
+    font-size: 11.5px; color: var(--ink-faint); text-align: center;
+    border: 1px solid var(--line-soft);
+  }
+  .frame-body { display: flex; min-height: 480px; }
+
+  /* ---------- APP CHROME ---------- */
+  .app-nav {
+    width: 60px; background: var(--ink); flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 4px;
+  }
+  .app-logo {
+    width: 34px; height: 34px; border-radius: 9px; margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--accent-soft), var(--accent));
+    display: grid; place-items: center; color: var(--card);
+    font-family: 'Fraunces', serif; font-weight: 700; font-size: 17px;
+  }
+  .app-nav-i {
+    width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center;
+    color: #8a8378; font-size: 17px; cursor: default; transition: all 0.15s; position: relative;
+  }
+  .app-nav-i.on { background: rgba(107,132,112,0.25); color: var(--paper); }
+  .app-nav-i .tip {
+    position: absolute; left: 46px; background: var(--ink); color: var(--paper);
+    font-family: 'Outfit'; font-size: 11px; padding: 3px 8px; border-radius: 5px;
+    white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.15s;
+  }
+  .app-nav-i:hover .tip { opacity: 1; }
+  .app-nav-spacer { flex: 1; }
+
+  .app-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .app-top {
+    height: 52px; border-bottom: 1px solid var(--line); display: flex; align-items: center;
+    padding: 0 18px; gap: 14px; flex-shrink: 0;
+  }
+  .app-top h3 { font-size: 16px; font-weight: 600; }
+  .app-search {
+    flex: 1; max-width: 340px; background: var(--paper-2); border-radius: 8px;
+    padding: 7px 12px; font-size: 12.5px; color: var(--ink-faint);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .app-search .kbd {
+    margin-left: auto; font-size: 10px; background: var(--card); border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 4px; color: var(--ink-faint);
+  }
+  .app-top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn {
+    font-family: 'Outfit'; font-size: 12.5px; font-weight: 600; padding: 7px 14px;
+    border-radius: 8px; border: none; cursor: default; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: var(--card); }
+  .btn-ghost { background: var(--paper-2); color: var(--ink); }
+  .btn-sm { padding: 5px 10px; font-size: 11.5px; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--clay);
+    color: var(--card); display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  }
+  .app-canvas { flex: 1; padding: 20px; overflow: hidden; background: var(--paper); }
+
+  /* ---------- GENERIC UI BITS ---------- */
+  .row { display: flex; gap: 14px; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+  }
+  .panel-head h4 { font-size: 14.5px; }
+  .panel-head .more { font-size: 11px; color: var(--ink-faint); }
+  .stat { font-family: 'Fraunces'; font-size: 26px; font-weight: 600; }
+  .stat-label { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat-delta { font-size: 11px; font-weight: 600; }
+  .up { color: var(--accent); } .down { color: var(--clay); }
+
+  .tag {
+    font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 100px;
+    display: inline-block;
+  }
+  .tag-green { background: var(--accent-bg); color: var(--accent); }
+  .tag-clay { background: var(--clay-bg); color: var(--clay); }
+  .tag-blue { background: var(--blue-bg); color: var(--blue-tag); }
+  .tag-gold { background: #f3e8c8; color: #8a6713; }
+  .tag-gray { background: var(--paper-2); color: var(--ink-soft); }
+
+  .list-row {
+    display: flex; align-items: center; gap: 11px; padding: 9px 4px;
+    border-bottom: 1px solid var(--line-soft); font-size: 12.5px;
+  }
+  .list-row:last-child { border-bottom: none; }
+  .mini-avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--card);
+  }
+  .skel { background: var(--paper-2); border-radius: 5px; height: 9px; }
+
+  /* table */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tbl th {
+    text-align: left; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  .tbl td { padding: 10px; border-bottom: 1px solid var(--line-soft); }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl .name-cell { display: flex; align-items: center; gap: 9px; font-weight: 500; }
+
+  /* kanban */
+  .kanban { display: flex; gap: 12px; height: 100%; }
+  .kan-col { flex: 1; background: var(--paper-2); border-radius: var(--radius-sm); padding: 9px; min-width: 0; }
+  .kan-col-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11.5px; font-weight: 600; margin-bottom: 9px; padding: 0 3px;
+  }
+  .kan-col-head .ct {
+    background: var(--card); border-radius: 100px; font-size: 10px;
+    padding: 1px 7px; color: var(--ink-soft);
+  }
+  .kan-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 10px; margin-bottom: 7px; box-shadow: var(--shadow);
+  }
+  .kan-card .kc-name { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .kan-card .kc-meta { font-size: 10.5px; color: var(--ink-faint); }
+  .kan-card .kc-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; }
+  .kc-dots { display: flex; gap: 3px; }
+  .kc-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+
+  /* record detail */
+  .rec-layout { display: flex; gap: 16px; height: 100%; }
+  .rec-main { flex: 1; min-width: 0; overflow: hidden; }
+  .rec-side { width: 220px; flex-shrink: 0; }
+  .rec-hero {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 14px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .rec-hero-av {
+    width: 54px; height: 54px; border-radius: 14px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--clay), #d98a5e);
+    display: grid; place-items: center; color: var(--card);
+    font-family: 'Fraunces'; font-size: 22px; font-weight: 600;
+  }
+  .rec-hero h3 { font-size: 18px; }
+  .rec-hero .sub { font-size: 12px; color: var(--ink-soft); margin-top: 1px; }
+  .rec-hero-stats { display: flex; gap: 18px; margin-top: 10px; }
+  .rec-hero-stats div .v { font-family: 'Fraunces'; font-size: 15px; font-weight: 600; }
+  .rec-hero-stats div .k { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+  .quick-actions { display: flex; gap: 6px; margin-left: auto; }
+  .qa {
+    width: 32px; height: 32px; border-radius: 8px; background: var(--paper-2);
+    display: grid; place-items: center; font-size: 14px; color: var(--ink-soft);
+  }
+  .folder {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .folder-head {
+    padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
+    font-size: 12.5px; font-weight: 600; background: var(--paper-2);
+  }
+  .folder-head .chev { color: var(--ink-faint); font-size: 11px; }
+  .folder-body { padding: 12px 14px; }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+  .field .fl { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+  .field .fv { font-size: 12.5px; font-weight: 500; margin-top: 1px; }
+  .field .fv.empty { color: var(--ink-faint); font-weight: 400; font-style: italic; }
+
+  .timeline-item { display: flex; gap: 9px; padding: 8px 0; font-size: 11.5px; }
+  .ti-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent-soft);
+    margin-top: 5px; flex-shrink: 0;
+  }
+  .ti-body .ti-t { font-weight: 500; }
+  .ti-body .ti-time { color: var(--ink-faint); font-size: 10.5px; }
+
+  /* command palette */
+  .cmdp-wrap {
+    background: rgba(42,38,32,0.4); padding: 60px 20px; min-height: 480px;
+    display: flex; justify-content: center; align-items: flex-start;
+  }
+  .cmdp {
+    width: 100%; max-width: 480px; background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid var(--line);
+  }
+  .cmdp-input {
+    padding: 15px 18px; font-size: 15px; color: var(--ink); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 11px;
+  }
+  .cmdp-input .cur { width: 1.5px; height: 18px; background: var(--accent); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .cmdp-sec { padding: 8px 0; }
+  .cmdp-sec-t {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+    padding: 4px 18px; font-weight: 600;
+  }
+  .cmdp-item {
+    padding: 8px 18px; display: flex; align-items: center; gap: 11px; font-size: 13px;
+  }
+  .cmdp-item.sel { background: var(--accent-bg); }
+  .cmdp-item .ci-ic {
+    width: 26px; height: 26px; border-radius: 7px; background: var(--paper-2);
+    display: grid; place-items: center; font-size: 13px; flex-shrink: 0;
+  }
+  .cmdp-item .ci-sub { color: var(--ink-faint); font-size: 11px; }
+  .cmdp-item .ci-go { margin-left: auto; font-size: 10px; color: var(--ink-faint); }
+
+  /* client-facing screens */
+  .client-frame {
+    background: linear-gradient(170deg, #faf7f0, #f0ebe0); padding: 0; min-height: 480px;
+  }
+  .client-topbar {
+    background: var(--card); padding: 14px 28px; display: flex; align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .client-logo { font-family: 'Fraunces'; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+  .client-logo span { color: var(--clay); }
+  .client-nav { margin-left: auto; display: flex; gap: 20px; font-size: 12.5px; color: var(--ink-soft); }
+  .client-nav span.on { color: var(--ink); font-weight: 600; }
+  .client-body { padding: 28px; }
+  .smartdoc {
+    max-width: 540px; margin: 0 auto; background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid var(--line);
+  }
+  .smartdoc-hero {
+    background: linear-gradient(135deg, var(--ink), #3d3830); color: var(--paper);
+    padding: 26px 28px;
+  }
+  .smartdoc-hero .sd-k { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-soft); }
+  .smartdoc-hero h3 { font-size: 22px; margin-top: 6px; }
+  .smartdoc-hero .sd-sub { font-size: 12.5px; color: #bdb6a8; margin-top: 4px; }
+  .smartdoc-steps { display: flex; border-bottom: 1px solid var(--line); }
+  .sd-step {
+    flex: 1; text-align: center; padding: 11px 4px; font-size: 11px; font-weight: 600;
+    color: var(--ink-faint); border-bottom: 2px solid transparent;
+  }
+  .sd-step.on { color: var(--accent); border-color: var(--accent); }
+  .sd-step.done { color: var(--accent); }
+  .smartdoc-body { padding: 22px 28px; }
+  .pkg-card {
+    border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 14px;
+    margin-bottom: 10px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .pkg-card.sel { border-color: var(--accent); background: var(--accent-bg); }
+  .pkg-radio {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line);
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .pkg-card.sel .pkg-radio { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--card); }
+  .pkg-card h4 { font-size: 14px; }
+  .pkg-card .pkg-desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  .pkg-card .pkg-price { margin-left: auto; font-family: 'Fraunces'; font-size: 17px; font-weight: 600; }
+
+  /* timeline builder */
+  .twrap { display: flex; gap: 14px; height: 100%; }
+  .tline { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; overflow: hidden; }
+  .tblock {
+    display: flex; gap: 10px; padding: 8px; border-radius: 8px; margin-bottom: 5px;
+    border: 1px solid var(--line-soft); background: var(--card);
+  }
+  .tblock.accent { border-left: 3px solid var(--clay); }
+  .tblock.green { border-left: 3px solid var(--accent); }
+  .tblock .tb-time { font-size: 11px; font-weight: 600; width: 80px; flex-shrink: 0; color: var(--ink-soft); }
+  .tblock .tb-name { font-size: 12px; font-weight: 600; }
+  .tblock .tb-meta { font-size: 10.5px; color: var(--ink-faint); }
+
+  /* workflow builder */
+  .wf-canvas {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    height: 100%; padding: 20px; position: relative;
+    background-image: radial-gradient(var(--line-soft) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .wf-node {
+    background: var(--card); border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 10px 13px; width: 200px; box-shadow: var(--shadow); margin: 0 auto 8px;
+    position: relative;
+  }
+  .wf-node.trigger { border-color: var(--clay); }
+  .wf-node.action { border-color: var(--accent); }
+  .wf-node.cond { border-color: var(--gold); }
+  .wf-node .wf-type {
+    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700;
+  }
+  .wf-node.trigger .wf-type { color: var(--clay); }
+  .wf-node.action .wf-type { color: var(--accent); }
+  .wf-node.cond .wf-type { color: var(--gold); }
+  .wf-node .wf-label { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+  .wf-node .wf-sub { font-size: 10.5px; color: var(--ink-faint); }
+  .wf-conn { width: 2px; height: 14px; background: var(--line); margin: 0 auto 8px; }
+
+  /* onboarding */
+  .onb {
+    max-width: 460px; margin: 30px auto; background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); border: 1px solid var(--line); overflow: hidden;
+  }
+  .onb-prog { display: flex; gap: 4px; padding: 14px 22px 0; }
+  .onb-prog i { flex: 1; height: 3px; border-radius: 2px; background: var(--line); }
+  .onb-prog i.on { background: var(--accent); }
+  .onb-body { padding: 22px; }
+  .onb-step-k { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--clay); font-weight: 600; }
+  .onb-body h3 { font-size: 21px; margin: 5px 0 4px; }
+  .onb-body .onb-q { font-size: 13px; color: var(--ink-soft); margin-bottom: 16px; }
+  .onb-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .onb-opt {
+    border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 12px;
+    font-size: 12.5px; font-weight: 500; text-align: center;
+  }
+  .onb-opt.sel { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+
+  /* responsive note tag */
+  .resp {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+    color: var(--accent); font-weight: 600; margin-top: 10px;
+  }
+
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; padding: 12px 16px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  }
+  .legend div { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-soft); }
+  .legend i { width: 14px; height: 14px; border-radius: 4px; display: block; }
+
+  .footer-note {
+    max-width: 1400px; margin: 0 auto; padding: 28px 40px 70px;
+    border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 13px;
+  }
+  .footer-note strong { color: var(--ink); font-weight: 600; }
+
+  @media (max-width: 920px) {
+    .toc { display: none; }
+    .content { padding: 24px 18px 80px; }
+    .field-grid { grid-template-columns: 1fr; }
+    .rec-side, .app-search { display: none; }
+    .doc-header h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div class="doc-kicker">V1 Lean Build · Interactive Wireframes · Final</div>
+  <h1>The <em>Photographer's</em> Operating System</h1>
+  <p>Every locked V1 decision, on screen. "Event" terminology (object is <code>project</code> in schema), the project-management engine (tasks, dependencies, templated plans, team workload), file management, and notifications — all reflected. Same design language, no open questions.</p>
+  <div class="doc-meta">
+    <span>19 V1 screens</span>
+    <span>CRM + real PM</span>
+    <span>Instagram DM priority</span>
+    <span>Event = project object</span>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="toc-title">Internal App</div>
+    <a href="#s1" class="active"><span class="n">1</span> Home / Dashboard</a>
+    <a href="#s2"><span class="n">2</span> Command Palette</a>
+    <a href="#s3"><span class="n">3</span> Contacts List</a>
+    <a href="#s4"><span class="n">4</span> Contact Detail</a>
+    <a href="#s5"><span class="n">5</span> Event Detail</a>
+    <a href="#s6"><span class="n">6</span> Pipeline (Kanban)</a>
+    <a href="#s7"><span class="n">7</span> Event Tasks &amp; Dependencies</a>
+    <a href="#s8"><span class="n">8</span> Team This Week</a>
+    <a href="#s9"><span class="n">9</span> Calendar — Month</a>
+    <a href="#s9b"><span class="n">9</span> Calendar — Week</a>
+    <a href="#s10"><span class="n">10</span> Editing Board</a>
+    <a href="#s11"><span class="n">11</span> Unified Inbox · IG DM</a>
+    <a href="#s12"><span class="n">12</span> Vendor Matrix</a>
+    <a href="#s13"><span class="n">13</span> Workflow Builder</a>
+    <a href="#s14"><span class="n">14</span> Reports</a>
+    <a href="#s15"><span class="n">15</span> Photographer Brief</a>
+    <a href="#s16"><span class="n">16</span> Notification Center</a>
+    <div class="toc-sep">Client-Facing</div>
+    <a href="#s17"><span class="n">17</span> Smart Document</a>
+    <div class="toc-sep">Setup</div>
+    <a href="#s18"><span class="n">18</span> Onboarding Wizard</a>
+    <a href="#s19"><span class="n">19</span> CSV Migration</a>
+  </nav>
+
+  <main class="content">
+
+    <section class="screen" id="s1">
+      <div class="screen-head">
+        <div class="label">Screen 01 · Internal</div>
+        <h2>Home / Dashboard</h2>
+        <p>The landing screen after login. Shows what needs attention today — not a wall of data. Role-aware: a photographer sees their events; an owner sees the whole business.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/home</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i on">⌂<span class="tip">Home</span></div>
+            <div class="app-nav-i">☺<span class="tip">Contacts</span></div>
+            <div class="app-nav-i">▦<span class="tip">Events</span></div>
+            <div class="app-nav-i">⫶<span class="tip">Pipeline</span></div>
+            <div class="app-nav-i">▤<span class="tip">Calendar</span></div>
+            <div class="app-nav-i">◔<span class="tip">Reports</span></div>
+            <div class="app-nav-spacer"></div>
+            <div class="app-nav-i">⚙<span class="tip">Settings</span></div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Good morning, Jordan</h3>
+              <div class="app-search">⌕ Search anything… <span class="kbd">⌘K</span></div>
+              <div class="app-top-actions">
+                <button class="btn btn-primary">+ Quick Add</button>
+                <div class="app-nav-i" style="color:var(--ink-soft)">◔</div>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="row" style="margin-bottom:14px">
+                <div class="panel" style="flex:1">
+                  <div class="stat-label">Pipeline Value</div>
+                  <div class="stat">$84,200</div>
+                  <div class="stat-delta up">▲ 12% vs last month</div>
+                </div>
+                <div class="panel" style="flex:1">
+                  <div class="stat-label">Bookings This Month</div>
+                  <div class="stat">7</div>
+                  <div class="stat-delta up">▲ 2 from last month</div>
+                </div>
+                <div class="panel" style="flex:1">
+                  <div class="stat-label">Awaiting Delivery</div>
+                  <div class="stat">5</div>
+                  <div class="stat-delta down">2 past target date</div>
+                </div>
+                <div class="panel" style="flex:1">
+                  <div class="stat-label">Overdue Invoices</div>
+                  <div class="stat">$3,500</div>
+                  <div class="stat-delta down">3 invoices</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="panel" style="flex:1.4">
+                  <div class="panel-head"><h4>Needs Your Attention</h4><span class="more">View all</span></div>
+                  <div class="list-row">
+                    <div class="mini-avatar" style="background:var(--clay)">SM</div>
+                    <div style="flex:1"><strong>Smith Wedding</strong> — contract expires tomorrow</div>
+                    <span class="tag tag-clay">Review &amp; send</span>
+                  </div>
+                  <div class="list-row">
+                    <div class="mini-avatar" style="background:var(--blue-tag)">AR</div>
+                    <div style="flex:1"><strong>Alvarez Engagement</strong> — gallery 3 days past target</div>
+                    <span class="tag tag-clay">Overdue</span>
+                  </div>
+                  <div class="list-row">
+                    <div class="mini-avatar" style="background:var(--accent)">TC</div>
+                    <div style="flex:1"><strong>Chen Family</strong> — questionnaire not started</div>
+                    <span class="tag tag-gray">Nudge client</span>
+                  </div>
+                  <div class="list-row">
+                    <div class="mini-avatar" style="background:var(--gold)">BP</div>
+                    <div style="flex:1"><strong>Park Wedding</strong> — final payment due in 2 days</div>
+                    <span class="tag tag-gold">Payment</span>
+                  </div>
+                </div>
+                <div class="panel" style="flex:1">
+                  <div class="panel-head"><h4>Today</h4><span class="more">Calendar</span></div>
+                  <div class="timeline-item"><div class="ti-dot"></div><div class="ti-body"><div class="ti-t">Consult call — Rivera couple</div><div class="ti-time">10:30 AM · Zoom</div></div></div>
+                  <div class="timeline-item"><div class="ti-dot" style="background:var(--clay)"></div><div class="ti-body"><div class="ti-t">Edit block — Alvarez gallery</div><div class="ti-time">1:00–4:00 PM</div></div></div>
+                  <div class="timeline-item"><div class="ti-dot" style="background:var(--gold)"></div><div class="ti-body"><div class="ti-t">Design meeting — Park album</div><div class="ti-time">4:30 PM · Google Meet</div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> The dashboard answers one question — "what do I need to do today?" Four KPIs at top, an action queue, and today's schedule. No charts to interpret, no setup required. Everything actionable is one click. <span class="resp">▮ On mobile: KPIs stack 2×2, "Needs Attention" is the full screen, "Today" is a tab.</span></div>
+    </section>
+
+    <section class="screen" id="s2">
+      <div class="screen-head">
+        <div class="label">Screen 02 · Internal</div>
+        <h2>Global Command Palette (⌘K)</h2>
+        <p>The single most important usability feature. Type what you want — a person, an event, an action, a question. Eliminates the need to learn where 27 modules live.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com · ⌘K active</div>
+        </div>
+        <div class="cmdp-wrap">
+          <div class="cmdp">
+            <div class="cmdp-input">⌕ <span>smith</span><span class="cur"></span></div>
+            <div class="cmdp-sec">
+              <div class="cmdp-sec-t">Contacts &amp; Events</div>
+              <div class="cmdp-item sel">
+                <div class="ci-ic" style="background:var(--clay-bg)">☺</div>
+                <div><div>Sarah &amp; Michael Smith</div><div class="ci-sub">Wedding · Oct 18, 2026 · Booked</div></div>
+                <span class="ci-go">↵ open</span>
+              </div>
+              <div class="cmdp-item">
+                <div class="ci-ic" style="background:var(--blue-bg)">▦</div>
+                <div><div>Smith Wedding</div><div class="ci-sub">Event record · Production pipeline</div></div>
+              </div>
+            </div>
+            <div class="cmdp-sec">
+              <div class="cmdp-sec-t">Actions</div>
+              <div class="cmdp-item">
+                <div class="ci-ic" style="background:var(--accent-bg)">✎</div>
+                <div><div>Send contract to Smith Wedding</div><div class="ci-sub">Smart Document · Classic Wedding template</div></div>
+              </div>
+              <div class="cmdp-item">
+                <div class="ci-ic" style="background:var(--accent-bg)">＄</div>
+                <div><div>Create invoice for Smith Wedding</div></div>
+              </div>
+            </div>
+            <div class="cmdp-sec">
+              <div class="cmdp-sec-t">Ask AI</div>
+              <div class="cmdp-item">
+                <div class="ci-ic" style="background:#efe5d0">✦</div>
+                <div><div>"How do I set up an anniversary email?"</div><div class="ci-sub">Get a step-by-step answer</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot clay"><strong>Why this matters most:</strong> With this many features, menu-hunting kills usability. The command palette means a user never has to <em>find</em> anything — they type intent. Contacts, events, actions, settings, and an AI help line all surface in one box. This is the difference between "overwhelming" and "effortless."</div>
+    </section>
+
+    <section class="screen" id="s3">
+      <div class="screen-head">
+        <div class="label">Screen 03 · Internal</div>
+        <h2>Contacts List</h2>
+        <p>The full client database with saved filters along the left. Vendors live here too — just a saved filter, not a separate module to learn.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/contacts</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div>
+            <div class="app-nav-i on">☺<span class="tip">Contacts</span></div>
+            <div class="app-nav-i">▦</div>
+            <div class="app-nav-i">⫶</div>
+            <div class="app-nav-i">▤</div>
+            <div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div>
+            <div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Contacts</h3>
+              <div class="app-search">⌕ Search anything… <span class="kbd">⌘K</span></div>
+              <div class="app-top-actions">
+                <button class="btn btn-primary">+ New Contact</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="row" style="height:100%">
+                <div style="width:160px;flex-shrink:0">
+                  <div class="panel" style="padding:10px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;padding:4px 6px">Saved Views</div>
+                    <div style="font-size:12px;font-weight:600;padding:6px;border-radius:6px;background:var(--accent);color:var(--card)">All Clients</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">Active Leads</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">Booked — 2026</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">Past Clients</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">⬡ Vendor Matrix</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">VIP</div>
+                    <div style="font-size:11px;padding:6px;color:var(--accent);font-weight:600">+ New view</div>
+                  </div>
+                </div>
+                <div class="panel" style="flex:1;overflow:hidden">
+                  <div class="panel-head">
+                    <div style="display:flex;gap:7px">
+                      <span class="tag tag-gray">⊕ Filter</span>
+                      <span class="tag tag-gray">⇅ Sort: Last contact</span>
+                    </div>
+                    <span class="more">312 contacts · Export</span>
+                  </div>
+                  <table class="tbl">
+                    <tr><th>Name</th><th>Type</th><th>Next event</th><th>Lifetime value</th><th>Last contact</th></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--clay)">SM</div>Sarah &amp; Michael Smith</div></td><td><span class="tag tag-green">Booked</span></td><td>Oct 18, 2026</td><td>$6,800</td><td>2 days ago</td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--blue-tag)">AR</div>Ana &amp; Rob Alvarez</div></td><td><span class="tag tag-green">Booked</span></td><td>Jun 4, 2026</td><td>$5,200</td><td>Yesterday</td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--accent)">TC</div>The Chen Family</div></td><td><span class="tag tag-blue">Lead</span></td><td>—</td><td>$0</td><td>4 hours ago</td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--gold)">BP</div>Brian &amp; Paige Park</div></td><td><span class="tag tag-green">Booked</span></td><td>May 30, 2026</td><td>$7,400</td><td>1 week ago</td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--ink-soft)">EV</div>Evergreen Events Co.</div></td><td><span class="tag tag-gray">Vendor</span></td><td>—</td><td>12 referrals</td><td>3 weeks ago</td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--clay)">JD</div>Jess &amp; Dana Reyes</div></td><td><span class="tag tag-gold">Past Client</span></td><td>—</td><td>$6,100</td><td>Anniversary in 12d</td></tr>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Saved Views replace a sprawling menu. "Vendor Matrix" is just a view of contacts filtered to <span class="tag tag-gray">Vendor</span> — same UI patterns, nothing new to learn. Filter + sort are inline, results count and export are always visible. <span class="resp">▮ On mobile: saved views become a dropdown, the table becomes cards.</span></div>
+    </section>
+
+    <section class="screen" id="s4">
+      <div class="screen-head">
+        <div class="label">Screen 04 · Internal</div>
+        <h2>Contact Detail</h2>
+        <p>One person, permanent record. Folders group fields and collapse. The activity timeline on the right shows every email, SMS, call, payment, and document — automatically.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/contacts/sarah-michael-smith</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i on">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3 style="font-size:13px;color:var(--ink-faint);font-weight:500">Contacts ›</h3>
+              <h3 style="margin-left:-8px">Sarah &amp; Michael Smith</h3>
+              <div class="app-top-actions"><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="rec-layout">
+                <div class="rec-main">
+                  <div class="rec-hero">
+                    <div class="rec-hero-av">SM</div>
+                    <div style="flex:1">
+                      <h3>Sarah &amp; Michael Smith</h3>
+                      <div class="sub">Booked Client · Referred by Evergreen Events</div>
+                      <div class="rec-hero-stats">
+                        <div><div class="v">2</div><div class="k">Events</div></div>
+                        <div><div class="v">$6,800</div><div class="k">Lifetime</div></div>
+                        <div><div class="v">2 days</div><div class="k">Last contact</div></div>
+                      </div>
+                    </div>
+                    <div class="quick-actions">
+                      <div class="qa">✉</div><div class="qa">✆</div><div class="qa">⌨</div><div class="qa">＋</div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Contact Information <span class="chev">▾</span></div>
+                    <div class="folder-body">
+                      <div class="field-grid">
+                        <div class="field"><div class="fl">Primary Email</div><div class="fv">sarah.smith@email.com</div></div>
+                        <div class="field"><div class="fl">Partner Email</div><div class="fv">michael.smith@email.com</div></div>
+                        <div class="field"><div class="fl">Primary Phone</div><div class="fv">(727) 555-0148</div></div>
+                        <div class="field"><div class="fl">Instagram</div><div class="fv">@sarahandmichael</div></div>
+                        <div class="field"><div class="fl">Anniversary</div><div class="fv">Oct 18</div></div>
+                        <div class="field"><div class="fl">Mailing Address</div><div class="fv empty">Add address…</div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Events (2) <span class="chev">▾</span></div>
+                    <div class="folder-body" style="padding:8px 14px">
+                      <div class="list-row"><div class="mini-avatar" style="background:var(--clay)">▦</div><div style="flex:1"><strong>Smith Wedding</strong> · Oct 18, 2026</div><span class="tag tag-green">Production</span></div>
+                      <div class="list-row"><div class="mini-avatar" style="background:var(--gold)">▦</div><div style="flex:1"><strong>Smith Engagement</strong> · Apr 2, 2026</div><span class="tag tag-gold">Delivered</span></div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Style &amp; Preferences <span class="chev">▾</span></div>
+                  </div>
+                </div>
+                <div class="rec-side">
+                  <div class="panel" style="padding:13px">
+                    <div class="panel-head"><h4 style="font-size:13px">Activity</h4></div>
+                    <div class="timeline-item"><div class="ti-dot"></div><div class="ti-body"><div class="ti-t">Email opened — "Your timeline draft"</div><div class="ti-time">2 days ago</div></div></div>
+                    <div class="timeline-item"><div class="ti-dot" style="background:var(--gold)"></div><div class="ti-body"><div class="ti-t">Payment received — $2,400</div><div class="ti-time">5 days ago</div></div></div>
+                    <div class="timeline-item"><div class="ti-dot" style="background:var(--blue-tag)"></div><div class="ti-body"><div class="ti-t">SMS sent — engagement sneak peek</div><div class="ti-time">1 week ago</div></div></div>
+                    <div class="timeline-item"><div class="ti-dot" style="background:var(--clay)"></div><div class="ti-body"><div class="ti-t">Contract signed</div><div class="ti-time">3 weeks ago</div></div></div>
+                    <div class="timeline-item"><div class="ti-dot"></div><div class="ti-body"><div class="ti-t">Moved to Production</div><div class="ti-time">3 weeks ago</div></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Click any field to edit inline — no edit mode, no save button. Folders collapse so the record never feels long. Empty fields show <em>"Add address…"</em> instead of blank space. The timeline is automatic — the photographer never logs anything manually. <span class="resp">▮ On mobile: timeline moves to a "History" tab; quick-action bar stays pinned.</span></div>
+    </section>
+
+    <section class="screen" id="s5">
+      <div class="screen-head">
+        <div class="label">Screen 05 · Internal</div>
+        <h2>Event Detail</h2>
+        <p>The operational heart of the system. Every Event is independent — repeat clients get a new Event record, never an overwrite. Object is <code>project</code> in the schema; the photographer always sees "Event." Tasks, files, money, and status in one view.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/events/smith-wedding-2026</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂<span class="tip">Home</span></div><div class="app-nav-i">☺<span class="tip">Contacts</span></div><div class="app-nav-i on">▦<span class="tip">Events</span></div><div class="app-nav-i">⫶<span class="tip">Pipeline</span></div><div class="app-nav-i">✓<span class="tip">Tasks</span></div><div class="app-nav-i">▤<span class="tip">Calendar</span></div><div class="app-nav-i">◔<span class="tip">Reports</span></div><div class="app-nav-spacer"></div><div class="app-nav-i">◔<span class="tip">Alerts</span></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3 style="font-size:13px;color:var(--ink-faint);font-weight:500">Events ›</h3>
+              <h3 style="margin-left:-8px">Smith Wedding</h3>
+              <div class="app-top-actions">
+                <button class="btn btn-ghost btn-sm">Send Smart Doc</button>
+                <button class="btn btn-primary btn-sm">+ Invoice</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="rec-layout">
+                <div class="rec-main">
+                  <div class="rec-hero">
+                    <div class="rec-hero-av" style="background:linear-gradient(135deg,var(--accent-soft),var(--accent))">▦</div>
+                    <div style="flex:1">
+                      <h3>Smith Wedding</h3>
+                      <div class="sub">Oct 17, 2026 · The Vinoy, St. Petersburg · 8 hrs · 2 photographers</div>
+                      <div style="display:flex;gap:5px;margin-top:9px;flex-wrap:wrap">
+                        <span class="tag tag-green">✓ Contract Signed</span>
+                        <span class="tag tag-green">✓ Deposit Paid</span>
+                        <span class="tag tag-gold">Final Due Oct 3</span>
+                        <span class="tag tag-blue">Tasks 18/31</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Task Plan — instantiated from "Wedding" template <span class="chev">▾</span></div>
+                    <div class="folder-body" style="padding:8px 14px">
+                      <div class="list-row"><span class="tag tag-green">Done</span><div style="flex:1">Send welcome packet <span style="color:var(--ink-faint)">· T−90</span></div><div class="mini-avatar" style="background:var(--accent)">J</div></div>
+                      <div class="list-row"><span class="tag tag-green">Done</span><div style="flex:1">Engagement shoot complete <span style="color:var(--ink-faint)">· T−60</span></div><div class="mini-avatar" style="background:var(--accent)">J</div></div>
+                      <div class="list-row"><span class="tag tag-gold">In progress</span><div style="flex:1">Confirm timeline with couple <span style="color:var(--ink-faint)">· T−7</span></div><div class="mini-avatar" style="background:var(--accent)">J</div></div>
+                      <div class="list-row"><span class="tag tag-gray">Blocked</span><div style="flex:1">Back up files <span style="color:var(--ink-faint)">· waiting on: Event day</span></div><div class="mini-avatar" style="background:var(--clay)">M</div></div>
+                      <div class="list-row" style="border:none"><div style="flex:1;font-size:11px;color:var(--accent);font-weight:600">View all 31 tasks · screen 07 →</div></div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Package &amp; Pricing <span class="chev">▾</span></div>
+                    <div class="folder-body">
+                      <div class="field-grid">
+                        <div class="field"><div class="fl">Package</div><div class="fv">Classic Wedding Collection</div></div>
+                        <div class="field"><div class="fl">Base Price</div><div class="fv">$5,800</div></div>
+                        <div class="field"><div class="fl">Add-on</div><div class="fv">Engagement Session · +$1,000</div></div>
+                        <div class="field"><div class="fl">Subtotal</div><div class="fv">$6,800.00</div></div>
+                        <div class="field"><div class="fl">Discount</div><div class="fv">−10% · −$680.00</div></div>
+                        <div class="field"><div class="fl">Tax (add · 7%)</div><div class="fv">+$428.40</div></div>
+                        <div class="field"><div class="fl">Total Project Value</div><div class="fv"><strong>$6,548.40</strong></div></div>
+                      </div>
+                      <div style="font-size:10.5px;color:var(--ink-faint);margin-top:8px">Order: line items → discount → tax → total. Split runs on total.</div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Payment Schedule <span class="chev">▾</span></div>
+                    <div class="folder-body" style="padding:8px 14px">
+                      <div style="display:flex;gap:6px;align-items:center;padding:6px 0 10px">
+                        <span style="font-size:11px;color:var(--ink-faint)">Split:</span>
+                        <span class="tag tag-green">Even × 3</span>
+                        <span class="tag tag-gray">%</span>
+                        <span class="tag tag-gray">Fractions</span>
+                        <span class="tag tag-gray">Manual</span>
+                      </div>
+                      <div class="list-row"><div style="flex:1">Deposit · paid Mar 1</div><strong>$2,182.80</strong><span class="tag tag-green">Paid</span></div>
+                      <div class="list-row"><div style="flex:1">Second · paid Apr 28</div><strong>$2,182.80</strong><span class="tag tag-green">Paid</span></div>
+                      <div class="list-row"><div style="flex:1">Final · due Oct 3 <span style="color:var(--ink-faint)">(14 days before event)</span></div><strong>$2,182.80</strong><span class="tag tag-gold">Scheduled</span></div>
+                      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-faint);padding:8px 0 0;border-top:1px solid var(--line-soft);margin-top:6px"><span>Σ installments</span><span>$6,548.40 — reconciles ✓</span></div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Files <span class="chev">▾</span></div>
+                    <div class="folder-body" style="padding:8px 14px">
+                      <div class="list-row"><div style="flex:1">📄 Signed Contract.pdf</div><span class="tag tag-blue">Client-visible</span></div>
+                      <div class="list-row"><div style="flex:1">📄 Vendor COI — The Vinoy.pdf</div><span class="tag tag-gray">Internal</span></div>
+                      <div class="list-row" style="border:none"><div style="flex:1">📄 Family shot list.pdf</div><span class="tag tag-gray">Internal</span></div>
+                    </div>
+                  </div>
+                  <div class="folder">
+                    <div class="folder-head">Vendors &amp; Team <span class="chev">▾</span></div>
+                  </div>
+                </div>
+                <div class="rec-side">
+                  <div class="panel" style="padding:13px;margin-bottom:12px">
+                    <div class="stat-label">Project Profit</div>
+                    <div class="stat" style="font-size:21px">$4,180</div>
+                    <div style="font-size:10.5px;color:var(--ink-soft)">61% margin · est.</div>
+                  </div>
+                  <div class="panel" style="padding:13px">
+                    <div class="panel-head"><h4 style="font-size:13px">Sun &amp; Light</h4></div>
+                    <div style="font-size:11px;color:var(--ink-soft);line-height:1.7">Sunset <strong>6:48 PM</strong><br>Golden hr <strong>6:05–6:48</strong><br>Blue hr <strong>7:02 PM</strong><br><span style="color:var(--ink-faint)">auto from venue + date</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> The Event record is the command center — task plan, files, money, and status without leaving the page. The task plan was instantiated from the "Wedding" template when the Event was created; the blocked task shows <em>why</em> it's blocked. Profit is owner-only; photographer-role users never see it. <span class="resp">▮ On mobile: folders become an accordion; profit + sun move below the fold.</span></div>
+    </section>
+
+    <section class="screen" id="s6">
+      <div class="screen-head">
+        <div class="label">Screen 06 · Internal</div>
+        <h2>Pipeline — Kanban</h2>
+        <p>Drag events through stages. Multiple pipelines (Sales, Production, Post-Production, Album) all use this same view. Stage totals at the top, stale-card warnings built in.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/pipeline/sales</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i on">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Pipeline</h3>
+              <div style="display:flex;gap:6px;margin-left:6px">
+                <span class="tag tag-green">Sales</span>
+                <span class="tag tag-gray">Production</span>
+                <span class="tag tag-gray">Post-Production</span>
+                <span class="tag tag-gray">Album</span>
+              </div>
+              <div class="app-top-actions"><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="kanban">
+                <div class="kan-col">
+                  <div class="kan-col-head">New Inquiry <span class="ct">3 · $19k</span></div>
+                  <div class="kan-card"><div class="kc-name">Chen Family</div><div class="kc-meta">Family · ~$1,200</div><div class="kan-card-foot kc-foot"><span class="tag tag-blue">4h old</span></div></div>
+                  <div class="kan-card"><div class="kc-name">Rivera Wedding</div><div class="kc-meta">Wedding · ~$7,000</div><div class="kc-foot"><span class="tag tag-blue">1d old</span></div></div>
+                  <div class="kan-card"><div class="kc-name">Boyd Proposal</div><div class="kc-meta">Proposal · ~$900</div><div class="kc-foot"><span class="tag tag-clay">⚠ 6d — stale</span></div></div>
+                </div>
+                <div class="kan-col">
+                  <div class="kan-col-head">Consult Scheduled <span class="ct">2 · $13k</span></div>
+                  <div class="kan-card"><div class="kc-name">Okafor Wedding</div><div class="kc-meta">Wedding · ~$8,000</div><div class="kc-foot"><span class="tag tag-gray">Call Fri</span></div></div>
+                  <div class="kan-card"><div class="kc-name">Lin Engagement</div><div class="kc-meta">Engagement · ~$1,100</div><div class="kc-foot"><span class="tag tag-gray">Call Mon</span></div></div>
+                </div>
+                <div class="kan-col">
+                  <div class="kan-col-head">Proposal Sent <span class="ct">2 · $14k</span></div>
+                  <div class="kan-card"><div class="kc-name">Tanaka Wedding</div><div class="kc-meta">Wedding · $6,500</div><div class="kc-foot"><span class="tag tag-gold">Viewed 2×</span></div></div>
+                  <div class="kan-card"><div class="kc-name">Smith Wedding</div><div class="kc-meta">Wedding · $6,800</div><div class="kc-foot"><span class="tag tag-clay">Expires 1d</span></div></div>
+                </div>
+                <div class="kan-col">
+                  <div class="kan-col-head">Booked <span class="ct">4 · $24k</span></div>
+                  <div class="kan-card"><div class="kc-name">Park Wedding</div><div class="kc-meta">Wedding · $7,400</div><div class="kc-foot"><div class="kc-dots"><i style="background:var(--accent)"></i><i style="background:var(--accent)"></i></div></div></div>
+                  <div class="kan-card"><div class="kc-name">Alvarez Wedding</div><div class="kc-meta">Wedding · $5,200</div><div class="kc-foot"><div class="kc-dots"><i style="background:var(--accent)"></i><i style="background:var(--accent)"></i></div></div></div>
+                  <div class="kan-card"><div class="kc-name">Webb Family</div><div class="kc-meta">Family · $1,400</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Same kanban UI for all four pipelines — learn it once. Cards show only what matters (name, type, value, one status flag). Stale cards turn <span class="tag tag-clay">amber</span> automatically so nothing slips. Pipeline switcher is a simple tab row, not a buried setting. <span class="resp">▮ On mobile: columns become horizontally swipeable; tap a card for the full event.</span></div>
+    </section>
+
+    <!-- ========== EVENT TASKS & DEPENDENCIES ========== -->
+    <section class="screen" id="s7">
+      <div class="screen-head">
+        <div class="label">Screen 07 · Internal</div>
+        <h2>Event Tasks &amp; Dependencies</h2>
+        <p>The project-management core. Tasks instantiated from the Event's template with relative due dates resolved to real dates and roles resolved to real people. Dependencies are <code>blocked_by</code> only — a blocked task says what it's waiting on. No Gantt, no critical path: deliberately out of scope.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/events/smith-wedding-2026/tasks</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂<span class="tip">Home</span></div><div class="app-nav-i">☺<span class="tip">Contacts</span></div><div class="app-nav-i">▦<span class="tip">Events</span></div><div class="app-nav-i">⫶<span class="tip">Pipeline</span></div><div class="app-nav-i on">✓<span class="tip">Tasks</span></div><div class="app-nav-i">▤<span class="tip">Calendar</span></div><div class="app-nav-i">◔<span class="tip">Reports</span></div><div class="app-nav-spacer"></div><div class="app-nav-i">◔<span class="tip">Alerts</span></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3 style="font-size:13px;color:var(--ink-faint);font-weight:500">Smith Wedding ›</h3>
+              <h3 style="margin-left:-8px">Tasks</h3>
+              <div style="display:flex;gap:6px;margin-left:6px">
+                <span class="tag tag-green">List</span><span class="tag tag-gray">By stage</span>
+              </div>
+              <div class="app-top-actions">
+                <button class="btn btn-ghost btn-sm">Edit task plan</button>
+                <button class="btn btn-primary btn-sm">+ Task</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="panel" style="height:100%;overflow:hidden">
+                <div class="panel-head">
+                  <h4>Production · 31 tasks · 18 done</h4>
+                  <span class="more">Instantiated from "Wedding" template · event date Oct 17</span>
+                </div>
+                <table class="tbl">
+                  <tr><th>Task</th><th>Stage</th><th>Owner</th><th>Due</th><th>Status</th><th>Depends on</th></tr>
+                  <tr><td><div class="name-cell">✓ Confirm timeline with couple</div></td><td>Prep</td><td><div class="mini-avatar" style="background:var(--accent)">J</div></td><td>Oct 10 <span style="color:var(--ink-faint)">· T−7</span></td><td><span class="tag tag-gold">In progress</span></td><td style="color:var(--ink-faint)">—</td></tr>
+                  <tr><td><div class="name-cell">☐ Send day-before brief to 2nd shooter</div></td><td>Prep</td><td><div class="mini-avatar" style="background:var(--accent)">J</div></td><td>Oct 16 <span style="color:var(--ink-faint)">· T−1</span></td><td><span class="tag tag-gray">Not started</span></td><td>Confirm timeline</td></tr>
+                  <tr><td><div class="name-cell">☐ Shoot the wedding</div></td><td>Event day</td><td><div class="mini-avatar" style="background:var(--accent)">J</div> <div class="mini-avatar" style="background:var(--clay)">M</div></td><td>Oct 17 <span style="color:var(--ink-faint)">· T0</span></td><td><span class="tag tag-gray">Not started</span></td><td style="color:var(--ink-faint)">—</td></tr>
+                  <tr><td><div class="name-cell">⛔ Back up files (both locations)</div></td><td>Post</td><td><div class="mini-avatar" style="background:var(--clay)">M</div></td><td>Oct 18 <span style="color:var(--ink-faint)">· T+1</span></td><td><span class="tag tag-gray">Blocked</span></td><td style="color:var(--clay)">⤷ Shoot the wedding</td></tr>
+                  <tr><td><div class="name-cell">⛔ Cull &amp; deliver sneaks</div></td><td>Post</td><td><div class="mini-avatar" style="background:var(--clay)">M</div></td><td>Oct 22 <span style="color:var(--ink-faint)">· T+5</span></td><td><span class="tag tag-gray">Blocked</span></td><td style="color:var(--clay)">⤷ Back up files</td></tr>
+                  <tr><td><div class="name-cell">☐ Deliver full gallery</div></td><td>Post</td><td><div class="mini-avatar" style="background:var(--clay)">M</div></td><td>Nov 28 <span style="color:var(--ink-faint)">· T+42</span></td><td><span class="tag tag-gray">Blocked</span></td><td style="color:var(--clay)">⤷ Cull &amp; deliver sneaks</td></tr>
+                </table>
+                <div style="margin-top:12px;background:var(--accent-bg);border-radius:9px;padding:10px 13px;font-size:12px;color:var(--ink)">✦ <strong>Dependency rule in action:</strong> "Back up files" is greyed and Blocked until "Shoot the wedding" is marked done — then it flips to Ready and its T+1 due date locks in. If the event date moves, every non-overridden due date recomputes automatically.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot clay"><strong>The CRM-vs-PM line:</strong> this screen is what makes the system a real project-management tool, not a CRM with date fields. Tasks come from a templated plan, carry relative timing that resolves to the event date, resolve role assignees to real people, and block on each other. Critical-path math and Gantt charts are explicitly excluded — a wedding's chain is linear and the photographer knows it. <span class="resp">▮ On mobile: collapses to task + status + owner; tap a row for dependencies and checklist.</span></div>
+    </section>
+
+    <!-- ========== TEAM THIS WEEK ========== -->
+    <section class="screen" id="s8">
+      <div class="screen-head">
+        <div class="label">Screen 08 · Internal</div>
+        <h2>Team This Week</h2>
+        <p>One screen so a studio owner can see who's overloaded and rebalance manually. People as rows, the week's days as columns, each cell showing that person's tasks and events. No algorithm, no auto-balancing — a saved-view configuration over the task engine plus the calendar's week-grid render.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/tasks/team-week</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂<span class="tip">Home</span></div><div class="app-nav-i">☺<span class="tip">Contacts</span></div><div class="app-nav-i">▦<span class="tip">Events</span></div><div class="app-nav-i">⫶<span class="tip">Pipeline</span></div><div class="app-nav-i on">✓<span class="tip">Tasks</span></div><div class="app-nav-i">▤<span class="tip">Calendar</span></div><div class="app-nav-i">◔<span class="tip">Reports</span></div><div class="app-nav-spacer"></div><div class="app-nav-i">◔<span class="tip">Alerts</span></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Team This Week</h3>
+              <div style="display:flex;gap:6px;margin-left:6px">
+                <span class="tag tag-gray">‹ Prev</span><span class="tag tag-green">Oct 13–19</span><span class="tag tag-gray">Next ›</span>
+              </div>
+              <div class="app-top-actions"><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="panel" style="height:100%;overflow:hidden">
+                <table class="tbl">
+                  <tr><th>Person</th><th>Mon 13</th><th>Tue 14</th><th>Wed 15</th><th>Thu 16</th><th>Fri 17</th><th>Sat 18</th><th>Sun 19</th></tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--accent)">J</div>Jordan <span style="color:var(--ink-faint)">· lead</span></div></td>
+                    <td><span class="tag tag-blue">2 tasks</span></td><td><span class="tag tag-blue">1 task</span></td><td><span class="tag tag-gray">—</span></td>
+                    <td><span class="tag tag-clay">3 tasks</span></td><td><span class="tag tag-green">Smith Wedding</span></td><td><span class="tag tag-gray">—</span></td><td><span class="tag tag-gray">—</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--clay)">M</div>Maria <span style="color:var(--ink-faint)">· editor</span></div></td>
+                    <td><span class="tag tag-clay">Alvarez cull</span></td><td><span class="tag tag-clay">Alvarez edit</span></td><td><span class="tag tag-clay">Alvarez edit</span></td>
+                    <td><span class="tag tag-clay">Reyes cull</span></td><td><span class="tag tag-gray">—</span></td><td><span class="tag tag-blue">Smith backup</span></td><td><span class="tag tag-blue">Smith cull</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--blue-tag)">D</div>Devon <span style="color:var(--ink-faint)">· 2nd shooter</span></div></td>
+                    <td><span class="tag tag-gray">—</span></td><td><span class="tag tag-gray">—</span></td><td><span class="tag tag-gray">—</span></td>
+                    <td><span class="tag tag-blue">1 task</span></td><td><span class="tag tag-green">Smith Wedding</span></td><td><span class="tag tag-gray">—</span></td><td><span class="tag tag-gray">—</span></td>
+                  </tr>
+                </table>
+                <div style="margin-top:12px;background:var(--clay-bg);border-radius:9px;padding:10px 13px;font-size:12px;color:var(--ink)">⚠ <strong>What the owner sees at a glance:</strong> Maria is stacked Mon–Thu (Alvarez + Reyes) then has Smith backup/cull over the weekend — she's the bottleneck. Devon is open Mon–Wed. Move the Reyes cull to Devon. That decision is the entire point of this screen.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> deliberately not a resource-leveling engine. It surfaces the one thing a 2–8 person studio actually needs — "who's underwater this week" — and lets a human rebalance. It's nearly free to build because the data, grouping, and grid render already exist from the task engine, saved-views, and calendar modules. <span class="resp">▮ On mobile: one person per screen, swipe between team members.</span></div>
+    </section>
+
+    <section class="screen" id="s9">
+      <div class="screen-head">
+        <div class="label">Screen 09 · Internal</div>
+        <h2>Calendar — Month View</h2>
+        <p>A real calendar: Day / Week / Month / Agenda, interchangeable like any calendar app. Events, meetings, deadlines, edit blocks, and travel time in one place. Two-way sync with Google &amp; Outlook. Color-coded by type.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/calendar</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i">⫶</div><div class="app-nav-i on">▤</div><div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="tag tag-gray" style="cursor:default">‹</span>
+                <h3 style="margin:0">May 2026</h3>
+                <span class="tag tag-gray" style="cursor:default">›</span>
+                <span class="tag tag-gray" style="margin-left:4px">Today</span>
+              </div>
+              <div style="display:flex;gap:4px;margin-left:10px;border:1px solid var(--line);border-radius:8px;padding:2px">
+                <span class="tag tag-gray" style="border:none">Day</span>
+                <span class="tag tag-gray" style="border:none">Week</span>
+                <span class="tag tag-green" style="border:none">Month</span>
+                <span class="tag tag-gray" style="border:none">Agenda</span>
+              </div>
+              <div class="app-top-actions">
+                <button class="btn btn-ghost btn-sm">⇆ Synced: Google</button>
+                <button class="btn btn-primary btn-sm">+ Event</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas" style="padding:0">
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--line);gap:1px;border-bottom:1px solid var(--line)">
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">SUN</div>
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">MON</div>
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">TUE</div>
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">WED</div>
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">THU</div>
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">FRI</div>
+                <div style="background:var(--paper-2);padding:7px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--ink-soft);letter-spacing:0.04em">SAT</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;background:var(--line);gap:1px;height:calc(100% - 33px)">
+                <div style="background:var(--paper);padding:5px 6px"><span style="font-size:11px;color:var(--ink-faint)">26</span></div>
+                <div style="background:var(--paper);padding:5px 6px"><span style="font-size:11px;color:var(--ink-faint)">27</span></div>
+                <div style="background:var(--paper);padding:5px 6px"><span style="font-size:11px;color:var(--ink-faint)">28</span></div>
+                <div style="background:var(--paper);padding:5px 6px"><span style="font-size:11px;color:var(--ink-faint)">29</span></div>
+                <div style="background:var(--paper);padding:5px 6px"><span style="font-size:11px;color:var(--ink-faint)">30</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">1</span>
+                  <div style="font-size:9.5px;background:var(--blue-bg);color:var(--blue-tag);border-radius:3px;padding:1px 4px;margin-top:3px">Consult — Lee 2pm</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">2</span>
+                  <div style="font-size:9.5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:1px 4px;margin-top:3px">★ Tran Wedding</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">3</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">4</span>
+                  <div style="font-size:9.5px;background:var(--clay-bg);color:var(--clay);border-radius:3px;padding:1px 4px;margin-top:3px">Edit — Tran</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">5</span>
+                  <div style="font-size:9.5px;background:var(--blue-bg);color:var(--blue-tag);border-radius:3px;padding:1px 4px;margin-top:3px">Consult — Rivera</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">6</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">7</span>
+                  <div style="font-size:9.5px;background:#f3e8c8;color:#8a6713;border-radius:3px;padding:1px 4px;margin-top:3px">Album mtg — Park</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">8</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">9</span>
+                  <div style="font-size:9.5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:1px 4px;margin-top:3px">★ Okafor Wedding</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">10</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">11</span>
+                  <div style="font-size:9.5px;background:var(--clay-bg);color:var(--clay);border-radius:3px;padding:1px 4px;margin-top:3px">Edit — Okafor</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">12</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">13</span>
+                  <div style="font-size:9.5px;background:var(--blue-bg);color:var(--blue-tag);border-radius:3px;padding:1px 4px;margin-top:3px">Consult — Diaz</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">14</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">15</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">16</span>
+                  <div style="font-size:9.5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:1px 4px;margin-top:3px">★ Webb Family</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">17</span></div>
+                <div style="background:var(--accent-bg);padding:5px 6px;outline:2px solid var(--accent);outline-offset:-2px"><span style="font-size:11px;font-weight:700;color:var(--accent)">18</span>
+                  <div style="font-size:9.5px;background:var(--clay-bg);color:var(--clay);border-radius:3px;padding:1px 4px;margin-top:3px">Edit — Webb</div>
+                  <div style="font-size:9.5px;background:#f3e8c8;color:#8a6713;border-radius:3px;padding:1px 4px;margin-top:2px">+2 more</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">19</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">20</span>
+                  <div style="font-size:9.5px;background:var(--blue-bg);color:var(--blue-tag);border-radius:3px;padding:1px 4px;margin-top:3px">Consult — Park</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">21</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">22</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">23</span>
+                  <div style="font-size:9.5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:1px 4px;margin-top:3px">★ Smith Engmt</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">24</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">25</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">26</span>
+                  <div style="font-size:9.5px;background:var(--clay-bg);color:var(--clay);border-radius:3px;padding:1px 4px;margin-top:3px">Edit — Smith</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">27</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">28</span>
+                  <div style="font-size:9.5px;background:var(--blue-bg);color:var(--blue-tag);border-radius:3px;padding:1px 4px;margin-top:3px">Consult — Yu</div></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">29</span></div>
+                <div style="background:var(--card);padding:5px 6px"><span style="font-size:11px;font-weight:600">30</span>
+                  <div style="font-size:9.5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:1px 4px;margin-top:3px">★ Park Wedding</div></div>
+                <div style="background:var(--paper);padding:5px 6px"><span style="font-size:11px;color:var(--ink-faint)">1</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> A real month grid — weeks as rows, Sun–Sat columns, today (the 18th) outlined, prior/next-month days greyed, overflow collapses to "+N more." The Day / Week / Month / Agenda switch is a segmented control top-left; Month is shown here, the next screen shows Week. One calendar, everything on it — green = event, clay = edit block, gold = album/meeting, blue = consult. Sync status is a visible button so the photographer always trusts it. <span class="resp">▮ On mobile: defaults to Agenda (list) view — the only calendar view that truly works on a phone.</span></div>
+    </section>
+
+    <!-- ========== CALENDAR — WEEK VIEW ========== -->
+    <section class="screen" id="s9b" style="scroll-margin-top:80px">
+      <div class="screen-head">
+        <div class="label">Screen 09 · Internal (Week view)</div>
+        <h2>Calendar — Week View</h2>
+        <p>The same calendar, Week selected. Time grid down the left, the seven days across, events placed at their actual start time and height-scaled to duration — what a working calendar week actually looks like. Day view is this same grid for one column; Agenda is a chronological list.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/calendar?view=week</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i">⫶</div><div class="app-nav-i on">▤</div><div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="tag tag-gray" style="cursor:default">‹</span>
+                <h3 style="margin:0">May 17–23, 2026</h3>
+                <span class="tag tag-gray" style="cursor:default">›</span>
+              </div>
+              <div style="display:flex;gap:4px;margin-left:10px;border:1px solid var(--line);border-radius:8px;padding:2px">
+                <span class="tag tag-gray" style="border:none">Day</span>
+                <span class="tag tag-green" style="border:none">Week</span>
+                <span class="tag tag-gray" style="border:none">Month</span>
+                <span class="tag tag-gray" style="border:none">Agenda</span>
+              </div>
+              <div class="app-top-actions">
+                <button class="btn btn-ghost btn-sm">⇆ Synced: Google</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas" style="padding:0;overflow:hidden">
+              <div style="display:grid;grid-template-columns:46px repeat(7,1fr);background:var(--line);gap:1px;border-bottom:1px solid var(--line)">
+                <div style="background:var(--paper-2)"></div>
+                <div style="background:var(--paper-2);padding:6px 0;text-align:center;font-size:10px;font-weight:600;color:var(--ink-soft)">SUN 17</div>
+                <div style="background:var(--accent-bg);padding:6px 0;text-align:center;font-size:10px;font-weight:700;color:var(--accent)">MON 18</div>
+                <div style="background:var(--paper-2);padding:6px 0;text-align:center;font-size:10px;font-weight:600;color:var(--ink-soft)">TUE 19</div>
+                <div style="background:var(--paper-2);padding:6px 0;text-align:center;font-size:10px;font-weight:600;color:var(--ink-soft)">WED 20</div>
+                <div style="background:var(--paper-2);padding:6px 0;text-align:center;font-size:10px;font-weight:600;color:var(--ink-soft)">THU 21</div>
+                <div style="background:var(--paper-2);padding:6px 0;text-align:center;font-size:10px;font-weight:600;color:var(--ink-soft)">FRI 22</div>
+                <div style="background:var(--paper-2);padding:6px 0;text-align:center;font-size:10px;font-weight:600;color:var(--ink-soft)">SAT 23</div>
+              </div>
+              <div style="height:calc(100% - 30px);overflow:hidden">
+                <div style="display:grid;grid-template-columns:46px repeat(7,1fr);grid-template-rows:repeat(6,1fr);height:100%;background:var(--line-soft);gap:1px">
+                  <div style="background:var(--paper);font-size:9.5px;color:var(--ink-faint);text-align:right;padding:2px 5px 0 0">8 AM</div>
+                  <div style="background:var(--card)"></div><div style="background:var(--accent-bg)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                  <div style="background:var(--paper);font-size:9.5px;color:var(--ink-faint);text-align:right;padding:2px 5px 0 0">10 AM</div>
+                  <div style="background:var(--card)"></div>
+                  <div style="background:var(--accent-bg);position:relative"><div style="position:absolute;inset:2px;background:var(--accent);color:var(--card);border-radius:4px;padding:3px 5px;font-size:9px;line-height:1.25">★ Webb Family<br>10a–1p · studio</div></div>
+                  <div style="background:var(--card)"></div>
+                  <div style="background:var(--card);position:relative"><div style="position:absolute;left:2px;right:2px;top:2px;height:60%;background:var(--blue-tag);color:var(--card);border-radius:4px;padding:3px 5px;font-size:9px;line-height:1.25">Consult — Park<br>10:30 · Zoom</div></div>
+                  <div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                  <div style="background:var(--paper);font-size:9.5px;color:var(--ink-faint);text-align:right;padding:2px 5px 0 0">12 PM</div>
+                  <div style="background:var(--card)"></div><div style="background:var(--accent-bg)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                  <div style="background:var(--paper);font-size:9.5px;color:var(--ink-faint);text-align:right;padding:2px 5px 0 0">2 PM</div>
+                  <div style="background:var(--card)"></div>
+                  <div style="background:var(--accent-bg);position:relative"><div style="position:absolute;left:2px;right:2px;top:2px;height:130%;background:var(--clay);color:var(--card);border-radius:4px;padding:3px 5px;font-size:9px;line-height:1.25;z-index:1">Edit block — Webb<br>2–5 PM</div></div>
+                  <div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                  <div style="background:var(--card);position:relative"><div style="position:absolute;left:2px;right:2px;top:2px;height:90%;background:#c2942f;color:var(--card);border-radius:4px;padding:3px 5px;font-size:9px;line-height:1.25">Album mtg<br>2:30 PM</div></div>
+                  <div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                  <div style="background:var(--paper);font-size:9.5px;color:var(--ink-faint);text-align:right;padding:2px 5px 0 0">4 PM</div>
+                  <div style="background:var(--card)"></div><div style="background:var(--accent-bg)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                  <div style="background:var(--paper);font-size:9.5px;color:var(--ink-faint);text-align:right;padding:2px 5px 0 0">6 PM</div>
+                  <div style="background:var(--card)"></div><div style="background:var(--accent-bg)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div><div style="background:var(--card)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Week and Day are a true time grid — hour rows down the side, events positioned at their start time and sized to duration, overlaps side by side. This is the standard calendar interaction every photographer already knows from Google/Apple Calendar, so there's nothing new to learn. This screen is in the wireframe so the build target for view-switching is unambiguous: Month = grid of weeks, Week/Day = time grid, Agenda = chronological list. <span class="resp">▮ On mobile: Day replaces Week (a 7-column time grid is unusable on a phone); Agenda is the default.</span></div>
+    </section>
+
+    <section class="screen" id="s10">
+      <div class="screen-head">
+        <div class="label">Screen 10 · Internal</div>
+        <h2>Editing Board / Post-Production Tracking</h2>
+        <p>Where every event is in post — backed up, culled, with which editor, file-transfer links, gallery upload status. Does <em>not</em> integrate with Lightroom; it tracks the workflow around it.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/pipeline/post-production</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i on">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Post-Production</h3>
+              <div style="display:flex;gap:6px;margin-left:6px">
+                <span class="tag tag-gray">Board</span><span class="tag tag-green">Table</span>
+              </div>
+              <div class="app-top-actions"><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="panel" style="height:100%;overflow:hidden">
+                <table class="tbl">
+                  <tr><th>Event</th><th>Status</th><th>Editor</th><th>Files</th><th>Gallery</th><th>Target</th></tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--clay)">▦</div>Alvarez Wedding</div></td>
+                    <td><span class="tag tag-clay">Editing — Round 1</span></td>
+                    <td>Maria (ext.)</td>
+                    <td style="color:var(--blue-tag)">↗ Dropbox link</td>
+                    <td><span class="tag tag-gray">Not uploaded</span></td>
+                    <td style="color:var(--clay)">3d overdue</td>
+                  </tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--gold)">▦</div>Reyes Family</div></td>
+                    <td><span class="tag tag-blue">Culling</span></td>
+                    <td>Jordan (me)</td>
+                    <td style="color:var(--blue-tag)">↗ Local + B2</td>
+                    <td><span class="tag tag-gray">—</span></td>
+                    <td>May 20</td>
+                  </tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--accent)">▦</div>Tanaka Wedding</div></td>
+                    <td><span class="tag tag-green">Sneaks Delivered</span></td>
+                    <td>Maria (ext.)</td>
+                    <td style="color:var(--blue-tag)">↗ WeTransfer</td>
+                    <td style="color:var(--blue-tag)">↗ Pic-Time</td>
+                    <td>May 24</td>
+                  </tr>
+                  <tr>
+                    <td><div class="name-cell"><div class="mini-avatar" style="background:var(--blue-tag)">▦</div>Webb Family</div></td>
+                    <td><span class="tag tag-gray">Awaiting Backup</span></td>
+                    <td>Unassigned</td>
+                    <td><span class="tag tag-clay">⚠ Not backed up</span></td>
+                    <td><span class="tag tag-gray">—</span></td>
+                    <td>May 28</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Every post-production milestone is a column you can scan — no opening records. File-transfer URLs (Dropbox, WeTransfer, B2) are one click. "Not backed up" turns amber because that's the scary one. Editor-role users see only their own rows here. <span class="resp">▮ On mobile: collapses to status + event name, tap to expand the row.</span></div>
+    </section>
+
+    <section class="screen" id="s11">
+      <div class="screen-head">
+        <div class="label">Screen 11 · Internal</div>
+        <h2>Unified Inbox — Email · SMS · Instagram DM</h2>
+        <p>Every message from a person, every channel, one thread. Instagram DM is the V1 priority channel — incoming DMs get AI intent detection (booking / active client / noise) and a drafted reply the photographer reviews and sends. Nothing auto-sends.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/inbox</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂</div><div class="app-nav-i on">☺</div><div class="app-nav-i">▦</div><div class="app-nav-i">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div><div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Inbox</h3>
+              <div style="display:flex;gap:6px;margin-left:6px">
+                <span class="tag tag-green">All</span><span class="tag tag-gray">Instagram</span>
+                <span class="tag tag-gray">Email</span><span class="tag tag-gray">SMS</span>
+                <span class="tag tag-clay">Needs reply · 4</span>
+              </div>
+              <div class="app-top-actions"><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="rec-layout">
+                <div style="width:230px;flex-shrink:0">
+                  <div class="panel" style="padding:8px">
+                    <div class="list-row" style="padding:8px 6px"><div class="mini-avatar" style="background:var(--clay)">◍</div><div style="flex:1"><strong>@laurenmillerphoto</strong><div style="font-size:10.5px;color:var(--clay)">IG · booking intent</div></div></div>
+                    <div class="list-row" style="padding:8px 6px"><div class="mini-avatar" style="background:var(--accent)">SM</div><div style="flex:1"><strong>Sarah Smith</strong><div style="font-size:10.5px;color:var(--ink-faint)">Email · re: timeline</div></div></div>
+                    <div class="list-row" style="padding:8px 6px"><div class="mini-avatar" style="background:var(--blue-tag)">JP</div><div style="flex:1"><strong>(727) 555-0148</strong><div style="font-size:10.5px;color:var(--ink-faint)">SMS · Park wedding</div></div></div>
+                    <div class="list-row" style="padding:8px 6px;border:none"><div class="mini-avatar" style="background:var(--gold)">◍</div><div style="flex:1"><strong>@tanakaevents</strong><div style="font-size:10.5px;color:var(--ink-faint)">IG · vendor</div></div></div>
+                  </div>
+                </div>
+                <div class="rec-main">
+                  <div class="panel" style="height:100%">
+                    <div class="panel-head">
+                      <div style="display:flex;align-items:center;gap:9px"><div class="mini-avatar" style="background:var(--clay)">◍</div><div><strong>@laurenmillerphoto</strong><div style="font-size:11px;color:var(--ink-faint)">Instagram Direct · not yet a contact</div></div></div>
+                      <span class="tag tag-clay">✦ Booking intent detected</span>
+                    </div>
+                    <div style="padding:10px 2px">
+                      <div style="background:var(--paper-2);border-radius:10px;padding:10px 13px;font-size:12.5px;max-width:78%;margin-bottom:8px">Hi! We're getting married next October at the Vinoy and loved your work from the Tanaka wedding — are you available 10/17/26 and what do your packages run?</div>
+                      <div style="font-size:10.5px;color:var(--ink-faint);margin-bottom:14px">Instagram · 8 min ago</div>
+                      <div style="border:1.5px solid var(--accent);background:var(--accent-bg);border-radius:10px;padding:12px">
+                        <div style="font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:5px">✦ AI-drafted reply — review before sending</div>
+                        <div style="font-size:12.5px;line-height:1.55;color:var(--ink)">Hi Lauren! Congratulations 🎉 We do have October 17, 2026 open. Our wedding collections start at $4,200 and the Classic (8 hrs, 2 photographers) is our most popular at $5,800. I'd love to send over full details and hop on a quick call — what's the best email for you?</div>
+                        <div style="display:flex;gap:7px;margin-top:11px">
+                          <button class="btn btn-primary btn-sm">Send reply</button>
+                          <button class="btn btn-ghost btn-sm">Edit first</button>
+                          <button class="btn btn-ghost btn-sm">+ Create lead</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rec-side">
+                  <div class="panel" style="padding:13px">
+                    <div class="panel-head"><h4 style="font-size:13px">AI Read</h4></div>
+                    <div style="font-size:11.5px;color:var(--ink-soft);line-height:1.6">Detected: <strong>wedding inquiry</strong>. Date mentioned: <strong>Oct 17 2026</strong> — calendar shows open. Venue: <strong>The Vinoy</strong>. Referral signal: Tanaka wedding. Suggested action: create Sales opportunity, attach drafted reply.</div>
+                    <div style="margin-top:10px;font-size:11px;color:var(--accent);font-weight:600">Connected: Instagram ✓ · token healthy</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot clay"><strong>The V1 social play:</strong> wedding leads increasingly start as Instagram DMs, and no current CRM captures them. The system reads every incoming DM, classifies intent, and drafts a contextual reply using real calendar and package data — but a human always sends. DMs only: no scanning of comments, posts, or reels. <span class="resp">▮ On mobile: the conversation view is full-screen; the AI Read panel becomes a collapsible bar.</span></div>
+    </section>
+
+    <section class="screen" id="s12">
+      <div class="screen-head">
+        <div class="label">Screen 12 · Internal</div>
+        <h2>Vendor Matrix</h2>
+        <p>Not a new module — a saved view of Contacts where type = Vendor, plus vendor-specific fields. Reuses every Contacts pattern, so there's nothing new to learn. Typing a vendor name on an Event autocompletes from here.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/contacts?view=vendor-matrix</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂</div><div class="app-nav-i on">☺</div><div class="app-nav-i">▦</div><div class="app-nav-i">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div><div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3 style="font-size:13px;color:var(--ink-faint);font-weight:500">Contacts ›</h3>
+              <h3 style="margin-left:-8px">Vendor Matrix</h3>
+              <div class="app-top-actions"><button class="btn btn-primary btn-sm">+ Vendor</button><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="row" style="height:100%">
+                <div style="width:160px;flex-shrink:0">
+                  <div class="panel" style="padding:10px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;padding:4px 6px">Saved Views</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">All Clients</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">Active Leads</div>
+                    <div style="font-size:12px;font-weight:600;padding:6px;border-radius:6px;background:var(--accent);color:var(--card)">⬡ Vendor Matrix</div>
+                    <div style="font-size:12px;padding:6px;color:var(--ink-soft)">Past Clients</div>
+                    <div style="font-size:11px;padding:6px;color:var(--accent);font-weight:600">+ New view</div>
+                  </div>
+                </div>
+                <div class="panel" style="flex:1;overflow:hidden">
+                  <div class="panel-head">
+                    <div style="display:flex;gap:7px">
+                      <span class="tag tag-gray">⊕ Category: all</span>
+                      <span class="tag tag-green">⊕ Company: all</span>
+                      <span class="tag tag-gray">⇅ Tier</span>
+                      <span class="tag tag-gray">⌕ Search name · company · URL · phone</span>
+                    </div>
+                    <span class="more">38 vendors · Export</span>
+                  </div>
+                  <table class="tbl">
+                    <tr><th>Contact</th><th>Personal</th><th>Company</th><th>Company URL</th><th>Company phone</th><th>Tier</th></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--clay)">KS</div>Kelly Smith</div></td><td>(727) 555‑0182</td><td><strong>Evergreen Events Co.</strong></td><td style="color:var(--blue-tag)">evergreenevents.com</td><td>(813) 555‑0100</td><td><span class="tag tag-green">A — Preferred</span></td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--gold)">KS</div>Kelly Smith</div></td><td>(941) 555‑0147</td><td><strong>Bloom &amp; Bramble Planning</strong></td><td style="color:var(--blue-tag)">bloombramble.co</td><td>(941) 555‑0190</td><td><span class="tag tag-gold">B — Good</span></td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--accent)">DL</div>Dana Lee</div></td><td>(727) 555‑0233</td><td><strong>Bloom &amp; Co. Florals</strong></td><td style="color:var(--blue-tag)">bloomandco.com</td><td>(727) 555‑0200</td><td><span class="tag tag-green">A — Preferred</span></td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--blue-tag)">MR</div>Marcus Reed</div></td><td>(727) 555‑0318</td><td><strong>The Vinoy</strong></td><td style="color:var(--blue-tag)">vinoyresort.com</td><td>(727) 555‑0300</td><td><span class="tag tag-gold">B — Good</span></td></tr>
+                    <tr><td><div class="name-cell"><div class="mini-avatar" style="background:var(--ink-soft)">TP</div>Tom Pine</div></td><td>(813) 555‑0405</td><td><strong>Grand Catering</strong></td><td style="color:var(--ink-faint)">— add URL</td><td>(813) 555‑0400</td><td><span class="tag tag-gray">Unrated</span></td></tr>
+                  </table>
+                  <div style="margin-top:12px;background:var(--accent-bg);border-radius:9px;padding:10px 13px;font-size:12px;color:var(--ink)">✦ <strong>Why Company, Company URL, and the phone split matter:</strong> the two "Kelly Smith" rows are both wedding planners — same name, same category. Their personal cell, their company, their company URL, and their company main line are all different, and any one of them disambiguates instantly. Personal phone lives on the person; company phone and URL live on the Company reference (shared by every contact there, entered once). All are searchable and filterable.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Vendors aren't a separate system — they're a Contact type with a saved view and a few extra fields. Company is a first-class, picked (not free-typed) field on every contact, so it works as a search term, filter, column, and grouping here and everywhere. That is what resolves the real-world case where two vendors share a name and only the company tells them apart. On an Event record the "Vendors" field autocompletes from this set as "Name — Company" and links many-to-many. One concept, reused. <span class="resp">▮ On mobile: table collapses to contact + company + tier; tap to expand.</span></div>
+    </section>
+
+    <section class="screen" id="s13">
+      <div class="screen-head">
+        <div class="label">Screen 13 · Internal</div>
+        <h2>Workflow Builder</h2>
+        <p>Visual, node-based automation. But most users start from a pre-built template or describe it to AI — the blank canvas is the power-user path, not the default.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/settings/workflows/new-inquiry-nurture</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i on">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3 style="font-size:13px;color:var(--ink-faint);font-weight:500">Workflows ›</h3>
+              <h3 style="margin-left:-8px">New Inquiry Nurture</h3>
+              <div class="app-top-actions">
+                <button class="btn btn-ghost btn-sm">▷ Test mode</button>
+                <button class="btn btn-primary btn-sm">Active ✓</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="row" style="height:100%">
+                <div class="wf-canvas" style="flex:1">
+                  <div class="wf-node trigger">
+                    <div class="wf-type">● Trigger</div>
+                    <div class="wf-label">Inquiry form submitted</div>
+                    <div class="wf-sub">Any event type</div>
+                  </div>
+                  <div class="wf-conn"></div>
+                  <div class="wf-node action">
+                    <div class="wf-type">▸ Action</div>
+                    <div class="wf-label">Send welcome email</div>
+                    <div class="wf-sub">Template: Inquiry Response</div>
+                  </div>
+                  <div class="wf-conn"></div>
+                  <div class="wf-node action">
+                    <div class="wf-type">▸ Action</div>
+                    <div class="wf-label">Wait 4 days</div>
+                  </div>
+                  <div class="wf-conn"></div>
+                  <div class="wf-node cond">
+                    <div class="wf-type">◆ Condition</div>
+                    <div class="wf-label">Has the client replied?</div>
+                    <div class="wf-sub">Yes → exit · No → continue</div>
+                  </div>
+                  <div class="wf-conn"></div>
+                  <div class="wf-node action">
+                    <div class="wf-type">▸ Action</div>
+                    <div class="wf-label">Send follow-up + booking link</div>
+                  </div>
+                </div>
+                <div style="width:190px;flex-shrink:0">
+                  <div class="panel" style="padding:13px;margin-bottom:12px;background:#efe5d0;border-color:#e0d2b4">
+                    <h4 style="font-size:13px;margin-bottom:5px">✦ Build with AI</h4>
+                    <div style="font-size:11px;color:var(--ink-soft);line-height:1.5">"When a wedding inquiry comes in, send the welcome series and notify me." → AI builds it.</div>
+                  </div>
+                  <div class="panel" style="padding:13px">
+                    <h4 style="font-size:13px;margin-bottom:8px">Add Step</h4>
+                    <div style="font-size:11.5px;padding:4px 0;color:var(--clay)">● Trigger</div>
+                    <div style="font-size:11.5px;padding:4px 0;color:var(--accent)">▸ Action</div>
+                    <div style="font-size:11.5px;padding:4px 0;color:var(--gold)">◆ Condition</div>
+                    <div style="font-size:11.5px;padding:4px 0;color:var(--ink-soft)">⏲ Wait / Delay</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> The builder is powerful but lives in Settings — not the main nav — because most photographers use the 30+ pre-built workflows and rarely build from scratch. "Build with AI" is offered first. Test mode lets them simulate before going live, so automations are never a black box. <span class="resp">▮ On mobile: workflows can be viewed, toggled on/off, and AI-edited; deep node editing is desktop-recommended.</span></div>
+    </section>
+
+    <section class="screen" id="s14">
+      <div class="screen-head">
+        <div class="label">Screen 14 · Internal</div>
+        <h2>Reports</h2>
+        <p>Pre-built reports answer the common questions instantly. The custom builder and the "Ask AI" bar handle everything else — no report-building expertise required.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/reports</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav">
+            <div class="app-logo">S</div>
+            <div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i">▦</div>
+            <div class="app-nav-i">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i on">◔</div>
+            <div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Reports</h3>
+              <div class="app-search" style="max-width:380px">✦ Ask: "revenue by lead source this year"</div>
+              <div class="app-top-actions">
+                <button class="btn btn-primary btn-sm">+ Custom Report</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="row" style="margin-bottom:14px">
+                <div class="panel" style="flex:1.3">
+                  <div class="panel-head"><h4>Revenue — Trailing 6 Months</h4><span class="more">Export ▾</span></div>
+                  <div style="display:flex;align-items:flex-end;gap:10px;height:130px;padding-top:10px">
+                    <div style="flex:1;background:var(--accent-bg);height:55%;border-radius:6px 6px 0 0;position:relative"><span style="position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:10px;color:var(--ink-soft)">$22k</span></div>
+                    <div style="flex:1;background:var(--accent-bg);height:48%;border-radius:6px 6px 0 0"></div>
+                    <div style="flex:1;background:var(--accent-bg);height:70%;border-radius:6px 6px 0 0"></div>
+                    <div style="flex:1;background:var(--accent-bg);height:62%;border-radius:6px 6px 0 0"></div>
+                    <div style="flex:1;background:var(--accent-soft);height:85%;border-radius:6px 6px 0 0"></div>
+                    <div style="flex:1;background:var(--accent);height:95%;border-radius:6px 6px 0 0;position:relative"><span style="position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:10px;color:var(--accent);font-weight:600">$38k</span></div>
+                  </div>
+                  <div style="display:flex;gap:10px;font-size:10px;color:var(--ink-faint);margin-top:6px"><span style="flex:1;text-align:center">Dec</span><span style="flex:1;text-align:center">Jan</span><span style="flex:1;text-align:center">Feb</span><span style="flex:1;text-align:center">Mar</span><span style="flex:1;text-align:center">Apr</span><span style="flex:1;text-align:center">May</span></div>
+                </div>
+                <div class="panel" style="flex:1">
+                  <div class="panel-head"><h4>AI Insight</h4><span class="tag tag-gold">✦ Generated</span></div>
+                  <p style="font-size:12px;color:var(--ink-soft);line-height:1.6">You're trending <strong>34% above</strong> the same period last year. The lift is driven mostly by <strong>engagement-session upsells</strong> — 7 of your last 9 weddings added one. Referrals from <strong>Evergreen Events</strong> carry a 23% higher average value than other sources.</p>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><h4>Pre-Built Reports</h4><span class="more">12 reports</span></div>
+                <div class="row">
+                  <div style="flex:1;font-size:12px"><div style="padding:6px 0;border-bottom:1px solid var(--line-soft)">▸ Revenue by Lead Source</div><div style="padding:6px 0;border-bottom:1px solid var(--line-soft)">▸ Conversion Rate by Stage</div><div style="padding:6px 0">▸ Average Project Value</div></div>
+                  <div style="flex:1;font-size:12px"><div style="padding:6px 0;border-bottom:1px solid var(--line-soft)">▸ Top Referring Vendors</div><div style="padding:6px 0;border-bottom:1px solid var(--line-soft)">▸ Profit by Project</div><div style="padding:6px 0">▸ Outstanding Invoices Aging</div></div>
+                  <div style="flex:1;font-size:12px"><div style="padding:6px 0;border-bottom:1px solid var(--line-soft)">▸ Sales Tax Collected</div><div style="padding:6px 0;border-bottom:1px solid var(--line-soft)">▸ 1099 Contractor Totals</div><div style="padding:6px 0">▸ Booking Lead Time</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> The "Ask AI" bar is the headline feature — type a question in plain English, get a chart. AI Insight panel interprets the data <em>for</em> the photographer so they don't have to. 12 pre-built reports cover 90% of needs; the custom builder is there for the rest. <span class="resp">▮ On mobile: charts stack vertically, AI Insight leads, pre-built reports become a list.</span></div>
+    </section>
+
+    <section class="screen" id="s15">
+      <div class="screen-head">
+        <div class="label">Screen 15 · Internal</div>
+        <h2>One-Pager Photographer Brief</h2>
+        <p>Auto-generated from the Event record — nothing typed twice. Sun and golden-hour times are calculated from the venue and date. Auto-emailed to the lead and second shooter the week before, refreshed 24 hours out.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/events/smith-wedding/brief</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂</div><div class="app-nav-i">☺</div><div class="app-nav-i on">▦</div><div class="app-nav-i">⫶</div><div class="app-nav-i">▤</div><div class="app-nav-i">◔</div><div class="app-nav-spacer"></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3 style="font-size:13px;color:var(--ink-faint);font-weight:500">Smith Wedding ›</h3>
+              <h3 style="margin-left:-8px">Photographer Brief</h3>
+              <div class="app-top-actions">
+                <button class="btn btn-ghost btn-sm">⤓ PDF</button>
+                <button class="btn btn-primary btn-sm">Email team</button>
+                <div class="avatar">J</div>
+              </div>
+            </div>
+            <div class="app-canvas">
+              <div class="panel" style="max-width:680px;margin:0 auto;height:100%;overflow:hidden">
+                <div style="text-align:center;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px">
+                  <div style="font-family:'Fraunces';font-size:20px;font-weight:600">Smith Wedding — Event Brief</div>
+                  <div style="font-size:12px;color:var(--ink-soft)">Saturday, October 17, 2026 · The Vinoy, St. Petersburg FL</div>
+                </div>
+                <div class="row" style="margin-bottom:14px">
+                  <div style="flex:1">
+                    <div class="stat-label">Coverage</div>
+                    <div style="font-size:13px;font-weight:600">11:00 AM – 7:00 PM · 8 hrs</div>
+                    <div style="font-size:12px;color:var(--ink-soft);margin-top:2px">Lead: Jordan · 2nd: Maria</div>
+                  </div>
+                  <div style="flex:1">
+                    <div class="stat-label">Light (auto-calculated)</div>
+                    <div style="font-size:12px;color:var(--ink-soft);margin-top:2px">Sunset <strong>6:48 PM</strong> · Golden hour <strong>6:05–6:48</strong> · Blue hour <strong>7:02</strong></div>
+                  </div>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div class="stat-label">Key Vendors</div>
+                  <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">Planner: Evergreen Events <span style="color:var(--blue-tag)">@evergreenevents</span> · Florist: Bloom &amp; Co. <span style="color:var(--blue-tag)">@bloomandco</span> · DJ: Sweet Sounds <span style="color:var(--blue-tag)">@sweetsoundsdj</span></div>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div class="stat-label">Must-Have Shots</div>
+                  <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">First look (1:15 PM, waterfront lawn) · Ring detail with heirloom box · Grandmother's toast · Sunset couple portraits (~6:15, plan around golden hour above)</div>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div class="stat-label">Family / Group List</div>
+                  <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">8 groupings · divorced parents on Sarah's side — see note · full list on page 2</div>
+                </div>
+                <div style="background:var(--clay-bg);border-radius:9px;padding:10px 13px;font-size:12px;color:var(--ink)">⚠ <strong>Logistics:</strong> vendor meals at 5:00 in the Terrace Room · parking validated at the main garage · getting-ready suite is room 410.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> The brief is a generated artifact, never a form. Every field is pulled from the Event record, so it's always current and never double-entered. The light timing is the photographer-specific touch — sunset and golden hour computed from venue coordinates so portraits get planned against real available light. <span class="resp">▮ On mobile: this is the day-of reference view — large type, the brief in scroll order.</span></div>
+    </section>
+
+    <!-- ========== NOTIFICATION CENTER ========== -->
+    <section class="screen" id="s16">
+      <div class="screen-head">
+        <div class="label">Screen 16 · Internal</div>
+        <h2>Notification Center</h2>
+        <p>A real notification system, not just the reliability health email. In-app + email in V1; the dispatcher is channel-agnostic so V2's native-app push is a new adapter, not a rewrite. Per-event-type / per-channel preferences with sensible defaults shipped.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com — notification center open</div>
+        </div>
+        <div class="frame-body">
+          <div class="app-nav"><div class="app-logo">S</div><div class="app-nav-i">⌂<span class="tip">Home</span></div><div class="app-nav-i">☺<span class="tip">Contacts</span></div><div class="app-nav-i">▦<span class="tip">Events</span></div><div class="app-nav-i">⫶<span class="tip">Pipeline</span></div><div class="app-nav-i">✓<span class="tip">Tasks</span></div><div class="app-nav-i">▤<span class="tip">Calendar</span></div><div class="app-nav-i">◔<span class="tip">Reports</span></div><div class="app-nav-spacer"></div><div class="app-nav-i on">◔<span class="tip">Alerts</span></div><div class="app-nav-i">⚙</div></div>
+          <div class="app-main">
+            <div class="app-top">
+              <h3>Notifications</h3>
+              <div style="display:flex;gap:6px;margin-left:6px">
+                <span class="tag tag-green">All</span><span class="tag tag-gray">Unread · 5</span><span class="tag tag-gray">Mentions</span>
+              </div>
+              <div class="app-top-actions"><button class="btn btn-ghost btn-sm">Preferences</button><div class="avatar">J</div></div>
+            </div>
+            <div class="app-canvas">
+              <div class="rec-layout">
+                <div class="rec-main">
+                  <div class="panel" style="height:100%;overflow:hidden">
+                    <div class="list-row"><div class="mini-avatar" style="background:var(--accent)">＄</div><div style="flex:1"><strong>Payment received</strong> — Smith Wedding final, $2,400 <div style="font-size:10.5px;color:var(--ink-faint)">2 min ago · email + in-app</div></div><span class="tag tag-green">New</span></div>
+                    <div class="list-row"><div class="mini-avatar" style="background:var(--clay)">◍</div><div style="flex:1"><strong>Instagram DM — booking intent</strong> — @laurenmillerphoto, Oct 2026 wedding <div style="font-size:10.5px;color:var(--ink-faint)">14 min ago</div></div><span class="tag tag-green">New</span></div>
+                    <div class="list-row"><div class="mini-avatar" style="background:var(--blue-tag)">✎</div><div style="flex:1"><strong>Proposal viewed</strong> — Tanaka Wedding opened the Smart Document twice <div style="font-size:10.5px;color:var(--ink-faint)">1 hr ago</div></div><span class="tag tag-green">New</span></div>
+                    <div class="list-row"><div class="mini-avatar" style="background:var(--accent)">✓</div><div style="flex:1"><strong>Task unblocked</strong> — "Back up files" is now Ready (Smith Wedding) <div style="font-size:10.5px;color:var(--ink-faint)">3 hrs ago</div></div></div>
+                    <div class="list-row"><div class="mini-avatar" style="background:var(--clay)">⚠</div><div style="flex:1"><strong>Automation failed</strong> — "Gallery delivery" email bounced for Alvarez; retry available <div style="font-size:10.5px;color:var(--ink-faint)">5 hrs ago</div></div><span class="tag tag-clay">Action</span></div>
+                    <div class="list-row" style="border:none"><div class="mini-avatar" style="background:var(--ink-soft)">◷</div><div style="flex:1"><strong>Questionnaire completed</strong> — Park family pre-session form <div style="font-size:10.5px;color:var(--ink-faint)">yesterday</div></div></div>
+                  </div>
+                </div>
+                <div class="rec-side">
+                  <div class="panel" style="padding:13px">
+                    <div class="panel-head"><h4 style="font-size:13px">Preferences</h4></div>
+                    <div style="font-size:11px;color:var(--ink-soft);line-height:1.5;margin-bottom:8px">Per event type, per channel:</div>
+                    <div class="list-row" style="padding:6px 0;font-size:11px"><div style="flex:1">Payment received</div><span class="tag tag-green">In-app</span><span class="tag tag-green">Email</span></div>
+                    <div class="list-row" style="padding:6px 0;font-size:11px"><div style="flex:1">IG booking intent</div><span class="tag tag-green">In-app</span><span class="tag tag-green">Email</span></div>
+                    <div class="list-row" style="padding:6px 0;font-size:11px"><div style="flex:1">Task assigned</div><span class="tag tag-green">In-app</span><span class="tag tag-gray">Email off</span></div>
+                    <div class="list-row" style="padding:6px 0;font-size:11px;border:none"><div style="flex:1">Proposal viewed</div><span class="tag tag-green">In-app</span><span class="tag tag-gray">Email off</span></div>
+                    <div style="font-size:10.5px;color:var(--ink-faint);margin-top:8px">Push channel reserved for V2 native app — architecture already channel-agnostic.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Why this is V1, not V2:</strong> notifications are load-bearing for the mobile experience and for trust — "your contract was signed," "payment received," "automation failed, retry." Honeybook's notifications are a genuine strength; matching them is table stakes. V1 ships in-app + email with the full events catalog and preference matrix; the push channel lights up when the V2 native app ships, with no core rewrite. <span class="resp">▮ On mobile: full-screen list; preferences move to a settings tab.</span></div>
+    </section>
+
+    <section class="screen" id="s17">
+      <div class="screen-head">
+        <div class="label">Screen 17 · Client-Facing</div>
+        <h2>Smart Document — Proposal + Contract + Invoice</h2>
+        <p>What the client sees. Pick a package, sign, pay — one flow, one link, no login. Replaces three separate documents with one seamless experience.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">book.yourstudio.com/d/smith-wedding · no login required</div>
+        </div>
+        <div class="client-frame">
+          <div class="client-topbar">
+            <div class="client-logo">Your<span>Studio</span></div>
+            <div class="client-nav"><span>Need help?</span></div>
+          </div>
+          <div class="client-body">
+            <div class="smartdoc">
+              <div class="smartdoc-hero">
+                <div class="sd-k">Your Booking</div>
+                <h3>Sarah &amp; Michael — Wedding Collection</h3>
+                <div class="sd-sub">October 18, 2026 · The Vinoy, St. Petersburg</div>
+              </div>
+              <div class="smartdoc-steps">
+                <div class="sd-step on">1 · Choose</div>
+                <div class="sd-step">2 · Review &amp; Sign</div>
+                <div class="sd-step">3 · Pay Deposit</div>
+              </div>
+              <div class="smartdoc-body">
+                <div style="font-size:12px;color:var(--ink-soft);margin-bottom:12px">Select your collection — pricing, contract, and payment plan update automatically.</div>
+                <div class="pkg-card">
+                  <div class="pkg-radio"></div>
+                  <div><h4>Essential Wedding</h4><div class="pkg-desc">6 hours · 1 photographer · online gallery</div></div>
+                  <div class="pkg-price">$4,200</div>
+                </div>
+                <div class="pkg-card sel">
+                  <div class="pkg-radio"></div>
+                  <div><h4>Classic Wedding Collection</h4><div class="pkg-desc">8 hours · 2 photographers · gallery + print release</div></div>
+                  <div class="pkg-price">$5,800</div>
+                </div>
+                <div class="pkg-card">
+                  <div class="pkg-radio"></div>
+                  <div><h4>Heirloom Wedding</h4><div class="pkg-desc">10 hours · 2 photographers · album included</div></div>
+                  <div class="pkg-price">$8,400</div>
+                </div>
+                <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:12px">
+                  <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;margin-bottom:8px">Add to your collection</div>
+                  <div class="list-row" style="padding:7px 0"><div class="pkg-radio" style="width:16px;height:16px;border-radius:5px;background:var(--accent);border-color:var(--accent)"></div><div style="flex:1"><strong>Engagement Session</strong> — 2 hrs, separate gallery</div><strong>+$1,000</strong></div>
+                  <div class="list-row" style="padding:7px 0"><div class="pkg-radio" style="width:16px;height:16px;border-radius:5px"></div><div style="flex:1">Rehearsal Dinner Coverage — 2 hrs</div><strong>+$800</strong></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+                  <div><div style="font-size:11px;color:var(--ink-faint)">Total</div><div style="font-family:'Fraunces';font-size:22px;font-weight:600">$6,800</div></div>
+                  <button class="btn btn-primary" style="padding:11px 22px">Continue to Sign →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot clay"><strong>The Honeybook-killer flow:</strong> Three documents become one. The client picks a package — contract language and the payment schedule update live underneath. Sign and pay in the same flow. No login, no account, no access code. Works on a phone in about three minutes. Different invoice sections can route to different billing contacts (parents paying for part of it).</div>
+    </section>
+
+    <section class="screen" id="s18">
+      <div class="screen-head">
+        <div class="label">Screen 18 · Setup</div>
+        <h2>Onboarding Wizard</h2>
+        <p>Five questions. The system configures pipelines, workflows, templates, and tax settings from the answers. Operational in about an hour — not three weeks.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/welcome</div>
+        </div>
+        <div class="client-frame">
+          <div class="client-body" style="padding:10px">
+            <div class="onb">
+              <div class="onb-prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+              <div class="onb-body">
+                <div class="onb-step-k">Step 3 of 5</div>
+                <h3>What payment schedule do you usually use?</h3>
+                <div class="onb-q">We'll pre-build your invoicing and payment-reminder automations around this. You can always change it per event.</div>
+                <div class="onb-opts">
+                  <div class="onb-opt">Pay in full</div>
+                  <div class="onb-opt sel">50% deposit, 50% before</div>
+                  <div class="onb-opt">Three payments</div>
+                  <div class="onb-opt">Custom / varies</div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:18px">
+                  <button class="btn btn-ghost" style="flex:1">← Back</button>
+                  <button class="btn btn-primary" style="flex:2">Continue →</button>
+                </div>
+                <div style="text-align:center;font-size:11px;color:var(--ink-faint);margin-top:12px">You can skip setup and explore with sample data instead</div>
+              </div>
+            </div>
+            <div style="max-width:460px;margin:14px auto 0;display:flex;gap:8px">
+              <div class="panel" style="flex:1;padding:11px;text-align:center"><div style="font-size:11px;color:var(--ink-faint)">Already done</div><div style="font-size:12px;font-weight:600;margin-top:2px;color:var(--accent)">✓ Event types · ✓ Pricing</div></div>
+              <div class="panel" style="flex:1;padding:11px;text-align:center"><div style="font-size:11px;color:var(--ink-faint)">Coming next</div><div style="font-size:12px;font-weight:600;margin-top:2px">Brand vibe · Migration</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot"><strong>Usability decision:</strong> Five questions, big tappable options, sensible default pre-selected on each. From the answers, the system installs five pipelines, 30+ workflows, contract and email templates, and tax settings — all customized. "Skip and explore with sample data" is always there for people who'd rather poke around first. The next step ("Migration") is where AI offers to pull data from their old CRM. <span class="resp">▮ Fully mobile-first — many photographers will sign up on their phone.</span></div>
+    </section>
+
+    <section class="screen" id="s19">
+      <div class="screen-head">
+        <div class="label">Screen 19 · Setup</div>
+        <h2>CSV Migration + AI Interpretation</h2>
+        <p>Not API integrations with five competitors — a CSV importer with an AI interpretation layer. Upload an export from Honeybook/Dubsado/Tave/a spreadsheet; the system maps fields, flags duplicates, and proposes how to structure it. Human confirms.</p>
+      </div>
+      <div class="frame">
+        <div class="frame-bar">
+          <div class="frame-dots"><i></i><i></i><i></i></div>
+          <div class="frame-url">app.yourstudio.com/welcome/migrate</div>
+        </div>
+        <div class="client-frame">
+          <div class="client-body" style="padding:18px">
+            <div class="onb" style="max-width:560px">
+              <div class="onb-prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+              <div class="onb-body">
+                <div class="onb-step-k">Migration · Step 3 of 4</div>
+                <h3>Here's what we found in your file</h3>
+                <div class="onb-q">honeybook_export.csv · 312 rows · AI mapped the columns. Review the mapping — change anything that's off.</div>
+                <div class="panel" style="padding:12px;margin-bottom:12px">
+                  <div class="list-row" style="font-size:12px"><div style="flex:1"><strong>"Client Name"</strong> → Contact name</div><span class="tag tag-green">✓ confident</span></div>
+                  <div class="list-row" style="font-size:12px"><div style="flex:1"><strong>"Event Date"</strong> → Event primary date</div><span class="tag tag-green">✓ confident</span></div>
+                  <div class="list-row" style="font-size:12px"><div style="flex:1"><strong>"Project Value"</strong> → Event total value</div><span class="tag tag-green">✓ confident</span></div>
+                  <div class="list-row" style="font-size:12px"><div style="flex:1"><strong>"Stage"</strong> → Pipeline stage <span style="color:var(--ink-faint)">(mapped to your Sales pipeline)</span></div><span class="tag tag-gold">review</span></div>
+                  <div class="list-row" style="font-size:12px;border:none"><div style="flex:1"><strong>"Notes"</strong> → Event internal notes</div><span class="tag tag-green">✓ confident</span></div>
+                </div>
+                <div style="background:var(--accent-bg);border-radius:9px;padding:10px 13px;font-size:12px;color:var(--ink);margin-bottom:14px">✦ <strong>AI noticed:</strong> 14 rows look like repeat clients (same name, different event dates). We'll create one Contact with multiple Events for each — not duplicate contacts. 3 likely duplicates flagged for you to merge.</div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn btn-ghost" style="flex:1">← Back</button>
+                  <button class="btn btn-primary" style="flex:2">Looks right — import 312 rows →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot clay"><strong>The honest scope:</strong> no fragile login-scraping or per-competitor API integrations in V1. A robust CSV importer plus an AI layer that interprets messy exports and proposes the three-record structure (one Contact, many Events) covers the real migration need. The repeat-client detection is the part that matters — it's the exact thing flat-model CRMs get wrong. <span class="resp">▮ On mobile: supported, but migration is recommended on desktop.</span></div>
+    </section>
+
+    <div class="legend">
+      <div><i style="background:var(--accent)"></i> Primary / positive / done</div>
+      <div><i style="background:var(--clay)"></i> Needs attention / blocked</div>
+      <div><i style="background:var(--gold)"></i> Financial / in progress</div>
+      <div><i style="background:var(--blue-tag)"></i> Informational</div>
+      <div><i style="background:var(--paper-2)"></i> Neutral</div>
+    </div>
+
+  </main>
+</div>
+
+<div class="footer-note">
+  <strong>This is the locked V1, fully reconciled.</strong> Terminology: the core object is <code>project</code> in schema/API/code; photographers always see <strong>"Event."</strong> Domain terms that name real things are deliberately preserved — "Engagement Shoot" (a real couple's session), "second shooter" (the industry role), "Shooting" (a time category). Only the system/object layer became "Event." The project-management engine — tasks, <code>blocked_by</code> dependencies (no critical path, no Gantt), templated task plans with the instantiation engine, and Team This Week — is shown on screens 5, 7, and 8. File management is on the Event record (screen 5). The notification system is screen 16. Three screens from the earlier comprehensive set remain deferred to V2 and are intentionally absent: Wedding Day Timeline collaboration, Client Portal, Vendor/Planner Portal. Honest framing carried from the build spec: with the PM engine in scope, V1 is ~$54–55K module build / $70–95K launch budget and a 6–8 month timeline; module 4.30 (templated task plans / instantiation) is the most likely overrun and the one to pin the developer down on. Medium fidelity: layout, hierarchy, and the decisions — not final visual design.
+</div>
+
+<script>
+  const links = document.querySelectorAll('.toc a');
+  const screens = document.querySelectorAll('.screen');
+  const byId = {};
+  links.forEach(l => byId[l.getAttribute('href')] = l);
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const link = byId['#' + e.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-15% 0px -70% 0px' });
+  screens.forEach(s => obs.observe(s));
+</script>
+
+</body>
+</html>
+

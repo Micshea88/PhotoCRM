@@ -101,6 +101,33 @@ import { respectOverride } from "@/lib/recompute/override"
 All `cents` functions take and return **integer cents**. Passing a float
 throws. Percentages are **basis points** (1 bps = 0.01%, so 1500 = 15.00%).
 
+## NEVER show raw cents to a human — display discipline (HARD RULE)
+
+> Integer cents are an internal storage and computation format ONLY. They
+> are never appropriate for human display. Every UI screen, email, PDF,
+> invoice, exported CSV/XLSX, audit-rendering surface, and notification
+> MUST format `*_cents` values as currency before they reach a human:
+>
+> | Stored (integer cents) | Displayed                              |
+> | ---------------------- | -------------------------------------- |
+> | `226667`               | `$2,266.67` (or per-locale equivalent) |
+> | `0`                    | `$0.00`                                |
+> | `null`                 | empty / em-dash / TBD (NOT `$0.00`)    |
+>
+> Same rule for percentages: integer basis points are storage, not
+> display. `1500 bps` is shown as `15%` (or `15.00%` where two-decimal
+> precision matters — discounts, tax rates).
+>
+> **This rule binds every consumer of the data**, not just the recompute
+> engine: the Phase 4 list-view renderer, contact/event detail pages,
+> kanban cards, invoices module's PDF/email templates, the saved-views
+> export pipeline, and the audit-log metadata renderer. Lint cannot
+> enforce it; PR review must.
+>
+> When the Phase 4 UI components ship, they own a shared `formatCents()`
+> helper (likely at `src/lib/format/money.ts`). Every screen routes
+> through it; no inline `${cents}` template literals in JSX.
+
 All `dates` functions take and return **YYYY-MM-DD strings**. Passing a
 `Date` object throws.
 

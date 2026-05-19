@@ -61,6 +61,18 @@ export const env = createEnv({
     SENTRY_AUTH_TOKEN: z.string().optional(),
     SENTRY_ORG: z.string().optional(),
     SENTRY_PROJECT: z.string().optional(),
+    // AI Workflow Builder (module 16b). Optional everywhere: when key
+    // is missing the module GRACEFULLY DISABLES with a clear
+    // "AI Workflow Builder not configured" error — no crash, no
+    // build failure. The model var has a sane default.
+    ANTHROPIC_API_KEY: z.string().optional(),
+    AI_WORKFLOW_BUILDER_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
+    // Rate-limit ENV reads. Operator-cost backstop, NOT a user paywall.
+    // Defaults are generous (invisible to honest use; hard ceiling only
+    // against runaway / abuse / bug). See ai-workflow-builder/README.md.
+    AI_WORKFLOW_BUILDER_HOURLY_USER: z.coerce.number().int().min(1).default(100),
+    AI_WORKFLOW_BUILDER_HOURLY_ORG: z.coerce.number().int().min(1).default(500),
+    AI_WORKFLOW_BUILDER_DAILY_ORG: z.coerce.number().int().min(1).default(2000),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -83,6 +95,11 @@ export const env = createEnv({
     SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
     SENTRY_ORG: process.env.SENTRY_ORG,
     SENTRY_PROJECT: process.env.SENTRY_PROJECT,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    AI_WORKFLOW_BUILDER_MODEL: process.env.AI_WORKFLOW_BUILDER_MODEL,
+    AI_WORKFLOW_BUILDER_HOURLY_USER: process.env.AI_WORKFLOW_BUILDER_HOURLY_USER,
+    AI_WORKFLOW_BUILDER_HOURLY_ORG: process.env.AI_WORKFLOW_BUILDER_HOURLY_ORG,
+    AI_WORKFLOW_BUILDER_DAILY_ORG: process.env.AI_WORKFLOW_BUILDER_DAILY_ORG,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

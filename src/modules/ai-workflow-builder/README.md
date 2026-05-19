@@ -144,18 +144,45 @@ The "Confirm" button is the ONLY mutation path from a draft to a
 workflow. Page refresh / navigate away → nothing is saved. The draft
 persists in `ai_workflow_drafts` so the user can return.
 
-## Rate limits (V1 defaults)
+## Rate limits — OPERATOR-COST BACKSTOP, NOT A USER PAYWALL
 
-| Limit           | Default   |
-| --------------- | --------- |
-| Per-user hourly | 5 drafts  |
-| Per-org hourly  | 10 drafts |
-| Per-org daily   | 50 drafts |
+> The rate limits in this module are an OPERATOR-COST / abuse backstop.
+> They are NOT a user paywall, NOT a usage tier, NOT a paid-plan gate.
+> Defaults are GENEROUS — invisible to honest use, hard ceiling only
+> against runaway / abuse / bug. Treat them as a circuit breaker, not
+> a monetization lever. If a future change to this module turns them
+> into a paid-plan gate, that's a deliberate product decision and
+> needs to be flagged separately — they are not a paywall in
+> disguise today.
 
-Rejected and refused drafts COUNT toward the limit. This is intentional
-— a user attempting to evade the validation gate via repeated bad
-prompts hits the limit. Module 16b will switch defaults to env reads
-(`AI_WORKFLOW_BUILDER_HOURLY_USER` / `_ORG` / `_DAILY`).
+| Limit           | Default       | Env var                           |
+| --------------- | ------------- | --------------------------------- |
+| Per-user hourly | 100 drafts/hr | `AI_WORKFLOW_BUILDER_HOURLY_USER` |
+| Per-org hourly  | 500 drafts/hr | `AI_WORKFLOW_BUILDER_HOURLY_ORG`  |
+| Per-org daily   | 2000 drafts   | `AI_WORKFLOW_BUILDER_DAILY_ORG`   |
+
+Rejected and refused drafts COUNT toward the limit. A user attempting
+to evade the validation gate via repeated bad prompts still hits the
+ceiling.
+
+## Model provider — Anthropic (module 16b)
+
+The ONE deliberate external dependency in this build: `@anthropic-ai/sdk`.
+Contained to `src/lib/ai-model.ts` — the ONLY file that imports it.
+`eslint.config.mjs` enforces the allowlist; any other file attempting
+to import the SDK is a lint error. Adding a second AI provider (OpenAI,
+Vertex, etc.) is a new flagged decision, not a free addition.
+
+| Env var                     | Required?                                | Default             |
+| --------------------------- | ---------------------------------------- | ------------------- |
+| `ANTHROPIC_API_KEY`         | Optional — graceful disable when missing | —                   |
+| `AI_WORKFLOW_BUILDER_MODEL` | Optional                                 | `claude-sonnet-4-6` |
+
+**Graceful disable:** when `ANTHROPIC_API_KEY` is missing,
+`draftWorkflowFromPrompt` returns a clear "AI Workflow Builder is not
+configured" error. The build never fails because of a missing key.
+Production deploys without the key simply have the AI builder turned
+off — the rest of the engine is unaffected.
 
 ## Hard rules
 
@@ -178,19 +205,23 @@ prompts hits the limit. Module 16b will switch defaults to env reads
    through the identical human action path. No AI-specific
    back-channel. No self-firing, no self-enabling.
 
-## What's deferred to module 16b
+## ~~What's deferred to module 16b~~ — closed
 
-- Model provider + SDK choice (Anthropic Claude recommended per the
-  plan)
-- API key + env-var wiring (`ANTHROPIC_API_KEY` etc.)
-- Real `callAiModel` implementation in `src/lib/ai-model.ts`
-- `setup.ts` prompts for the API key
-- README updates documenting the provider choice + cost-per-draft
-  guidance
+All 16b items shipped:
 
-In 16a the module is fully wired except for the model call itself.
-Tests prove the safety architecture; 16b swaps the stub for a real
-call without changing the function signature.
+- ✅ Model provider/SDK: Anthropic Claude + `@anthropic-ai/sdk`
+- ✅ Env vars: `ANTHROPIC_API_KEY` + `AI_WORKFLOW_BUILDER_MODEL` (+ the
+  three rate-limit env reads)
+- ✅ `src/lib/ai-model.ts` — real implementation; ESLint allowlist
+  enforces it as the ONLY SDK importer
+- ✅ Rate limits as env reads; defaults raised to operator-cost-backstop
+  levels (100/hr user, 500/hr org, 2000/day org)
+- ✅ Graceful disable when key missing
+- ✅ `setup.ts` prompts for `ANTHROPIC_API_KEY`
+
+The validation gate, schemas, no-repair / native-only rules, and
+Module 15 are all UNCHANGED from 16a — verified via `git diff` before
+commit.
 
 ## What's deferred to Module 17 (AI Assistant)
 

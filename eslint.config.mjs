@@ -95,6 +95,35 @@ export default tseslint.config(
       ],
     },
   },
+  // `@anthropic-ai/sdk` is allowed ONLY in src/lib/ai-model.ts — the
+  // single grep-able surface for the AI provider integration. This is
+  // the locked posture per docs/PIVOTS_LEDGER.md (AI layer guiding
+  // principle): one named external dependency, contained at one site.
+  {
+    files: [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "app/**/*.ts",
+      "app/**/*.tsx",
+      "tests/**/*.ts",
+      "tests/**/*.tsx",
+    ],
+    ignores: ["src/lib/ai-model.ts", "tests/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@anthropic-ai/sdk", "@anthropic-ai/sdk/*"],
+              message:
+                "Import the AI model only via @/lib/ai-model. The Anthropic SDK is contained to that single file per docs/PIVOTS_LEDGER.md (AI1).",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // No default exports in `src/modules/**` and `src/lib/**`. Named only.
   // Implements AGENTS.md hard rule #7 — enforced by lint, not just docs.
   {

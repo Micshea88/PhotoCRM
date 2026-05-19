@@ -9,6 +9,7 @@ import { hasPermission } from "@/modules/rbac/queries"
 import { workflows, workflowSteps } from "@/modules/workflows/schema"
 import { aiWorkflowDrafts } from "./schema"
 import { buildCatalogForPrompt } from "./catalog"
+import { buildPrompt } from "./prompt"
 import { callAiModel } from "@/lib/ai-model"
 import { renderDraftAsProse } from "./render"
 import { validateModelOutput, type ValidatedDraft } from "./validate"
@@ -80,16 +81,17 @@ export const draftWorkflowFromPrompt = orgAction
     // The catalog is the bounded universe the model can emit from.
     const catalog = buildCatalogForPrompt()
 
-    // Call the model. In 16a this throws ("not yet configured"); tests
-    // mock `@/lib/ai-model`. Throwing here means NO draft row is
-    // persisted — the rate-limit count is not incremented and the user
-    // sees a clear "not configured" error.
+    // Build the structured system prompt (catalog enumeration +
+    // emit-only-these-ids rules). Pure function; no side effects.
+    const builtPrompt = buildPrompt(catalog, parsedInput.prompt)
+
+    // Call the model. When ANTHROPIC_API_KEY is unset this throws a
+    // clear "AI Workflow Builder not configured" error and NO draft
+    // row is persisted — rate-limit count is unaffected. Tests mock
+    // `@/lib/ai-model` via vi.mock; production calls Anthropic.
     let modelResult: Awaited<ReturnType<typeof callAiModel>>
     try {
-      modelResult = await callAiModel({
-        systemPrompt: JSON.stringify({ catalog, prompt: parsedInput.prompt }),
-        userPrompt: parsedInput.prompt,
-      })
+      modelResult = await callAiModel(builtPrompt)
     } catch (err) {
       throw new ActionError(
         "VALIDATION",

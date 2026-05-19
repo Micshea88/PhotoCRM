@@ -96,6 +96,18 @@ const VARS: Var[] = [
     defaultValue: "",
   },
   {
+    name: "ANTHROPIC_API_KEY",
+    description:
+      "Anthropic API key (sk-ant-...). Leave blank to disable the AI Workflow Builder (graceful disable; no crash).",
+    defaultValue: "",
+    hidden: true,
+  },
+  {
+    name: "AI_WORKFLOW_BUILDER_MODEL",
+    description: "Anthropic model id for the AI Workflow Builder.",
+    defaultValue: "claude-sonnet-4-6",
+  },
+  {
     name: "NEXT_PUBLIC_APP_URL",
     description: "Public URL of the app.",
     defaultValue: "http://localhost:3000",

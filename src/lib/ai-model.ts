@@ -1,18 +1,25 @@
 import "server-only"
+import Anthropic from "@anthropic-ai/sdk"
+import { env } from "@/lib/env"
 
 /**
- * AI model client — STUBBED in module 16a. The actual provider/SDK
- * choice + key handling lands in module 16b per the flagged decision
- * in `src/modules/ai-workflow-builder/README.md` §"What's deferred to 16b".
+ * AI model client. The ONE deliberate external dependency in this
+ * build, contained to THIS file. Per `docs/PIVOTS_LEDGER.md` Section 1
+ * row AI1 ("the AI is a tool, not the leader"), this file is the only
+ * SDK importer — `eslint.config.mjs` enforces the allowlist.
  *
- * This stub is the ONE file that imports the model SDK (when 16b
- * adds one). ESLint's `no-restricted-imports` should enforce — but
- * even without it, this is the single grep-able surface.
+ * GRACEFUL DISABLE: when `ANTHROPIC_API_KEY` is missing, this function
+ * throws a clear `AI Workflow Builder not configured` error. The build
+ * does not fail. Tests inject mocks via `vi.mock("@/lib/ai-model")`.
  *
- * Tests inject scripted outputs via `vi.mock("@/lib/ai-model")`. The
- * module 16a tests demonstrate this pattern; module 16b will swap the
- * stub for a real Anthropic / OpenAI / etc. call without changing the
- * function signature.
+ * The provider/SDK choice is the ONLY external dependency this module
+ * is permitted to introduce — module 16b's locked decision. It does not
+ * open the door to additional providers (e.g., adding OpenAI would be
+ * a new flagged decision, not an addition).
+ *
+ * Per the AI layer guiding principle: this function is only callable
+ * from human-initiated action paths (`draftWorkflowFromPrompt`). It
+ * has no scheduled / cron caller and never self-fires.
  */
 
 export interface CallAiModelArgs {
@@ -21,27 +28,45 @@ export interface CallAiModelArgs {
 }
 
 export interface CallAiModelResult {
-  /** The model's raw text output. Caller is responsible for JSON.parse. */
+  /** Model's raw text output. Caller is responsible for JSON.parse. */
   raw: string
-  /** Identifier for the model used (e.g. "claude-sonnet-4-6"). */
+  /** Model identifier used (e.g. "claude-sonnet-4-6"). */
   modelName: string
-  /** Tokens consumed by this call. */
+  /** Tokens consumed by this call (input + output), null if unknown. */
   tokensUsed: number | null
 }
 
-/**
- * Call the AI model. In module 16a this throws — the entire AI
- * capability is unwired in production. Tests inject mocks.
- *
- * Per the AI layer guiding principle ("it is a tool, not the leader"),
- * this function is ONLY callable from human-initiated action paths.
- * It has no scheduled/cron caller and never self-fires.
- */
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function callAiModel(_args: CallAiModelArgs): Promise<CallAiModelResult> {
-  // Touch param so the unused-vars lint stays quiet.
-  void _args
-  throw new Error(
-    "AI model is not yet configured. The AI Workflow Builder is in safety-architecture phase (module 16a); the model client lands in module 16b.",
-  )
+const NOT_CONFIGURED_MESSAGE =
+  "AI Workflow Builder is not configured. Set ANTHROPIC_API_KEY in your environment to enable it."
+
+const DEFAULT_MAX_TOKENS = 2000
+
+export async function callAiModel(args: CallAiModelArgs): Promise<CallAiModelResult> {
+  const apiKey = env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new Error(NOT_CONFIGURED_MESSAGE)
+  }
+  const client = new Anthropic({ apiKey })
+  const model = env.AI_WORKFLOW_BUILDER_MODEL
+  const response = await client.messages.create({
+    model,
+    max_tokens: DEFAULT_MAX_TOKENS,
+    system: args.systemPrompt,
+    messages: [{ role: "user", content: args.userPrompt }],
+  })
+
+  // Anthropic responses carry an array of content blocks. The AI
+  // builder prompt instructs the model to return ONLY a single JSON
+  // object — so we expect a single text block. If something else
+  // arrives (tool_use, multi-block), we surface the concatenation;
+  // the validation gate will reject if it's not parseable JSON.
+  const raw = response.content.map((block) => (block.type === "text" ? block.text : "")).join("")
+
+  const tokensUsed =
+    typeof response.usage.input_tokens === "number" &&
+    typeof response.usage.output_tokens === "number"
+      ? response.usage.input_tokens + response.usage.output_tokens
+      : null
+
+  return { raw, modelName: model, tokensUsed }
 }

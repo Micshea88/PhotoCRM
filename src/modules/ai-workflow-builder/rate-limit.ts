@@ -2,21 +2,29 @@ import "server-only"
 import { and, eq, gte } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
+import { env } from "@/lib/env"
 import { aiWorkflowDrafts } from "./schema"
 
 type DbHandle = NodePgDatabase<typeof schema>
 
 /**
- * Rate-limit defaults. Module 16b will switch these to env reads
- * (AI_WORKFLOW_BUILDER_HOURLY_ORG / _USER / DAILY_ORG_CAP). For 16a
- * the defaults are inline + the limits are runtime-checkable.
+ * Rate-limit posture — OPERATOR-COST / abuse backstop, NOT a user
+ * paywall or usage tier. Defaults are GENEROUS — invisible to
+ * honest use, hard ceiling only against runaway / abuse / bug.
  *
- * Rejected and refused drafts COUNT toward the limit — bounded abuse
- * via repeated bad prompts is the intended behavior.
+ * This is recorded as the explicit posture in the module README so
+ * future contributors don't mistake it for a usage gate later.
+ *
+ * Reads from env (module 16b). Defaults: 100/hr per user, 500/hr
+ * per org, 2000/day per org.
+ *
+ * Rejected and refused drafts COUNT toward the limit — a user
+ * attempting to evade the validation gate via repeated bad prompts
+ * still hits the ceiling.
  */
-export const DEFAULT_HOURLY_ORG_LIMIT = 10
-export const DEFAULT_HOURLY_USER_LIMIT = 5
-export const DEFAULT_DAILY_ORG_LIMIT = 50
+export const DEFAULT_HOURLY_USER_LIMIT = env.AI_WORKFLOW_BUILDER_HOURLY_USER
+export const DEFAULT_HOURLY_ORG_LIMIT = env.AI_WORKFLOW_BUILDER_HOURLY_ORG
+export const DEFAULT_DAILY_ORG_LIMIT = env.AI_WORKFLOW_BUILDER_DAILY_ORG
 
 export interface RateLimitConfig {
   hourlyPerOrg: number

@@ -85,6 +85,13 @@
       "when": 1779191096282,
       "tag": "0011_black_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779192523180,
+      "tag": "0012_low_bishop",
+      "breakpoints": true
     }
   ]
 }

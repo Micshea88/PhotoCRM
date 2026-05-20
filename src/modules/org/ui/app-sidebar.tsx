@@ -16,15 +16,7 @@ import { AppSidebarNav, type AppSidebarItem } from "./app-sidebar-nav"
 /**
  * V1 sidebar entry order. Each id MUST exist in ROUTE_CATALOG — the
  * sidebar is anchored to the catalog so the AI's NAVIGATE capability
- * and the human sidebar stay in sync (single source of truth). The
- * "show in sidebar?" concern stays here, not on the catalog rows; the
- * catalog is for "the AI may navigate here," which is a superset of
- * "show in sidebar" (the catalog also includes settings sub-pages,
- * forms, onboarding, etc.).
- *
- * Settings sub-items (Members, Pipelines, Project Templates,
- * Terminology, Custom Fields) are intentionally NOT in this list. The
- * Settings landing page filters them per-permission in a later commit.
+ * and the human sidebar stay in sync (single source of truth).
  */
 const SIDEBAR_ITEM_IDS = [
   "dashboard",
@@ -44,7 +36,20 @@ const ICONS: Record<(typeof SIDEBAR_ITEM_IDS)[number], LucideIcon> = {
   settings_account: Settings,
 }
 
-export async function AppSidebar({ userId, className }: { userId: string; className?: string }) {
+/**
+ * Resolve the visible sidebar items for a user. Calls hasPermission
+ * for each entry that requires one. MUST be called from inside a
+ * `runWithOrgContext` scope (the layout sets this up). Returns a
+ * plain array of items ready to render.
+ *
+ * Reason this is a separate function rather than inline in the sidebar
+ * component: in Next.js production RSC, the layout's runWithOrgContext
+ * scope does NOT propagate into async child components — those render
+ * outside the layout's ALS frame. So we resolve permissions inside the
+ * layout's await chain and pass the resolved list to a SYNC sidebar
+ * component below.
+ */
+export async function resolveSidebarItems(userId: string): Promise<AppSidebarItem[]> {
   const items: AppSidebarItem[] = []
   for (const id of SIDEBAR_ITEM_IDS) {
     const route = ROUTE_CATALOG.find((r): r is CatalogRoute => r.id === id)
@@ -55,6 +60,15 @@ export async function AppSidebar({ userId, className }: { userId: string; classN
     }
     items.push({ href: route.path, label: route.title, icon: ICONS[id] })
   }
+  return items
+}
+
+/**
+ * Sync sidebar renderer. Takes pre-resolved items as a prop. The
+ * permission-gating work happens in `resolveSidebarItems` (above),
+ * called from the layout. This component just renders.
+ */
+export function AppSidebar({ items, className }: { items: AppSidebarItem[]; className?: string }) {
   return (
     <div className={cn(className)}>
       <AppSidebarNav items={items} />

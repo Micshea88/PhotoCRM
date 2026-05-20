@@ -23,7 +23,7 @@ export const auth = betterAuth({
     // an email round-trip. Vercel never sets PLAYWRIGHT_E2E, so this can't
     // be triggered in real deployments.
     requireEmailVerification: env.NODE_ENV === "production" && process.env.PLAYWRIGHT_E2E !== "1",
-    minPasswordLength: 12,
+    minPasswordLength: 8,
     sendResetPassword: async ({ user, url }) => {
       await sendEmail({
         to: user.email,

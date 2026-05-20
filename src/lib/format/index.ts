@@ -65,3 +65,100 @@ export function formatDate(iso: string): string {
   const day = iso.slice(8, 10)
   return `${month}/${day}/${year}`
 }
+
+const MS_PER_DAY = 86_400_000
+
+function parseYMD(iso: string): { y: number; m: number; d: number } {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) {
+    throw new Error(`expected YYYY-MM-DD prefix; received ${iso}`)
+  }
+  return {
+    y: Number(iso.slice(0, 4)),
+    m: Number(iso.slice(5, 7)),
+    d: Number(iso.slice(8, 10)),
+  }
+}
+
+function utcDateToISO(utcMs: number): string {
+  // Format a UTC millisecond integer back to YYYY-MM-DD. The Date
+  // constructor here is a pure calendar-lookup over UTC; no local time,
+  // no DST.
+  return new Date(utcMs).toISOString().slice(0, 10)
+}
+
+/**
+ * Resolve the most-recent-Sunday-through-following-Saturday window for
+ * a given calendar date. Per LOC1 (US conventions, Sunday-Saturday
+ * week). Pure UTC arithmetic; no timezone library; no DST handling.
+ * Per-studio timezone is a deferred decision — the dashboard treats
+ * the input as a UTC calendar date.
+ *
+ *   resolveSundaySaturdayWeek("2026-05-20") -> Wednesday
+ *     -> { startISO: "2026-05-17", endISO: "2026-05-23" }
+ *   resolveSundaySaturdayWeek("2026-05-17") -> Sunday (returns itself)
+ *     -> { startISO: "2026-05-17", endISO: "2026-05-23" }
+ *   resolveSundaySaturdayWeek("2026-05-23") -> Saturday
+ *     -> { startISO: "2026-05-17", endISO: "2026-05-23" }
+ */
+export function resolveSundaySaturdayWeek(todayISO: string): {
+  startISO: string
+  endISO: string
+} {
+  const { y, m, d } = parseYMD(todayISO)
+  const todayUtc = Date.UTC(y, m - 1, d)
+  // getUTCDay returns 0=Sunday..6=Saturday. Used only as a calendar
+  // lookup; the actual arithmetic below is integer math on ms values.
+  const dayOfWeek = new Date(todayUtc).getUTCDay()
+  const startUtc = todayUtc - dayOfWeek * MS_PER_DAY
+  const endUtc = startUtc + 6 * MS_PER_DAY
+  return { startISO: utcDateToISO(startUtc), endISO: utcDateToISO(endUtc) }
+}
+
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+}
+
+function daysInMonth(year: number, month: number): number {
+  // month is 1-indexed (January = 1).
+  if (month === 2) return isLeapYear(year) ? 29 : 28
+  if (month === 4 || month === 6 || month === 9 || month === 11) return 30
+  return 31
+}
+
+function pad2(n: number): string {
+  return n < 10 ? `0${String(n)}` : String(n)
+}
+
+/**
+ * Resolve the first-day and last-day-of-month window for a given
+ * calendar date. Pure string math — leap years handled by
+ * `daysInMonth`. No timezone library, no Date arithmetic.
+ *
+ *   resolveCurrentMonthRange("2026-05-20")
+ *     -> { startISO: "2026-05-01", endISO: "2026-05-31" }
+ *   resolveCurrentMonthRange("2024-02-15") (leap year)
+ *     -> { startISO: "2024-02-01", endISO: "2024-02-29" }
+ */
+export function resolveCurrentMonthRange(todayISO: string): {
+  startISO: string
+  endISO: string
+} {
+  const { y, m } = parseYMD(todayISO)
+  const yy = String(y)
+  const mm = pad2(m)
+  return {
+    startISO: `${yy}-${mm}-01`,
+    endISO: `${yy}-${mm}-${pad2(daysInMonth(y, m))}`,
+  }
+}
+
+/**
+ * Today's date as YYYY-MM-DD in UTC. This is the ONLY function in the
+ * format module that reads the system clock; every other date helper
+ * is a pure function of its inputs. UTC posture is deliberate per LOC1
+ * (no per-studio timezone in V1; the dashboard window is a UTC calendar
+ * window, not a local-time one).
+ */
+export function todayISO(): string {
+  return new Date().toISOString().slice(0, 10)
+}

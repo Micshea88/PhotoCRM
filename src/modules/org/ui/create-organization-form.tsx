@@ -73,7 +73,7 @@ export function CreateOrganizationForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="name">Organization name</Label>
+        <Label htmlFor="name">Studio name</Label>
         <Input id="name" {...register("name")} />
         {errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}
       </div>

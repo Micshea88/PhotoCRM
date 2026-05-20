@@ -22,12 +22,14 @@ test("sign-up → onboarding → dashboard golden path", async ({ page }) => {
   // and routed to the org-create onboarding.
   await expect(page).toHaveURL(/\/onboarding\/create-organization/, { timeout: 10000 })
 
-  await page.getByLabel("Organization name").fill("Acme Test Co")
+  await page.getByLabel("Studio name").fill("Acme Test Co")
   // Slug auto-fills.
   await page.getByRole("button", { name: "Create organization" }).click()
 
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 })
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible()
+  // The dashboard's welcome heading includes the studio name (P4.1).
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Welcome, Test")
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Acme Test Co")
 })
 
 test("sign-out then sign-in", async ({ page }) => {
@@ -41,7 +43,7 @@ test("sign-out then sign-in", async ({ page }) => {
   await page.getByLabel("Password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
   await expect(page).toHaveURL(/\/onboarding\/create-organization/, { timeout: 10000 })
-  await page.getByLabel("Organization name").fill("Acme Test Co")
+  await page.getByLabel("Studio name").fill("Acme Test Co")
   await page.getByRole("button", { name: "Create organization" }).click()
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 })
 

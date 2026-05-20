@@ -13,7 +13,7 @@ async function signUpAndCreateOrg(page: Page) {
   await page.getByLabel("Password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
   await expect(page).toHaveURL(/\/onboarding\/create-organization/, { timeout: 10000 })
-  await page.getByLabel("Organization name").fill("Acme Test Co")
+  await page.getByLabel("Studio name").fill("Acme Test Co")
   await page.getByRole("button", { name: "Create organization" }).click()
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 })
 }

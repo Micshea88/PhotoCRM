@@ -65,6 +65,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // RSC render chain. A sync function would have its ALS frame popped before
   // React renders the children below.
   //
+  const activeOrg = organizations.find((o) => o.id === activeOrgId)
+  const studioName = activeOrg?.name ?? "Studio"
+
   return runWithOrgContext(
     { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -72,11 +75,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[56px_1fr]">
         <AppTopbar
           user={{ name: session.user.name, email: session.user.email }}
+          studioName={studioName}
           organizations={organizations.map((o) => ({ id: o.id, name: o.name, slug: o.slug }))}
           activeOrgId={activeOrgId}
           className="col-span-2 border-b border-[var(--color-border)]"
         />
-        <AppSidebar className="border-r border-[var(--color-border)]" />
+        <AppSidebar userId={session.user.id} className="border-r border-[var(--color-border)]" />
         <main className="overflow-y-auto p-6">{children}</main>
       </div>
     ),

@@ -17,7 +17,6 @@
  */
 import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
-import { LayoutDashboard, Settings, Users } from "lucide-react"
 import { AppSidebarNav, type AppSidebarItem } from "@/modules/org/ui/app-sidebar-nav"
 
 vi.mock("next/navigation", () => ({
@@ -25,12 +24,12 @@ vi.mock("next/navigation", () => ({
 }))
 
 const OWNER_ITEMS: AppSidebarItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/events", label: "Events", icon: Users },
-  { href: "/opportunities", label: "Pipeline", icon: Users },
-  { href: "/tasks", label: "Tasks", icon: Users },
-  { href: "/settings/account", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/contacts", label: "Contacts", icon: "contacts" },
+  { href: "/events", label: "Events", icon: "events" },
+  { href: "/opportunities", label: "Pipeline", icon: "opportunities" },
+  { href: "/tasks", label: "Tasks", icon: "tasks" },
+  { href: "/settings/account", label: "Settings", icon: "settings" },
 ]
 
 const USER_ITEMS: AppSidebarItem[] = [
@@ -38,19 +37,19 @@ const USER_ITEMS: AppSidebarItem[] = [
   // view_events. They see the same six entries; the Settings sub-pages
   // (Members, Pipelines, etc.) are gated at the Settings landing page,
   // not in the sidebar.
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/events", label: "Events", icon: Users },
-  { href: "/opportunities", label: "Pipeline", icon: Users },
-  { href: "/tasks", label: "Tasks", icon: Users },
-  { href: "/settings/account", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/contacts", label: "Contacts", icon: "contacts" },
+  { href: "/events", label: "Events", icon: "events" },
+  { href: "/opportunities", label: "Pipeline", icon: "opportunities" },
+  { href: "/tasks", label: "Tasks", icon: "tasks" },
+  { href: "/settings/account", label: "Settings", icon: "settings" },
 ]
 
 const CLIENT_ITEMS: AppSidebarItem[] = [
   // Client has no permissions in V1, so view_contacts / view_events
   // gate out. Only Dashboard + Settings (account) remain.
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/settings/account", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/settings/account", label: "Settings", icon: "settings" },
 ]
 
 describe("AppSidebarNav — renders the items the server passes in", () => {

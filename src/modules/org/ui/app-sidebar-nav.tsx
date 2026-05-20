@@ -2,22 +2,55 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import {
+  CheckSquare,
+  LayoutDashboard,
+  ListChecks,
+  Settings,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { LucideIcon } from "lucide-react"
+
+/**
+ * Sidebar icons keyed by short string. The server-side AppSidebar
+ * resolves items with these string keys; this client component maps
+ * the key to the actual Lucide component. We can't pass the Lucide
+ * components themselves across the server→client boundary because
+ * React Server Components serializes props and function references
+ * (forwardRef components) aren't serializable.
+ */
+export type SidebarIconKey =
+  | "dashboard"
+  | "contacts"
+  | "events"
+  | "opportunities"
+  | "tasks"
+  | "settings"
+
+const ICONS: Record<SidebarIconKey, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  contacts: Users,
+  events: ListChecks,
+  opportunities: TrendingUp,
+  tasks: CheckSquare,
+  settings: Settings,
+}
 
 export interface AppSidebarItem {
   href: string
   label: string
-  icon: LucideIcon
+  icon: SidebarIconKey
 }
 
 /**
  * Client child of the server-rendered AppSidebar. The server component
  * resolves which items the team member is allowed to see (via
- * hasPermission); this component only handles the `usePathname`-driven
- * active-state highlighting. Splitting the responsibilities lets the
- * permission check stay server-side (no client round-trip) while
- * keeping active-state interactive.
+ * hasPermission); this component handles the `usePathname`-driven
+ * active-state highlighting AND maps icon keys to Lucide components
+ * (which must live on the client side of the boundary because forwardRef
+ * function references aren't serializable).
  */
 export function AppSidebarNav({ items }: { items: AppSidebarItem[] }) {
   const pathname = usePathname()
@@ -26,7 +59,7 @@ export function AppSidebarNav({ items }: { items: AppSidebarItem[] }) {
       {items.map((item) => {
         const isActive =
           pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
-        const Icon = item.icon
+        const Icon = ICONS[item.icon]
         return (
           <Link
             key={item.href}

@@ -1,17 +1,8 @@
-import {
-  CheckSquare,
-  LayoutDashboard,
-  ListChecks,
-  Settings,
-  TrendingUp,
-  Users,
-  type LucideIcon,
-} from "lucide-react"
 import { ROUTE_CATALOG, type CatalogRoute } from "@/modules/ai-assistant/route-catalog"
 import { hasPermission } from "@/modules/rbac/queries"
 import { cn } from "@/lib/utils"
 import type { PermissionKey } from "@/modules/rbac/types"
-import { AppSidebarNav, type AppSidebarItem } from "./app-sidebar-nav"
+import { AppSidebarNav, type AppSidebarItem, type SidebarIconKey } from "./app-sidebar-nav"
 
 /**
  * V1 sidebar entry order. Each id MUST exist in ROUTE_CATALOG — the
@@ -27,13 +18,18 @@ const SIDEBAR_ITEM_IDS = [
   "settings_account",
 ] as const
 
-const ICONS: Record<(typeof SIDEBAR_ITEM_IDS)[number], LucideIcon> = {
-  dashboard: LayoutDashboard,
-  contacts_list: Users,
-  events_list: ListChecks,
-  opportunities_list: TrendingUp,
-  tasks_list: CheckSquare,
-  settings_account: Settings,
+/**
+ * Icon-key map. Strings only — actual Lucide components are imported
+ * by AppSidebarNav on the client side. Server-to-client prop boundary
+ * can't carry forwardRef function references.
+ */
+const ICON_KEYS: Record<(typeof SIDEBAR_ITEM_IDS)[number], SidebarIconKey> = {
+  dashboard: "dashboard",
+  contacts_list: "contacts",
+  events_list: "events",
+  opportunities_list: "opportunities",
+  tasks_list: "tasks",
+  settings_account: "settings",
 }
 
 /**
@@ -44,10 +40,10 @@ const ICONS: Record<(typeof SIDEBAR_ITEM_IDS)[number], LucideIcon> = {
  *
  * Reason this is a separate function rather than inline in the sidebar
  * component: in Next.js production RSC, the layout's runWithOrgContext
- * scope does NOT propagate into async child components — those render
- * outside the layout's ALS frame. So we resolve permissions inside the
- * layout's await chain and pass the resolved list to a SYNC sidebar
- * component below.
+ * scope does NOT propagate into async child server components — those
+ * render outside the layout's ALS frame. So we resolve permissions
+ * inside the layout's await chain and pass the resolved list to a
+ * SYNC sidebar component below.
  */
 export async function resolveSidebarItems(userId: string): Promise<AppSidebarItem[]> {
   const items: AppSidebarItem[] = []
@@ -58,7 +54,7 @@ export async function resolveSidebarItems(userId: string): Promise<AppSidebarIte
       const allowed = await hasPermission(userId, route.requiresPermission as PermissionKey)
       if (!allowed) continue
     }
-    items.push({ href: route.path, label: route.title, icon: ICONS[id] })
+    items.push({ href: route.path, label: route.title, icon: ICON_KEYS[id] })
   }
   return items
 }

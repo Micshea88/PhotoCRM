@@ -73,6 +73,12 @@ export const env = createEnv({
     AI_WORKFLOW_BUILDER_HOURLY_USER: z.coerce.number().int().min(1).default(100),
     AI_WORKFLOW_BUILDER_HOURLY_ORG: z.coerce.number().int().min(1).default(500),
     AI_WORKFLOW_BUILDER_DAILY_ORG: z.coerce.number().int().min(1).default(2000),
+    // AI Assistant (module 17). Same operator-cost-backstop posture —
+    // NOT a user paywall. Higher defaults than the workflow builder
+    // because conversation volume is higher than drafting volume.
+    AI_ASSISTANT_HOURLY_USER: z.coerce.number().int().min(1).default(300),
+    AI_ASSISTANT_HOURLY_ORG: z.coerce.number().int().min(1).default(1500),
+    AI_ASSISTANT_DAILY_ORG: z.coerce.number().int().min(1).default(6000),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -100,6 +106,9 @@ export const env = createEnv({
     AI_WORKFLOW_BUILDER_HOURLY_USER: process.env.AI_WORKFLOW_BUILDER_HOURLY_USER,
     AI_WORKFLOW_BUILDER_HOURLY_ORG: process.env.AI_WORKFLOW_BUILDER_HOURLY_ORG,
     AI_WORKFLOW_BUILDER_DAILY_ORG: process.env.AI_WORKFLOW_BUILDER_DAILY_ORG,
+    AI_ASSISTANT_HOURLY_USER: process.env.AI_ASSISTANT_HOURLY_USER,
+    AI_ASSISTANT_HOURLY_ORG: process.env.AI_ASSISTANT_HOURLY_ORG,
+    AI_ASSISTANT_DAILY_ORG: process.env.AI_ASSISTANT_DAILY_ORG,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

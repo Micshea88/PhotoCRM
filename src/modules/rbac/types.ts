@@ -81,6 +81,14 @@ export const PERMISSION_KEYS = [
   "api_access",
   "send_sms",
   "view_sms_conversations_all",
+  /**
+   * Permission to use the AI Assistant (Module 17). Per the AI layer
+   * guiding principle (rbac/README — AI1), the assistant is a tool
+   * the human drives; its writes still flow through orgAction (same
+   * permission checks per action). This key gates the conversational
+   * surface itself. Default-granted to all roles except client_limited.
+   */
+  "use_ai_assistant",
 ] as const
 
 export const permissionKeySchema = z.enum(PERMISSION_KEYS)

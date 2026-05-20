@@ -1,0 +1,146 @@
+/**
+ * Static-grep guard for the AI Assistant module (17a).
+ *
+ * AI LAYER PRINCIPLE (rule AI1, docs/PIVOTS_LEDGER.md Section 1):
+ * the AI is a tool the human drives, never an autonomous actor.
+ * 17a is read+navigate only — it is MATHEMATICALLY INCAPABLE of
+ * writing because (a) writers.ts does not exist, (b) the model output
+ * schema has no write_proposal variant, and (c) the module cannot
+ * import the database layer.
+ *
+ * This test proves (c) by static analysis. ESLint's
+ * no-restricted-imports rule blocks the imports at build time; this
+ * test is the belt-and-suspenders verification — even if a future
+ * contributor disables the lint rule, this test catches the bypass.
+ *
+ * The forbidden imports are EXACTLY the same set blocked from
+ * `app/**` per AGENTS.md hard rule #1, applied to the AI assistant
+ * module so it cannot reach around queries.ts.
+ */
+import { describe, it, expect } from "vitest"
+import { readdir, readFile, stat } from "node:fs/promises"
+import { join } from "node:path"
+
+const AI_ASSISTANT_DIR = join(process.cwd(), "src/modules/ai-assistant")
+
+/**
+ * THE FORBIDDEN-IMPORT MATRIX
+ *
+ * Some Drizzle imports are unavoidable in this module (the schema file
+ * for the messages table; the rate-limit file for counting messages on
+ * the AI's OWN table; the action file for inserting transcript rows).
+ * These are NOT a privileged write path against client data — they
+ * operate on `ai_assistant_messages` alone, which exists to record the
+ * AI's transcript.
+ *
+ * What MUST be enforced is:
+ *   - `retrievers.ts` MUST NOT import drizzle / @/db / @/lib/db /
+ *     @/modules/*\/schema. Reads MUST go through @/modules/*\/queries.
+ *   - NO file in this module may import @/modules/*\/actions. There is
+ *     no write back-channel against other modules' data in 17a.
+ *     writers.ts does not exist (separate check below). 17b will add
+ *     writers.ts and at that point the orgAction-import allowlist
+ *     gets scoped to writers.ts only.
+ */
+
+interface ForbiddenRule {
+  fileMatch: (relPath: string) => boolean
+  pattern: RegExp
+  description: string
+}
+
+const FORBIDDEN_RULES: ForbiddenRule[] = [
+  // (1) retrievers.ts must not bypass queries.ts
+  {
+    fileMatch: (p) => p.endsWith("/retrievers.ts"),
+    pattern: /from\s+["']drizzle-orm["']/,
+    description: "retrievers.ts may not import drizzle-orm directly",
+  },
+  {
+    fileMatch: (p) => p.endsWith("/retrievers.ts"),
+    pattern: /from\s+["']drizzle-orm\//,
+    description: "retrievers.ts may not import drizzle-orm subpaths directly",
+  },
+  {
+    fileMatch: (p) => p.endsWith("/retrievers.ts"),
+    pattern: /from\s+["']@\/db["']/,
+    description: "retrievers.ts may not import @/db directly",
+  },
+  {
+    fileMatch: (p) => p.endsWith("/retrievers.ts"),
+    pattern: /from\s+["']@\/db\//,
+    description: "retrievers.ts may not import @/db/* directly",
+  },
+  {
+    fileMatch: (p) => p.endsWith("/retrievers.ts"),
+    pattern: /from\s+["']@\/lib\/db["']/,
+    description: "retrievers.ts may not import @/lib/db directly",
+  },
+  {
+    fileMatch: (p) => p.endsWith("/retrievers.ts"),
+    pattern: /from\s+["']@\/modules\/[^"']+\/schema["']/,
+    description: "retrievers.ts may not import module schemas",
+  },
+  // (2) NO file in the AI assistant module may import @/modules/*\/actions
+  //     in 17a. 17b will scope this rule to writers.ts only.
+  {
+    fileMatch: () => true,
+    pattern: /from\s+["']@\/modules\/[^"']+\/actions["']/,
+    description:
+      "17a does NOT permit @/modules/*/actions imports — the AI has no write path against other modules in 17a.",
+  },
+]
+
+async function* walkTsFiles(dir: string): AsyncGenerator<string> {
+  let entries: string[]
+  try {
+    entries = await readdir(dir)
+  } catch {
+    return
+  }
+  for (const name of entries) {
+    const full = join(dir, name)
+    const s = await stat(full)
+    if (s.isDirectory()) {
+      yield* walkTsFiles(full)
+    } else if (name.endsWith(".ts") || name.endsWith(".tsx")) {
+      yield full
+    }
+  }
+}
+
+describe("AI Assistant — no database-layer imports (Module 17a, hard gate)", () => {
+  it("retrievers.ts contains no direct DB-layer imports; no file imports @/modules/*/actions", async () => {
+    const offenders: { file: string; line: number; text: string; rule: string }[] = []
+    for await (const file of walkTsFiles(AI_ASSISTANT_DIR)) {
+      const relPath = file.slice(process.cwd().length)
+      const content = await readFile(file, "utf8")
+      const lines = content.split("\n")
+      for (const [idx, line] of lines.entries()) {
+        for (const rule of FORBIDDEN_RULES) {
+          if (!rule.fileMatch(relPath)) continue
+          if (rule.pattern.test(line)) {
+            offenders.push({
+              file: relPath,
+              line: idx + 1,
+              text: line.trim(),
+              rule: rule.description,
+            })
+          }
+        }
+      }
+    }
+    if (offenders.length > 0) {
+      const summary = offenders
+        .map((o) => `  ${o.file}:${String(o.line)}: ${o.text}\n    → ${o.rule}`)
+        .join("\n")
+      throw new Error(`AI Assistant module forbidden imports:\n${summary}`)
+    }
+    expect(offenders.length).toBe(0)
+  })
+
+  it("writers.ts does not exist in src/modules/ai-assistant/ (17a hard gate)", async () => {
+    const entries = await readdir(AI_ASSISTANT_DIR).catch(() => [] as string[])
+    expect(entries.includes("writers.ts")).toBe(false)
+  })
+})

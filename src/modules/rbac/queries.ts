@@ -38,19 +38,26 @@ const ROLE_DEFAULTS: Record<ExtendedRole, ReadonlySet<PermissionKey>> = {
     "manage_settings",
     "send_sms",
     "view_sms_conversations_all",
+    "use_ai_assistant",
   ]),
-  // Photographer: assigned events + contacts. No financials.
-  photographer: new Set<PermissionKey>(["view_contacts", "view_events", "send_sms"]),
-  // Contractor (external): assigned events, limited contact info, sees own pay.
-  contractor: new Set<PermissionKey>(["view_events"]),
-  // Editor (external): only editing assignments.
-  editor: new Set<PermissionKey>(["view_events"]),
-  // Accountant (external): read-only financial.
+  // Photographer: assigned events + contacts. No financials. The AI
+  // assistant is granted because its writes (when 17b lands) still flow
+  // through orgAction → same RLS + permission checks the manual UI
+  // does. The AI is a tool, not a privilege escalator.
+  photographer: new Set<PermissionKey>([
+    "view_contacts",
+    "view_events",
+    "send_sms",
+    "use_ai_assistant",
+  ]),
+  contractor: new Set<PermissionKey>(["view_events", "use_ai_assistant"]),
+  editor: new Set<PermissionKey>(["view_events", "use_ai_assistant"]),
   accountant: new Set<PermissionKey>([
     "view_financial_data",
     "view_reports",
     "view_contractor_pay",
     "export_data",
+    "use_ai_assistant",
   ]),
   // Client-limited: parked role for the future client-portal V2 work.
   client_limited: new Set<PermissionKey>([]),

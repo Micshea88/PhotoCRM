@@ -32,6 +32,7 @@ const TABLES_TO_TRUNCATE = [
   "task_dependencies",
   "tasks",
   "terminology_map",
+  "ai_assistant_messages",
   "ai_workflow_drafts",
   "workflow_executions",
   "workflow_steps",

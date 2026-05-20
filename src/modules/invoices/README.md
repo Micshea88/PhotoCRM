@@ -85,11 +85,12 @@ rule is documented at top of `src/lib/recompute/README.md`.
 `payment_installments` carries a role-gated SELECT/INSERT/UPDATE/DELETE
 policy on top of org isolation:
 
-| Role                               | Access      |
-| ---------------------------------- | ----------- |
-| owner / admin / accountant         | Full        |
-| manager (V1, no grant)             | **Blocked** |
-| photographer / contractor / editor | **Blocked** |
+| Role                                 | Access      |
+| ------------------------------------ | ----------- |
+| owner / admin / accountant           | Full        |
+| manager (V1, no grant)               | **Blocked** |
+| user (the standard team-member tier) | **Blocked** |
+| client                               | **Blocked** |
 
 The manager-with-grant finer check (`member_permission_override.view_financial_data`)
 is **deferred to the Phase 4 admin UI**. V1 fail-closed posture: managers

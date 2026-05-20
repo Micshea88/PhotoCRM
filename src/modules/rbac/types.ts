@@ -1,20 +1,24 @@
 import { z } from "zod"
 
 /**
- * V1 8-role model per Requirements §5. Stored as text in `member_role.role`;
- * validated app-side via this enum so adding a 9th role later is a code-only
+ * V1 6-role model. Stored as text in `member_role.role`; validated
+ * app-side via this enum so adding a 7th role later is a code-only
  * change (same rationale as custom-fields `field_type`).
+ *
+ *   owner       — workspace creator; full access including billing
+ *   admin       — full operational access; user management
+ *   manager     — operational access; no financials, no user management
+ *   user        — the standard team-member tier; assignment-scoped reads
+ *                 on contacts/projects/tasks (see Module 14a overlay);
+ *                 no financials
+ *   accountant  — financial-tables access; no project/task access
+ *   client      — parked for the future client-portal V2 (no permissions
+ *                 in V1)
+ *
+ * The role NAME is "user"; user-facing copy refers to "team" /
+ * "team member" to avoid the noun collision per LOC1.
  */
-export const EXTENDED_ROLES = [
-  "owner",
-  "admin",
-  "manager",
-  "photographer",
-  "contractor",
-  "editor",
-  "accountant",
-  "client_limited",
-] as const
+export const EXTENDED_ROLES = ["owner", "admin", "manager", "user", "accountant", "client"] as const
 
 export const extendedRoleSchema = z.enum(EXTENDED_ROLES)
 export type ExtendedRole = z.infer<typeof extendedRoleSchema>
@@ -40,12 +44,12 @@ export function extendedToBetterAuth(role: ExtendedRole): BetterAuthRole {
  * or a defense-in-depth fallback when the extended row is missing). Mirror
  * the documented Layer 2 fallback in `rbac/README.md`: BA owner→admin
  * (defensive downgrade — only org creators get extended `owner`); BA
- * admin→admin; BA member→photographer (lowest productive role).
+ * admin→admin; BA member→user (the standard team-member tier).
  */
 export function extendedFromBetterAuth(role: BetterAuthRole): ExtendedRole {
   if (role === "owner") return "admin"
   if (role === "admin") return "admin"
-  return "photographer"
+  return "user"
 }
 
 /**
@@ -86,7 +90,7 @@ export const PERMISSION_KEYS = [
    * guiding principle (rbac/README — AI1), the assistant is a tool
    * the human drives; its writes still flow through orgAction (same
    * permission checks per action). This key gates the conversational
-   * surface itself. Default-granted to all roles except client_limited.
+   * surface itself. Default-granted to all roles except `client`.
    */
   "use_ai_assistant",
 ] as const

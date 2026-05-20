@@ -1,26 +1,31 @@
 /**
  * Assignment-scoped RLS overlay — the security boundary change owned by
- * commit 14a per contacts/projects/tasks/rbac READMEs.
+ * commit 14a per contacts/projects/tasks/rbac READMEs, with role
+ * names refreshed to the 6-role taxonomy by migration 0021.
  *
- * For roles in the ASSIGNMENT-SCOPED set (photographer, contractor, editor):
+ * For the ASSIGNMENT-SCOPED tier (role `user` — the standard
+ * team-member tier; the merged photographer/contractor/editor of the
+ * old 8-role taxonomy):
  *   - SELECT on contacts: only contacts associated with a project the
- *     user is project-assigned to (via project_photographers)
- *   - SELECT on projects: only projects the user is project-assigned to
- *   - SELECT on tasks:    only tasks on projects the user is project-
- *     assigned to OR tasks where the user is the assignee
+ *     team member is project-assigned to (via project_photographers)
+ *   - SELECT on projects: only projects the team member is assigned to
+ *   - SELECT on tasks:    only tasks on projects the team member is
+ *     project-assigned to OR tasks where the team member is the
+ *     direct assignee
  *   - INSERT/UPDATE/DELETE on contacts and projects: BLOCKED
- *   - UPDATE on tasks: allowed only when assignee_user_id = current user
- *     (the markTaskDone carve-out for self-owned tasks)
+ *   - UPDATE on tasks: allowed only when assignee_user_id = current
+ *     team member (the markTaskDone carve-out for self-owned tasks)
  *   - INSERT/DELETE on tasks: BLOCKED
  *
- * For roles in the FULL-VISIBILITY set (owner, admin, manager, accountant,
- * client_limited): unchanged from V1 — full org-scoped read/write.
+ * For the FULL-VISIBILITY tier (owner, admin, manager, accountant,
+ * and client — though `client` has no permissions in V1): unchanged
+ * from V1 — full org-scoped read/write.
  *
- * Cross-org boundary: the new policy preserves
+ * Cross-org boundary: the policy preserves
  * `organization_id = current_setting('app.current_org', true)` as the
  * OUTER AND-clamp. The assignment-scoped expression is the inner OR.
- * This ordering is the proof that the overlay cannot LOOSEN org isolation
- * (test "cross-org attack" at the bottom).
+ * This ordering is the proof that the overlay cannot LOOSEN org
+ * isolation (test "cross-org attack" at the bottom).
  *
  * Raw-pg, app layer fully bypassed.
  */
@@ -148,47 +153,39 @@ async function seedAdminContext(client: PoolClient): Promise<Scenario> {
   }
 }
 
-async function switchToPhotographer(client: PoolClient, photogUserId: string) {
-  await client.query("SELECT set_config('app.current_role', 'photographer', true)")
-  await client.query("SELECT set_config('app.current_user_id', $1, true)", [photogUserId])
+async function switchToTeamMember(client: PoolClient, teamMemberUserId: string) {
+  await client.query("SELECT set_config('app.current_role', 'user', true)")
+  await client.query("SELECT set_config('app.current_user_id', $1, true)", [teamMemberUserId])
 }
 
 describe("assignment-scoped RLS overlay — projects", () => {
-  it("photographer CAN see project they're project-assigned to", async () => {
+  // Per migration 0021, the prior photographer/contractor/editor cases
+  // collapse into the single `user` tier. One test asserts the visibility
+  // shape; the cross-org probe at the bottom is the security-boundary
+  // proof. No coverage regression — the three old roles all evaluated
+  // through the same NOT IN list.
+  it("team member (role `user`) CAN see project they're project-assigned to", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM projects WHERE id = $1`, [s.projectAssignedId])
       expect(r.rows.length).toBe(1)
     })
   })
 
-  it("photographer CANNOT see project they're not assigned to", async () => {
+  it("team member CANNOT see project they're not assigned to", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM projects WHERE id = $1`, [s.projectUnassignedId])
       expect(r.rows.length).toBe(0)
     })
   })
 
-  it("contractor follows the same shape as photographer", async () => {
+  it("team member sees only their assigned projects in a full-org list", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await client.query("SELECT set_config('app.current_role', 'contractor', true)")
-      await client.query("SELECT set_config('app.current_user_id', $1, true)", [s.photogUserId])
-      const r = await client.query(`SELECT id FROM projects WHERE organization_id = $1`, [s.orgId])
-      const ids = r.rows.map((row: { id: string }) => row.id)
-      expect(ids).toContain(s.projectAssignedId)
-      expect(ids).not.toContain(s.projectUnassignedId)
-    })
-  })
-
-  it("editor follows the same shape as photographer", async () => {
-    await withRawClient(async (client) => {
-      const s = await seedAdminContext(client)
-      await client.query("SELECT set_config('app.current_role', 'editor', true)")
-      await client.query("SELECT set_config('app.current_user_id', $1, true)", [s.photogUserId])
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM projects WHERE organization_id = $1`, [s.orgId])
       const ids = r.rows.map((row: { id: string }) => row.id)
       expect(ids).toContain(s.projectAssignedId)
@@ -198,19 +195,19 @@ describe("assignment-scoped RLS overlay — projects", () => {
 })
 
 describe("assignment-scoped RLS overlay — contacts", () => {
-  it("photographer CAN see contacts on projects they're assigned to", async () => {
+  it("team member CAN see contacts on projects they're assigned to", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM contacts WHERE id = $1`, [s.contactOnAssignedId])
       expect(r.rows.length).toBe(1)
     })
   })
 
-  it("photographer CANNOT see contacts only on projects they're not assigned to", async () => {
+  it("team member CANNOT see contacts only on projects they're not assigned to", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM contacts WHERE id = $1`, [
         s.contactOnUnassignedId,
       ])
@@ -220,37 +217,37 @@ describe("assignment-scoped RLS overlay — contacts", () => {
 })
 
 describe("assignment-scoped RLS overlay — tasks", () => {
-  it("photographer CAN see tasks on projects they're project-assigned to", async () => {
+  it("team member CAN see tasks on projects they're project-assigned to", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM tasks WHERE id = $1`, [s.taskOnAssignedId])
       expect(r.rows.length).toBe(1)
     })
   })
 
-  it("photographer CANNOT see tasks on projects they're not assigned to (no direct assignee)", async () => {
+  it("team member CANNOT see tasks on projects they're not assigned to (no direct assignee)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM tasks WHERE id = $1`, [s.taskOnUnassignedId])
       expect(r.rows.length).toBe(0)
     })
   })
 
-  it("photographer CAN see a task where they are the direct assignee even on an unassigned project (carve-out)", async () => {
+  it("team member CAN see a task where they are the direct assignee even on an unassigned project (carve-out)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`SELECT id FROM tasks WHERE id = $1`, [s.taskDirectAssigneeId])
       expect(r.rows.length).toBe(1)
     })
   })
 
-  it("photographer CAN UPDATE a task assigned directly to them (markTaskDone carve-out)", async () => {
+  it("team member CAN UPDATE a task assigned directly to them (markTaskDone carve-out)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`UPDATE tasks SET status = 'done' WHERE id = $1 RETURNING id`, [
         s.taskDirectAssigneeId,
       ])
@@ -258,10 +255,10 @@ describe("assignment-scoped RLS overlay — tasks", () => {
     })
   })
 
-  it("photographer CANNOT UPDATE a task they don't own (returns 0 rows)", async () => {
+  it("team member CANNOT UPDATE a task they don't own (returns 0 rows)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(`UPDATE tasks SET status = 'done' WHERE id = $1 RETURNING id`, [
         s.taskOnUnassignedId,
       ])
@@ -269,10 +266,10 @@ describe("assignment-scoped RLS overlay — tasks", () => {
     })
   })
 
-  it("photographer CANNOT INSERT a new task (gate blocks writes)", async () => {
+  it("team member CANNOT INSERT a new task (gate blocks writes)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       await expect(
         client.query(
           `INSERT INTO tasks (id, organization_id, project_id, title)
@@ -325,7 +322,7 @@ describe("assignment-scoped RLS overlay — full-visibility control roles", () =
 })
 
 describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST hold)", () => {
-  it("photographer in org B with a forged project_photographers assignment to an org A project STILL cannot see org A's data", async () => {
+  it("team member in org B with a forged project_photographers assignment to an org A project STILL cannot see org A's data", async () => {
     await withRawClient(async (client) => {
       // Org A — seed via the normal helper.
       const a = await seedAdminContext(client)
@@ -361,8 +358,8 @@ describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST
         [createId(), orgB, a.projectAssignedId, photogB],
       )
 
-      // Now operate as photographer B in org B context.
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
+      // Now operate as team member B in org B context.
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [photogB])
 
       // Probe org A's project. The new policy's outer AND-clamp is
@@ -375,7 +372,7 @@ describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST
     })
   })
 
-  it("photographer in org A with a real assignment but probing org B's data sees zero (no forge needed)", async () => {
+  it("team member in org A with a real assignment but probing org B's data sees zero (no forge needed)", async () => {
     await withRawClient(async (client) => {
       const a = await seedAdminContext(client)
 
@@ -393,9 +390,9 @@ describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST
         [orgBProjectId, orgB],
       )
 
-      // Switch back to org A context as the photographer.
+      // Switch back to org A context as the team member.
       await client.query("SELECT set_config('app.current_org', $1, true)", [a.orgId])
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [a.photogUserId])
       const r = await client.query(`SELECT id FROM projects WHERE id = $1`, [orgBProjectId])
       expect(r.rows.length).toBe(0)
@@ -404,10 +401,10 @@ describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST
 })
 
 describe("assignment-scoped RLS overlay — write gate on contacts/projects", () => {
-  it("photographer CANNOT INSERT a contact", async () => {
+  it("team member CANNOT INSERT a contact", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       await expect(
         client.query(
           `INSERT INTO contacts (id, organization_id, first_name, last_name)
@@ -418,10 +415,10 @@ describe("assignment-scoped RLS overlay — write gate on contacts/projects", ()
     })
   })
 
-  it("photographer CANNOT UPDATE a contact (returns 0 rows, even on an assigned-project's contact)", async () => {
+  it("team member CANNOT UPDATE a contact (returns 0 rows, even on an assigned-project's contact)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(
         `UPDATE contacts SET first_name = 'Mutated' WHERE id = $1 RETURNING id`,
         [s.contactOnAssignedId],
@@ -430,10 +427,10 @@ describe("assignment-scoped RLS overlay — write gate on contacts/projects", ()
     })
   })
 
-  it("photographer CANNOT INSERT a project", async () => {
+  it("team member CANNOT INSERT a project", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       await expect(
         client.query(
           `INSERT INTO projects (id, organization_id, name)
@@ -444,10 +441,10 @@ describe("assignment-scoped RLS overlay — write gate on contacts/projects", ()
     })
   })
 
-  it("photographer CANNOT UPDATE a project (even one they're assigned to)", async () => {
+  it("team member CANNOT UPDATE a project (even one they're assigned to)", async () => {
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
-      await switchToPhotographer(client, s.photogUserId)
+      await switchToTeamMember(client, s.photogUserId)
       const r = await client.query(
         `UPDATE projects SET name = 'Mutated' WHERE id = $1 RETURNING id`,
         [s.projectAssignedId],

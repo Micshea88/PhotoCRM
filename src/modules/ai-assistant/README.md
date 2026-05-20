@@ -186,9 +186,9 @@ Hard constraints (per `docs/PIVOTS_LEDGER.md` Section 2, Module 17):
 ## RBAC
 
 New permission key: `use_ai_assistant`. Default-granted to all roles
-EXCEPT `client_limited`. Photographer/contractor/editor get it; their
-writes (when 17b lands) are still bounded by their existing RLS +
-permission checks because the writers will call the same orgActions
+EXCEPT `client`. The `user` tier (the standard team-member access
+level) gets it; team-member writes are still bounded by their existing
+RLS + permission checks because the writers call the same orgActions
 the manual UI does.
 
 ## Rate limits — OPERATOR-COST BACKSTOP, NOT A USER PAYWALL

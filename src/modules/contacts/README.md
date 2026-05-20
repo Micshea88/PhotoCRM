@@ -47,17 +47,17 @@ exercise every path including edge cases.
 
 ## RLS — org-isolation + assignment-scoped overlay
 
-As of commit 14a (migration `0015_assignment_scoped_rls_overlay`), the
+As of commit 14a (migration `0015_assignment_scoped_rls_overlay`; role
+name updated to `user` in migration `0021_role_rename_to_user`), the
 single `contacts_org_isolation` policy is replaced by four per-operation
 policies (`contacts_select` / `contacts_insert` / `contacts_update` /
 `contacts_delete`) that AND-clamp on the org-isolation predicate as the
-OUTER condition, with an assignment-scope inner OR for the
-photographer/contractor/editor roles:
+OUTER condition, with an assignment-scope inner OR for the `user` tier:
 
-| Probe role                                            | SELECT                                                                                           | INSERT / UPDATE / DELETE |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------ |
-| owner / admin / manager / accountant / client_limited | All in-org contacts                                                                              | All in-org contacts      |
-| photographer / contractor / editor                    | Only contacts on projects the user is assigned to (`project_photographers` ⋈ `project_contacts`) | **Blocked** at the gate  |
+| Probe role                                    | SELECT                                                                                                  | INSERT / UPDATE / DELETE |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------ |
+| owner / admin / manager / accountant / client | All in-org contacts                                                                                     | All in-org contacts      |
+| user (the standard team-member tier)          | Only contacts on projects the team member is assigned to (`project_photographers` ⋈ `project_contacts`) | **Blocked** at the gate  |
 
 Empty / unset `app.current_role` is treated as a non-assignment-scoped
 role (COALESCE to empty string). orgAction and runWithOrgContext both

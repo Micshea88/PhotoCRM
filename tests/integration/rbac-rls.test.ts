@@ -9,7 +9,7 @@ import { withRawClient } from "../helpers/rls"
  *   1. Org-isolation — same shape as terminology + custom-fields RLS tests.
  *   2. Role-gate — owner/admin can INSERT/UPDATE/DELETE; everyone else
  *      cannot. The role-gate is the high-risk one: an escape would let a
- *      photographer or contractor promote themselves to owner.
+ *      team member (role `user`) promote themselves to owner.
  *
  * UPDATE/DELETE failure modes: Postgres permissive-policy semantics mean
  * a denied UPDATE/DELETE silently affects zero rows (no error). We assert
@@ -115,8 +115,8 @@ describe("rbac — RLS: admin-only write gate on member_role", () => {
     await withRawClient(async (client) => {
       const { orgA, userId } = await seedTwoOrgsAndOneUser(client)
       await client.query("SELECT set_config('app.current_org', $1, true)", [orgA])
-      // Photographer trying to promote themselves to owner.
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
+      // Team member (role `user`) trying to promote themselves to owner.
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       await expect(
         client.query(
           `INSERT INTO member_role (id, organization_id, user_id, role)
@@ -136,12 +136,12 @@ describe("rbac — RLS: admin-only write gate on member_role", () => {
       await client.query("SELECT set_config('app.current_role', 'owner', true)")
       await client.query(
         `INSERT INTO member_role (id, organization_id, user_id, role)
-         VALUES ($1, $2, $3, 'photographer')`,
+         VALUES ($1, $2, $3, 'user')`,
         [createId(), orgA, userId],
       )
 
       // Switch to the non-admin and try to escalate
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       const update = await client.query(
         "UPDATE member_role SET role = 'owner' WHERE user_id = $1",
         [userId],
@@ -154,7 +154,7 @@ describe("rbac — RLS: admin-only write gate on member_role", () => {
         "SELECT role FROM member_role WHERE user_id = $1",
         [userId],
       )
-      expect(probe.rows[0]?.role).toBe("photographer")
+      expect(probe.rows[0]?.role).toBe("user")
     })
   })
 
@@ -166,11 +166,11 @@ describe("rbac — RLS: admin-only write gate on member_role", () => {
       await client.query("SELECT set_config('app.current_role', 'owner', true)")
       await client.query(
         `INSERT INTO member_role (id, organization_id, user_id, role)
-         VALUES ($1, $2, $3, 'photographer')`,
+         VALUES ($1, $2, $3, 'user')`,
         [createId(), orgA, userId],
       )
 
-      await client.query("SELECT set_config('app.current_role', 'contractor', true)")
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       const del = await client.query("DELETE FROM member_role WHERE user_id = $1", [userId])
       expect(del.rowCount).toBe(0)
 
@@ -202,7 +202,7 @@ describe("rbac — RLS: admin-only write gate on member_permission_override", ()
     await withRawClient(async (client) => {
       const { orgA, userId } = await seedTwoOrgsAndOneUser(client)
       await client.query("SELECT set_config('app.current_org', $1, true)", [orgA])
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       await expect(
         client.query(
           `INSERT INTO member_permission_override

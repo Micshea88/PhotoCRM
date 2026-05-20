@@ -40,18 +40,14 @@ const ROLE_DEFAULTS: Record<ExtendedRole, ReadonlySet<PermissionKey>> = {
     "view_sms_conversations_all",
     "use_ai_assistant",
   ]),
-  // Photographer: assigned events + contacts. No financials. The AI
-  // assistant is granted because its writes (when 17b lands) still flow
-  // through orgAction → same RLS + permission checks the manual UI
-  // does. The AI is a tool, not a privilege escalator.
-  photographer: new Set<PermissionKey>([
-    "view_contacts",
-    "view_events",
-    "send_sms",
-    "use_ai_assistant",
-  ]),
-  contractor: new Set<PermissionKey>(["view_events", "use_ai_assistant"]),
-  editor: new Set<PermissionKey>(["view_events", "use_ai_assistant"]),
+  // User: the standard team-member access tier. Assignment-scoped reads
+  // on contacts / projects / tasks (Module 14a RLS overlay; the
+  // assignment-scoped policies key on role='user'). No financials, no
+  // user management. The AI assistant is granted because its writes
+  // flow through the writers.ts orgAction allowlist → same RLS +
+  // permission checks the manual UI runs. The AI is a tool, not a
+  // privilege escalator.
+  user: new Set<PermissionKey>(["view_contacts", "view_events", "send_sms", "use_ai_assistant"]),
   accountant: new Set<PermissionKey>([
     "view_financial_data",
     "view_reports",
@@ -59,8 +55,9 @@ const ROLE_DEFAULTS: Record<ExtendedRole, ReadonlySet<PermissionKey>> = {
     "export_data",
     "use_ai_assistant",
   ]),
-  // Client-limited: parked role for the future client-portal V2 work.
-  client_limited: new Set<PermissionKey>([]),
+  // Client: parked role for the future client-portal V2 work. No
+  // permissions in V1.
+  client: new Set<PermissionKey>([]),
 }
 
 /**

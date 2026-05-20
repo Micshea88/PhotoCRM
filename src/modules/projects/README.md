@@ -86,11 +86,12 @@ The `projects` table now carries four per-operation policies
 `projects_delete`) replacing the single `projects_org_isolation`
 policy. Per migration `0015_assignment_scoped_rls_overlay`:
 
-- Owner / admin / manager / accountant / client_limited: full
-  org-scoped read + write (unchanged).
-- Photographer / contractor / editor: **read** only projects they
-  are assigned to (via `project_photographers.user_id`); **write**
-  blocked entirely.
+- Owner / admin / manager / accountant / client: full org-scoped
+  read + write (unchanged). (`client` has no permissions in V1, so
+  its full-visibility status is moot.)
+- User (the standard team-member tier): **read** only projects they
+  are project-assigned to (via `project_photographers.user_id`);
+  **write** blocked entirely.
 
 The three sub-tables (`project_contacts`, `project_photographers`,
 `project_sub_events`) continue to use their original single
@@ -132,9 +133,10 @@ probe inside the migration.
 - **Geocoding fill** — `primary_venue_coordinates` is null until the
   geocoder runs against `primary_venue_address`. Phase 2.
 - ~~**Assignment-scoped RLS overlay**~~ — **CLOSED** in commit 14a (migration
-  `0015_assignment_scoped_rls_overlay`). Photographer/contractor/editor now
-  see only projects they're project-photographer-assigned to, and only the
-  contacts on those projects. See "RLS" section above.
+  `0015_assignment_scoped_rls_overlay`; role name updated to `user` in
+  migration `0021_role_rename_to_user`). Team members (role `user`)
+  see only projects they're project-photographer-assigned to, and only
+  the contacts on those projects. See "RLS" section above.
 - **Opportunities** — the per-pipeline tracking records that point at
   a project. Next Phase 2 module.
 - **Tasks + dependencies + checklists** — Phase 2, sits on top of

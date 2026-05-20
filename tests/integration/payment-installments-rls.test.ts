@@ -1,9 +1,9 @@
 /**
  * RLS tests for payment_installments — the financial-table role gate
  * (Tech Arch §4 line 104). V1 gate: owner / admin / accountant.
- * Manager (without grant) and photographer/contractor/editor are
- * blocked. Manager-with-grant is deferred to the Phase 4 admin UI per
- * `rbac/README.md`.
+ * Manager (without grant) and the standard team-member tier (`user`)
+ * are blocked. Manager-with-grant is deferred to the Phase 4 admin UI
+ * per `rbac/README.md`.
  *
  * Raw-pg, app layer fully bypassed. Same shape as every other RLS suite.
  */
@@ -98,32 +98,16 @@ describe("payment_installments — RLS standard (org isolation)", () => {
 })
 
 describe("payment_installments — financial RLS role gate (Tech Arch §4)", () => {
-  it("photographer sees 0 rows (blocked)", async () => {
+  it("user (standard team-member tier) sees 0 rows (blocked)", async () => {
+    // Consolidates the prior photographer/contractor/editor cases — all
+    // three old roles collapsed into the single `user` tier per the
+    // P4-roles rename (migration 0021). The financial gate uses a
+    // positive-match allowlist (owner/admin/accountant), so the rename
+    // doesn't change the policy text; it does change what role label
+    // the test sets.
     await withRawClient(async (client) => {
       const a = await seedOrgAndProject(client)
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
-      const r = await client.query(`SELECT id FROM payment_installments WHERE id = $1`, [
-        a.installmentId,
-      ])
-      expect(r.rows.length).toBe(0)
-    })
-  })
-
-  it("contractor sees 0 rows", async () => {
-    await withRawClient(async (client) => {
-      const a = await seedOrgAndProject(client)
-      await client.query("SELECT set_config('app.current_role', 'contractor', true)")
-      const r = await client.query(`SELECT id FROM payment_installments WHERE id = $1`, [
-        a.installmentId,
-      ])
-      expect(r.rows.length).toBe(0)
-    })
-  })
-
-  it("editor sees 0 rows", async () => {
-    await withRawClient(async (client) => {
-      const a = await seedOrgAndProject(client)
-      await client.query("SELECT set_config('app.current_role', 'editor', true)")
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       const r = await client.query(`SELECT id FROM payment_installments WHERE id = $1`, [
         a.installmentId,
       ])
@@ -164,10 +148,10 @@ describe("payment_installments — financial RLS role gate (Tech Arch §4)", () 
     })
   })
 
-  it("photographer CANNOT INSERT (financial role gate WITH CHECK)", async () => {
+  it("user CANNOT INSERT (financial role gate WITH CHECK)", async () => {
     await withRawClient(async (client) => {
       const a = await seedOrgAndProject(client)
-      await client.query("SELECT set_config('app.current_role', 'photographer', true)")
+      await client.query("SELECT set_config('app.current_role', 'user', true)")
       await expect(
         client.query(
           `INSERT INTO payment_installments (id, organization_id, project_id, sequence_no, split_method, amount_cents)

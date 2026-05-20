@@ -17,8 +17,8 @@ import type { BetterAuthRole } from "@/modules/rbac/types"
  * BA's three-role enum:
  *
  *   BA admin   → extended "admin"
- *   BA member  → extended "photographer" (productive default; an admin
- *                can promote via the Phase 4 UI when it ships)
+ *   BA member  → extended "user" (the standard team-member tier; an
+ *                admin can promote via the Phase 4 UI when it ships)
  *   BA owner   → extended "admin" (defensive downgrade — only org
  *                creators should ever be extended "owner")
  *
@@ -38,8 +38,7 @@ export async function seedNewMember(
   userId: string,
   baRole: BetterAuthRole,
 ): Promise<void> {
-  const extendedRole: ExtendedRole =
-    baRole === "admin" || baRole === "owner" ? "admin" : "photographer"
+  const extendedRole: ExtendedRole = baRole === "admin" || baRole === "owner" ? "admin" : "user"
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)

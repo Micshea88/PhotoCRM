@@ -129,8 +129,10 @@ future projects from the same template.
   A batched reorder action (like `reorderPipelineStages`) lands when
   the UI needs it.
 - ~~**Assignment-scoped RLS on tasks**~~ — **CLOSED** in commit 14a (migration
-  `0015_assignment_scoped_rls_overlay`). Photographer/contractor/editor see
-  tasks on projects they're project-photographer-assigned to OR tasks where
-  they are the direct `assignee_user_id` (the markTaskDone carve-out). The
-  per-operation update policy allows assignees to mutate their own tasks
-  even when not project-assigned. See `tests/integration/assignment-scoped-rls.test.ts`.
+  `0015_assignment_scoped_rls_overlay`; role name updated to `user` in
+  migration `0021_role_rename_to_user`). Team members (role `user`)
+  see tasks on projects they're project-photographer-assigned to OR
+  tasks where they are the direct `assignee_user_id` (the markTaskDone
+  carve-out). The per-operation update policy allows assignees to
+  mutate their own tasks even when not project-assigned. See
+  `tests/integration/assignment-scoped-rls.test.ts`.

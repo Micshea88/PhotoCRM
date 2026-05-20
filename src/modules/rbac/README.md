@@ -1,35 +1,38 @@
 # rbac module
 
-The 8-role + permission-override layer on top of Better Auth's
-3-role organization model. Per Requirements §5.
+The 6-role + permission-override layer on top of Better Auth's
+3-role organization model.
+
+The 6 roles are **access tiers**, not job titles. The standard
+team-member tier is named `user`; UI copy uses "team" / "team member"
+when referring to the people (LOC1 plain-language rule — avoids the
+"user" noun collision in English prose).
 
 ## What's here
 
 - `schema.ts` — two tables. `member_role` (one row per user per org)
   carries the extended role; `member_permission_override` (sparse) carries
   per-user grants/revokes against the role defaults.
-- `types.ts` — `EXTENDED_ROLES` (8), `extendedToBetterAuth(role)` mapping,
-  and `PERMISSION_KEYS` (the granular permissions from Requirements §5).
+- `types.ts` — `EXTENDED_ROLES` (6), `extendedToBetterAuth(role)` mapping,
+  and `PERMISSION_KEYS` (the granular permissions).
 - `queries.ts` — `getExtendedMemberRole`, `hasPermission`, and
   `listMemberPermissionOverrides`. `ROLE_DEFAULTS` (the role → permission
   set baseline) lives here in code, not in DB.
 - `seed.ts` — `seedMemberRoleForOrgOwner(db, orgId, userId)`. Idempotent.
 
-## Better Auth coexistence (the Q5 decision)
+## Better Auth coexistence
 
 Better Auth only knows three roles. We map ours onto theirs so its
 internal plugin checks keep working:
 
-| our role       | →   | BA `member.role` |
-| -------------- | --- | ---------------- |
-| owner          | →   | owner            |
-| admin          | →   | admin            |
-| manager        | →   | member           |
-| photographer   | →   | member           |
-| contractor     | →   | member           |
-| editor         | →   | member           |
-| accountant     | →   | member           |
-| client_limited | →   | member           |
+| our role   | →   | BA `member.role` |
+| ---------- | --- | ---------------- |
+| owner      | →   | owner            |
+| admin      | →   | admin            |
+| manager    | →   | member           |
+| user       | →   | member           |
+| accountant | →   | member           |
+| client     | →   | member           |
 
 When the Phase 4 admin UI lets an admin change someone's role, the action
 that ships with it must update **both** tables: `member_role.role` (our
@@ -41,7 +44,7 @@ extended) and Better Auth's `member.role` (the mapping). The
 Both tables enable FORCE ROW LEVEL SECURITY with TWO permissive policies:
 
 1. **`*_org_select`** — `FOR SELECT USING (organization_id = current_setting(...))`.
-   Any member of the org can read. A photographer can see who the admins
+   Any member of the org can read. A team member can see who the admins
    are without being one.
 2. **`*_admin_write`** — `FOR ALL` with `app.current_role IN ('owner', 'admin')`
    in both USING and WITH CHECK. Non-admins:
@@ -49,9 +52,9 @@ Both tables enable FORCE ROW LEVEL SECURITY with TWO permissive policies:
    - UPDATE → zero rows affected (USING denies; Postgres semantics, no error)
    - DELETE → zero rows affected (same)
 
-The 10 negative tests in `tests/integration/rbac-rls.test.ts` exercise
+The negative tests in `tests/integration/rbac-rls.test.ts` exercise
 both the org-isolation path and the admin-write gate, including the
-self-escalation scenario (a photographer trying to UPDATE themselves to
+self-escalation scenario (a team member trying to UPDATE themselves to
 owner — affects 0 rows).
 
 ## Bootstrap-trust: seeding the very first owner
@@ -89,8 +92,8 @@ button is enabled:
 - No default role on the form.
 - "Send invite" is blocked/disabled until a role is explicitly chosen.
 - No invite can be created or sent without a role.
-- The form selects from the extended 8-role enum (manager, photographer,
-  contractor, editor, accountant, etc.) — not the BA 3-role.
+- The form selects from the extended 6-role enum (manager, user,
+  accountant, client, etc.) — not the BA 3-role.
 - The selected extended role is persisted on the invitation (custom
   column / metadata field) and read by `seedNewMember` directly when
   the invitee accepts.
@@ -103,11 +106,11 @@ backend mapping below should never fire from the form path.
 In V1, Better Auth's invitation flow only carries the 3-role enum, so
 `seedNewMember` derives the extended role from `member.role`:
 
-| BA `member.role` | →   | extended role                                                 |
-| ---------------- | --- | ------------------------------------------------------------- |
-| owner            | →   | admin (defensive — only org creators are extended `owner`)    |
-| admin            | →   | admin                                                         |
-| member           | →   | photographer (productive default; an admin can promote later) |
+| BA `member.role` | →   | extended role                                                    |
+| ---------------- | --- | ---------------------------------------------------------------- |
+| owner            | →   | admin (defensive — only org creators are extended `owner`)       |
+| admin            | →   | admin                                                            |
+| member           | →   | user (the standard team-member tier; an admin can promote later) |
 
 **This mapping exists as a fail-safe fallback only**, for code paths
 that reach `seedNewMember` without an explicit extended role:
@@ -118,8 +121,8 @@ that reach `seedNewMember` without an explicit extended role:
   that bypass the form, internal admin tools, BA core changes that
   reset the custom field, etc.
 
-The fail-safe lands on the LOWEST productive role (`photographer`)
-rather than failing closed (`hasPermission() === false`) because a
+The fail-safe lands on the standard productive tier (`user`) rather
+than failing closed (`hasPermission() === false`) because a
 silently-permissionless invitee is harder to rescue than one who can
 at least see contacts/events and ping an admin. **The fallback must
 never be the normal path for an invite created through the UI.**
@@ -137,7 +140,7 @@ results from day one. The seed is idempotent; re-firing the hook
   admin UI's "remove member" action will handle cleanup; until then,
   orphans are harmless but cosmetic.
 - ~~**`app.current_role` is currently the Better Auth 3-role**~~ — **CLOSED**
-  in commit 14a. `OrgContext.role` is now `ExtendedRole` (8-role); `orgAction`
+  in commit 14a. `OrgContext.role` is now `ExtendedRole`; `orgAction`
   and `runWithOrgContext` both set `app.current_role` to the extended value
   via `lookupExtendedMemberRole(tx, userId)` (parametric helper in
   `rbac/queries.ts`). New `app.current_user_id` setting plumbed alongside

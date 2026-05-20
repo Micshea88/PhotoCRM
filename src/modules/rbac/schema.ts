@@ -2,20 +2,18 @@ import { pgTable, text, boolean, timestamp, uniqueIndex, index } from "drizzle-o
 import { organization, user } from "@/modules/auth/schema"
 
 /**
- * Extended role for a user in an organization, per Requirements §5.
- * Better Auth's `member.role` only knows `owner | admin | member`; the
- * product needs eight roles. We keep both in sync:
+ * Extended role for a user in an organization. Better Auth's
+ * `member.role` only knows `owner | admin | member`; the product needs
+ * six access tiers. We keep both in sync:
  *
  *   our role          → Better Auth member.role
  *   ───────────────────────────────────────────
  *   owner             → owner
  *   admin             → admin
  *   manager           → member
- *   photographer      → member
- *   contractor        → member
- *   editor            → member
+ *   user              → member
  *   accountant        → member
- *   client_limited    → member
+ *   client            → member
  *
  * Mapping is owned by `extendedToBetterAuth` in types.ts. Whenever a row
  * here is created or updated, the matching Better Auth `member.role` is

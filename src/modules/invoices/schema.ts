@@ -39,8 +39,9 @@ import { contacts } from "@/modules/contacts/schema"
  *     current_setting('app.current_role') ∈ money-permitted set."
  *   - V1 gate: owner / admin / accountant. Manager-with-grant deferred
  *     to the Phase 4 admin UI (per `rbac/README.md` + the locked decision
- *     in commit 14a planning). Photographer / contractor / editor:
- *     ZERO rows on SELECT, INSERT/UPDATE/DELETE rejected.
+ *     in commit 14a planning). The standard team-member tier (role
+ *     `user`) and `client` are blocked at the gate: ZERO rows on
+ *     SELECT, INSERT/UPDATE/DELETE rejected.
  *
  * Display discipline:
  *   - amountCents NEVER appears as a raw integer in any UI / email / PDF

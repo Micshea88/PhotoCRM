@@ -35,26 +35,38 @@ try {
   console.log("[migrate] ✓ migrations applied successfully")
 } catch (err) {
   console.error("[migrate] ✗ migration FAILED")
-  if (err && typeof err === "object") {
-    const e = err
-    if (e.message) console.error("  message :", e.message)
-    if (e.code) console.error("  code    :", e.code)
-    if (e.severity) console.error("  severity:", e.severity)
-    if (e.detail) console.error("  detail  :", e.detail)
-    if (e.hint) console.error("  hint    :", e.hint)
-    if (e.schema) console.error("  schema  :", e.schema)
-    if (e.table) console.error("  table   :", e.table)
-    if (e.column) console.error("  column  :", e.column)
-    if (e.constraint) console.error("  constr  :", e.constraint)
-    if (e.position) console.error("  position:", e.position)
-    if (e.where) console.error("  where   :", e.where)
-    if (e.file) console.error("  file    :", e.file)
-    if (e.line) console.error("  line    :", e.line)
-    if (e.routine) console.error("  routine :", e.routine)
-    if (e.stack) console.error("  stack   :", e.stack)
-  } else {
-    console.error(err)
+  // Walk the error chain: drizzle wraps the pg error in a generic
+  // "Failed query: ..." Error and the real Postgres details (code,
+  // severity, detail, etc.) live on `err.cause` per Node's standard
+  // error-chaining convention. Print each link in the chain so the
+  // underlying pg error is always visible.
+  let chain = err
+  let depth = 0
+  while (chain && depth < 5) {
+    const prefix = depth === 0 ? "  " : "  ".repeat(depth + 1) + "→ "
+    if (chain && typeof chain === "object") {
+      const e = chain
+      if (e.message) console.error(`${prefix}message :`, e.message.slice(0, 500))
+      if (e.code) console.error(`${prefix}code    :`, e.code)
+      if (e.severity) console.error(`${prefix}severity:`, e.severity)
+      if (e.detail) console.error(`${prefix}detail  :`, e.detail)
+      if (e.hint) console.error(`${prefix}hint    :`, e.hint)
+      if (e.schema) console.error(`${prefix}schema  :`, e.schema)
+      if (e.table) console.error(`${prefix}table   :`, e.table)
+      if (e.column) console.error(`${prefix}column  :`, e.column)
+      if (e.constraint) console.error(`${prefix}constr  :`, e.constraint)
+      if (e.position) console.error(`${prefix}position:`, e.position)
+      if (e.where) console.error(`${prefix}where   :`, e.where)
+      if (e.file) console.error(`${prefix}file    :`, e.file)
+      if (e.line) console.error(`${prefix}line    :`, e.line)
+      if (e.routine) console.error(`${prefix}routine :`, e.routine)
+    } else {
+      console.error(`${prefix}value   :`, chain)
+    }
+    chain = chain?.cause
+    depth += 1
   }
+  if (err?.stack) console.error("  stack   :", err.stack)
   process.exit(1)
 } finally {
   await pool.end()

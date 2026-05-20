@@ -83,6 +83,31 @@ export const ROUTE_CATALOG: readonly CatalogRoute[] = [
     title: "Create organization",
     description: "Onboarding step to create your first organization.",
   },
+  // P4-prep additions (additive only — no edits to entries above).
+  // These three routes 404 until the corresponding Phase 4 list pages
+  // (P4.2 / P4.3 / P4.4 / P4.5) ship. The catalog entries land now so
+  // the sidebar in P4.1 has a single source of truth from day one.
+  {
+    id: "contacts_list",
+    path: "/contacts",
+    title: "Contacts",
+    description: "List of all contacts in this organization.",
+    requiresPermission: "view_contacts",
+  },
+  {
+    id: "opportunities_list",
+    path: "/opportunities",
+    title: "Pipeline",
+    description: "Sales-pipeline kanban — opportunities by stage.",
+    requiresPermission: "view_events",
+  },
+  {
+    id: "tasks_list",
+    path: "/tasks",
+    title: "Tasks",
+    description: "List of tasks across your events.",
+    requiresPermission: "view_events",
+  },
 ] as const
 
 const ROUTE_BY_ID = new Map(ROUTE_CATALOG.map((r) => [r.id, r]))

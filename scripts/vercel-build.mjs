@@ -42,7 +42,12 @@ if (env === "production") {
     process.exit(1)
   }
   console.log("[vercel-build] VERCEL_ENV=production — running migrations against the unpooled URL")
-  run("pnpm", ["exec", "drizzle-kit", "migrate"], { DATABASE_URL: unpooled })
+  // We invoke scripts/migrate.mjs (not `drizzle-kit migrate`) because the
+  // drizzle-kit CLI swallows the underlying Postgres error and surfaces
+  // only a non-zero exit with no message. scripts/migrate.mjs uses the
+  // same drizzle migrator under the hood but logs the actual error
+  // (code / detail / hint / position / stack).
+  run("node", ["scripts/migrate.mjs"], { DATABASE_URL: unpooled })
 } else if (env === "preview") {
   console.log(
     "[vercel-build] VERCEL_ENV=preview — SKIPPING migrations (preview shares the prod DB by default; wire a separate preview DB if you want previews to migrate independently)",

@@ -12,15 +12,22 @@ import { findRouteById } from "./route-catalog"
  * `validate.ts` (Module 16). No repair branch, no third success
  * state.
  *
- * For 17a (READ + NAVIGATE only):
- *   - `reply`       — always accepted (text-only)
- *   - `retrieve`    — name in `ASSISTANT_RETRIEVER_NAMES` AND args
- *                     match the retriever's canonical Zod input
- *   - `navigate`    — routeId in `ROUTE_CATALOG`
- *   - `refusal`     — always accepted (reason text)
+ * Five accepted shapes:
+ *   - `reply`          — always accepted (text-only)
+ *   - `retrieve`       — name in `ASSISTANT_RETRIEVER_NAMES` AND args
+ *                        match the retriever's canonical Zod input
+ *   - `navigate`       — routeId in `ROUTE_CATALOG`
+ *   - `refusal`        — always accepted (reason text)
+ *   - `write_proposal` — action in `ASSISTANT_WRITER_NAMES` AND input
+ *                        parses through the writer's canonical Zod
+ *                        inputSchema (imported verbatim from each
+ *                        source module's `types.ts` — no AI-permissive
+ *                        variants)
  *
- * A model output of `kind: "write_proposal"` fails the discriminated
- * union here — 17a has no write surface.
+ * A `write_proposal` is JUST a proposal — the actual mutation only
+ * happens via the separate `confirmWriteProposal` action with an
+ * explicit `confirmed: z.literal(true)` from the user. See README's
+ * "Defense-in-depth" section.
  */
 
 export interface ValidationError {

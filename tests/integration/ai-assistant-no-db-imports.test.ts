@@ -1,21 +1,27 @@
 /**
- * Static-grep guard for the AI Assistant module (17a).
+ * Static-grep guard for the AI Assistant module.
  *
  * AI LAYER PRINCIPLE (rule AI1, docs/PIVOTS_LEDGER.md Section 1):
  * the AI is a tool the human drives, never an autonomous actor.
- * 17a is read+navigate only — it is MATHEMATICALLY INCAPABLE of
- * writing because (a) writers.ts does not exist, (b) the model output
- * schema has no write_proposal variant, and (c) the module cannot
- * import the database layer.
+ * Reads flow through queries.ts; writes flow through the writers.ts
+ * orgAction allowlist + explicit human confirmation.
  *
- * This test proves (c) by static analysis. ESLint's
- * no-restricted-imports rule blocks the imports at build time; this
- * test is the belt-and-suspenders verification — even if a future
- * contributor disables the lint rule, this test catches the bypass.
+ * This test enforces two posture invariants by static analysis:
  *
- * The forbidden imports are EXACTLY the same set blocked from
- * `app/**` per AGENTS.md hard rule #1, applied to the AI assistant
- * module so it cannot reach around queries.ts.
+ *   1. `retrievers.ts` reaches READS via queries.ts only — it MUST
+ *      NOT import drizzle, @/db, @/lib/db, or any module schema.
+ *   2. `writers.ts` is the ONLY file in this module permitted to
+ *      import @/modules/<x>/actions. Every other file (including
+ *      `actions.ts` and `validate.ts`) is blocked from importing the
+ *      orgAction surface of other modules.
+ *
+ * ESLint's no-restricted-imports rule blocks the imports at build
+ * time; this test is the belt-and-suspenders verification — even if
+ * a future contributor disables the lint rule, this test catches the
+ * bypass. The companion suite at
+ * `tests/integration/ai-assistant-privileged-write-bypass.test.ts`
+ * enforces from the OTHER direction (writers.ts imports ONLY actions
+ * + types + zod + server-only).
  */
 import { describe, it, expect } from "vitest"
 import { readdir, readFile, stat } from "node:fs/promises"
@@ -36,11 +42,11 @@ const AI_ASSISTANT_DIR = join(process.cwd(), "src/modules/ai-assistant")
  * What MUST be enforced is:
  *   - `retrievers.ts` MUST NOT import drizzle / @/db / @/lib/db /
  *     @/modules/*\/schema. Reads MUST go through @/modules/*\/queries.
- *   - NO file in this module may import @/modules/*\/actions. There is
- *     no write back-channel against other modules' data in 17a.
- *     writers.ts does not exist (separate check below). 17b will add
- *     writers.ts and at that point the orgAction-import allowlist
- *     gets scoped to writers.ts only.
+ *   - `writers.ts` is the ONLY file in this module permitted to
+ *     import @/modules/*\/actions. Every other file (including
+ *     `actions.ts` and `validate.ts`) is blocked from reaching another
+ *     module's orgAction surface; writes must route through the
+ *     writers.ts allowlist + an explicit human `confirmWriteProposal`.
  */
 
 interface ForbiddenRule {

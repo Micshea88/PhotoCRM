@@ -9,26 +9,31 @@ import { organization, user } from "@/modules/auth/schema"
  * actor." Every AI write must route through the IDENTICAL human action
  * path. No AI-specific back-channel.
  *
- * MODULE 17a SCOPE — READ + NAVIGATE ONLY. The write_proposal /
- * confirmWriteProposal flow lands in 17b. This module is
- * MATHEMATICALLY INCAPABLE of writing data because the code paths for
- * write_proposal output and the writer-allowlist file (writers.ts) do
- * not exist in 17a — the static-grep test in
- * `tests/integration/ai-assistant-no-db-imports.test.ts` proves it.
+ * SCOPE — READ + NAVIGATE + PROPOSE-WRITE. The AI cannot mutate other
+ * modules' data directly: writes go through `writers.ts` (the locked
+ * orgAction allowlist) and require an explicit human confirmation via
+ * `confirmWriteProposal({ confirmed: z.literal(true) })`. The model
+ * output schema has no `confirmed` field and `.strict()` rejects one,
+ * so the model cannot self-confirm. See `README.md` "Defense-in-depth"
+ * for the three enforcement layers.
  *
  * Read-path safety: every retriever wraps an existing queries.ts
  * function which uses `withOrgContext`. RLS bounds visibility
- * automatically — a photographer's AI sees only what the photographer
+ * automatically — a team member's AI sees only what that team member
  * sees by clicking through the UI. Proven by the assignment-scoped
  * read-bypass tests in
  * `tests/integration/ai-assistant-rls-read-boundary.test.ts`.
  *
  * Conversation persistence (locked per user instruction):
  *   - Persist ALL turns (full transcript) — TTL 30 days for chatter
- *   - Write proposals + confirmations TTL 90 days (audit trail)
- *   - Purge via the daily cron at app/api/jobs/cron/purge-deleted/route.ts
- *     (write_proposal/write_confirmed/write_rejected branches land in 17b
- *     — for 17a, the only roles are user / assistant / tool_result / refusal)
+ *     (user / assistant / tool_result / refusal rows)
+ *   - Write proposals + confirmations TTL 90 days (audit trail) —
+ *     write_proposal / write_confirmed / write_rejected rows; the
+ *     proposal lifecycle columns (`writeProposalAction`,
+ *     `writeProposalInput`, `writeProposalStatus`,
+ *     `resultingResourceType`, `resultingResourceId`) carry the audit
+ *     payload.
+ *   - Purge via the daily cron at app/api/jobs/cron/purge-deleted/route.ts.
  */
 export const aiAssistantMessages = pgTable(
   "ai_assistant_messages",

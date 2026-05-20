@@ -3,15 +3,16 @@ import { ASSISTANT_RETRIEVER_NAMES } from "./retrievers"
 import { ROUTE_IDS } from "./route-catalog"
 
 /**
- * Model-output contract for Module 17a (READ + NAVIGATE only).
- *
- * MODULE 17a INTENTIONALLY HAS NO `write_proposal` variant. The
- * write surface lands in 17b. A model output of kind="write_proposal"
- * fails this schema's discriminated union — there is no syntactic
- * path from the AI to a write in 17a.
+ * Model-output contract for the AI Assistant (module 17). Five
+ * variants in a discriminated union: `reply` / `retrieve` / `navigate`
+ * / `refusal` / `write_proposal`.
  *
  * Every variant uses `.strict()` so the model cannot smuggle unknown
- * fields (mirrors the ai-workflow-builder schema's defense).
+ * fields (mirrors the ai-workflow-builder schema's defense). The
+ * `write_proposal` variant specifically has NO `confirmed` field —
+ * `.strict()` rejects one — because the model cannot self-confirm.
+ * Confirmation happens via the separate `confirmWriteProposal` action
+ * below, which requires `confirmed: z.literal(true)` from the user.
  */
 
 const retrieverNameSchema = z.enum(ASSISTANT_RETRIEVER_NAMES as [string, ...string[]])

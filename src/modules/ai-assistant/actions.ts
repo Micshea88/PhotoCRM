@@ -25,13 +25,26 @@ import { assistantTurnInput, confirmWriteProposalInput, rejectWriteProposalInput
 const PERMISSION_KEY = "use_ai_assistant" as const
 
 /**
- * Module 17a — `assistantTurn` is the ONLY action. The 17b actions
- * (confirmWriteProposal, rejectWriteProposal) do not exist yet.
+ * Three actions, all human-initiated:
+ *
+ *   - `assistantTurn`         — the user typed a message; the model
+ *                               replies / retrieves / navigates /
+ *                               refuses / PROPOSES a write. NEVER
+ *                               invokes an orgAction itself; a
+ *                               write_proposal is persisted as a
+ *                               pending row only.
+ *   - `confirmWriteProposal`  — requires `confirmed: z.literal(true)`
+ *                               from the user. Re-validates the
+ *                               stored input through the writer's
+ *                               canonical Zod schema (tamper defense),
+ *                               then invokes the canonical orgAction.
+ *   - `rejectWriteProposal`   — marks the proposal status=rejected.
  *
  * Per the AI layer guiding principle (AI1, docs/PIVOTS_LEDGER.md):
- * the AI is a tool the human drives, never an autonomous actor. This
- * action runs on a human-initiated request (the user typed a
- * message). It cannot self-fire. It has no cron caller.
+ * the AI is a tool the human drives, never an autonomous actor. None
+ * of these actions can self-fire — `assistantTurn` runs on a typed
+ * user message; confirm/reject run on an explicit click. No cron
+ * caller anywhere.
  */
 
 export const assistantTurn = orgAction

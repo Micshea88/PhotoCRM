@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, gte, isNull, lte, sql } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
 import { projects, projectContacts, projectPhotographers, projectSubEvents } from "./schema"
 
@@ -75,6 +75,30 @@ export async function getProjectContactsByRole(projectId: string, role: string) 
       .select()
       .from(projectContacts)
       .where(and(eq(projectContacts.projectId, projectId), eq(projectContacts.role, role)))
+  })
+}
+
+/**
+ * Dashboard widget — count of projects whose `primaryDate` falls within
+ * the (inclusive) window [startISO, endISO]. Date inputs are plain
+ * YYYY-MM-DD strings; NO Date constructor (Module 14b discipline +
+ * LOC1's "no timezone library" rule). Soft-deleted rows excluded.
+ * RLS-scoped via withOrgContext. Lands as part of P4-queries ahead of
+ * the P4.1 dashboard's "Projects this month" widget.
+ */
+export async function countProjectsInDateRange(startISO: string, endISO: string): Promise<number> {
+  return withOrgContext(async (tx) => {
+    const [row] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(projects)
+      .where(
+        and(
+          gte(projects.primaryDate, startISO),
+          lte(projects.primaryDate, endISO),
+          isNull(projects.deletedAt),
+        ),
+      )
+    return row?.count ?? 0
   })
 }
 

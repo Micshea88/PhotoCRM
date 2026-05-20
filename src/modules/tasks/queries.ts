@@ -1,7 +1,9 @@
 import "server-only"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, gte, isNull, lte } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
 import { tasks, taskDependencies, taskChecklistItems, projectStages } from "./schema"
+
+export type Task = typeof tasks.$inferSelect
 
 interface ListOptions {
   withDeleted?: boolean
@@ -96,6 +98,30 @@ export async function listTaskBlockers(taskId: string) {
       .from(taskDependencies)
       .innerJoin(tasks, eq(tasks.id, taskDependencies.blockedByTaskId))
       .where(eq(taskDependencies.taskId, taskId))
+  })
+}
+
+/**
+ * Dashboard widget — tasks whose `dueDate` falls within the (inclusive)
+ * window [startISO, endISO]. Date inputs are plain YYYY-MM-DD strings;
+ * NO Date constructor (Module 14b discipline + LOC1's "no timezone
+ * library" rule). Soft-deleted rows excluded. Ordered by dueDate asc.
+ * RLS-scoped via withOrgContext. Capped at `opts.limit` (default 100)
+ * to keep the dashboard query bounded.
+ */
+export async function listTasksByDueDateRange(
+  startISO: string,
+  endISO: string,
+  opts: { limit?: number } = {},
+): Promise<Task[]> {
+  const limit = opts.limit ?? 100
+  return withOrgContext(async (tx) => {
+    return tx
+      .select()
+      .from(tasks)
+      .where(and(gte(tasks.dueDate, startISO), lte(tasks.dueDate, endISO), isNull(tasks.deletedAt)))
+      .orderBy(tasks.dueDate)
+      .limit(limit)
   })
 }
 

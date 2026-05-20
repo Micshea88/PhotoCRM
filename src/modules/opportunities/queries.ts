@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
 import { opportunities } from "./schema"
 import { pipelineStages } from "@/modules/pipelines/schema"
@@ -105,6 +105,22 @@ export async function listOpportunitiesByOwner(ownerUserId: string) {
  * caller decides which to use; typical: prefer opportunity override,
  * fall back to stage).
  */
+/**
+ * Dashboard widget — count of opportunities in the open stage (i.e.,
+ * not yet won or lost, not soft-deleted). RLS-scoped via withOrgContext;
+ * one studio's count never sees another studio's rows. Lands as part of
+ * P4-queries ahead of the P4.1 dashboard.
+ */
+export async function countOpenOpportunities(): Promise<number> {
+  return withOrgContext(async (tx) => {
+    const [row] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(opportunities)
+      .where(and(eq(opportunities.status, "open"), isNull(opportunities.deletedAt)))
+    return row?.count ?? 0
+  })
+}
+
 export async function listOpenOpportunitiesWithStage() {
   return withOrgContext(async (tx) => {
     return tx

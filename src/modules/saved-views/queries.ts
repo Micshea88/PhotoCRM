@@ -97,5 +97,40 @@ export async function listAllSavedViewsForOrg(opts: ListOptions = {}) {
   })
 }
 
+/**
+ * Returns the seeded org-default saved view for one object type, or
+ * `null` if the org wasn't seeded (no auto-seed for organizations
+ * created before the default-view seed shipped). Default views have
+ * `is_default=true` AND `owner_user_id IS NULL` AND `shared=true` per
+ * seed.ts's "default-view semantics" docblock — they are immutable and
+ * visible to every member of the org.
+ *
+ * V1 has one seed: `Team This Week` (objectType="task"). The P4.1
+ * dashboard's "Team This Week" widget calls this with `"task"` to
+ * load the spec, then resolves the `<startOfWeek>` / `<endOfWeek>`
+ * placeholders against the current US Sunday-Saturday week (LOC1).
+ *
+ * RLS-scoped via withOrgContext.
+ */
+export async function getDefaultSavedView(
+  objectType: string,
+): Promise<typeof savedViews.$inferSelect | null> {
+  return withOrgContext(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(savedViews)
+      .where(
+        and(
+          eq(savedViews.objectType, objectType),
+          eq(savedViews.isDefault, true),
+          isNull(savedViews.ownerUserId),
+          isNull(savedViews.deletedAt),
+        ),
+      )
+      .limit(1)
+    return row ?? null
+  })
+}
+
 // Re-exported convenience; eslint flags it if entirely unused. Tests use it.
 export const _sql = sql

@@ -81,13 +81,16 @@ const FORBIDDEN_RULES: ForbiddenRule[] = [
     pattern: /from\s+["']@\/modules\/[^"']+\/schema["']/,
     description: "retrievers.ts may not import module schemas",
   },
-  // (2) NO file in the AI assistant module may import @/modules/*\/actions
-  //     in 17a. 17b will scope this rule to writers.ts only.
+  // (2) In 17b: writers.ts is the ONLY file in this module that may
+  //     import @/modules/*\/actions. The dedicated Zone-1 test
+  //     `ai-assistant-privileged-write-bypass.test.ts` enforces both
+  //     directions (no other file imports actions; writers.ts ONLY
+  //     imports actions + types).
   {
-    fileMatch: () => true,
+    fileMatch: (p) => !p.endsWith("/writers.ts"),
     pattern: /from\s+["']@\/modules\/[^"']+\/actions["']/,
     description:
-      "17a does NOT permit @/modules/*/actions imports — the AI has no write path against other modules in 17a.",
+      "Only writers.ts may import @/modules/*/actions. Every other file must go through queries.ts (reads) or the writers.ts allowlist (writes).",
   },
 ]
 
@@ -139,8 +142,12 @@ describe("AI Assistant — no database-layer imports (Module 17a, hard gate)", (
     expect(offenders.length).toBe(0)
   })
 
-  it("writers.ts does not exist in src/modules/ai-assistant/ (17a hard gate)", async () => {
+  it("writers.ts exists in src/modules/ai-assistant/ (17b — the orgAction allowlist)", async () => {
+    // 17a's negative assertion (writers.ts does NOT exist) flips to a
+    // positive assertion in 17b: writers.ts IS the file. The
+    // dedicated Zone-1 suite proves it imports ONLY @/modules/*/actions
+    // and @/modules/*/types.
     const entries = await readdir(AI_ASSISTANT_DIR).catch(() => [] as string[])
-    expect(entries.includes("writers.ts")).toBe(false)
+    expect(entries.includes("writers.ts")).toBe(true)
   })
 })

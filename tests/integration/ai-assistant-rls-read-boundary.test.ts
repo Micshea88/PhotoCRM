@@ -125,15 +125,16 @@ describe("AI Assistant — model output validation rejects out-of-catalog retrie
     expect(result.kind).toBe("rejected")
   })
 
-  it("validateAssistantOutput rejects write_proposal (no such variant in 17a)", async () => {
+  it("validateAssistantOutput rejects write_proposal with missing summaryForUser (17b — .strict)", async () => {
     const { validateAssistantOutput } = await import("@/modules/ai-assistant/validate")
     const result = validateAssistantOutput({
       kind: "write_proposal",
       action: "updateContact",
       input: { id: "x", primaryPhone: "555-0000" },
+      // missing required summaryForUser
     })
-    // 17a's modelOutputSchema has no write_proposal variant —
-    // discriminated union exhausts → rejected.
+    // 17b's write_proposal variant requires summaryForUser. .strict()
+    // means the discriminated union member's parse fails → rejected.
     expect(result.kind).toBe("rejected")
   })
 })

@@ -95,6 +95,30 @@ export default tseslint.config(
       ],
     },
   },
+  // Module 17b: writers.ts is the ONLY file in src/modules/ai-assistant/
+  // permitted to import @/modules/<other>/actions. Every other file in
+  // the module routes reads through queries.ts and never reaches into
+  // another module's write surface. The Zone-1 static-grep test
+  // (ai-assistant-privileged-write-bypass.test.ts) enforces this from
+  // the other direction.
+  {
+    files: ["src/modules/ai-assistant/**/*.ts", "src/modules/ai-assistant/**/*.tsx"],
+    ignores: ["src/modules/ai-assistant/writers.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/modules/*/actions"],
+              message:
+                "Only src/modules/ai-assistant/writers.ts may import @/modules/<x>/actions. Every other AI assistant file must go through queries.ts (reads) or the writers.ts allowlist (writes). See docs/PIVOTS_LEDGER.md (AI1).",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // `@anthropic-ai/sdk` is allowed ONLY in src/lib/ai-model.ts — the
   // single grep-able surface for the AI provider integration. This is
   // the locked posture per docs/PIVOTS_LEDGER.md (AI layer guiding

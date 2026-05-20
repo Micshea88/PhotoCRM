@@ -72,6 +72,34 @@ export const aiAssistantMessages = pgTable(
      * via the retriever if needed.
      */
     retrieverResultSummary: text("retriever_result_summary"),
+    /**
+     * For role='write_proposal' (17b): the writer-allowlist action
+     * name (e.g. "updateContact"). Validated against ASSISTANT_WRITERS
+     * keys; the AI cannot smuggle arbitrary names through.
+     */
+    writeProposalAction: text("write_proposal_action"),
+    /**
+     * For role='write_proposal' (17b): the Zod-validated input ready
+     * to pass to the orgAction. Validated through the writer's
+     * canonical .inputSchema() before persistence and AGAIN at confirm
+     * time (tamper defense — same pattern as confirmAiWorkflowDraft).
+     */
+    writeProposalInput: jsonb("write_proposal_input").$type<Record<string, unknown> | null>(),
+    /**
+     * 17b lifecycle for proposals:
+     *   pending   — proposal persisted; awaiting human confirmation
+     *   confirmed — user confirmed; orgAction invoked
+     *   rejected  — user explicitly rejected via rejectWriteProposal
+     *   expired   — TTL sweep marked it abandoned (future cron)
+     * Null when role is not 'write_proposal'.
+     */
+    writeProposalStatus: text("write_proposal_status"),
+    /**
+     * Cross-ref to the resulting resource after a confirmed write
+     * (e.g. the contact id that was updated). Soft pointer; no FK.
+     */
+    resultingResourceType: text("resulting_resource_type"),
+    resultingResourceId: text("resulting_resource_id"),
     /** Forensic record of the raw model output for this turn. */
     rawModelOutput: jsonb("raw_model_output").$type<unknown>(),
     /** Validation result object: { kind: "...", errors?: [...] }. */

@@ -9,13 +9,18 @@ import { hasPermission } from "@/modules/rbac/queries"
 import { callAiModel } from "@/lib/ai-model"
 import { aiAssistantMessages } from "./schema"
 import { ASSISTANT_RETRIEVERS } from "./retrievers"
+import {
+  ASSISTANT_WRITERS,
+  ASSISTANT_WRITER_INPUT_SCHEMAS,
+  type AssistantWriterName,
+} from "./writers"
 import { findRouteById } from "./route-catalog"
 import { buildCatalogForPrompt } from "./catalog"
 import { buildPrompt, type ConversationTurn } from "./prompt"
 import { validateAssistantOutput, type ValidationError } from "./validate"
-import { renderNavigation, renderRetrieverSummary } from "./render"
+import { renderNavigation, renderRetrieverSummary, renderWriteProposal } from "./render"
 import { checkRateLimit } from "./rate-limit"
-import { assistantTurnInput } from "./types"
+import { assistantTurnInput, confirmWriteProposalInput, rejectWriteProposalInput } from "./types"
 
 const PERMISSION_KEY = "use_ai_assistant" as const
 
@@ -227,6 +232,57 @@ export const assistantTurn = orgAction
         }
       }
 
+      case "write_proposal": {
+        // 17b — persist the proposal as a pending row. The actual
+        // mutation does NOT happen here; confirmWriteProposal is the
+        // ONLY path that invokes the underlying orgAction.
+        const proseMessage = renderWriteProposal({
+          action: validation.action,
+          summaryForUser: validation.summaryForUser,
+        })
+        await ctx.db.insert(aiAssistantMessages).values({
+          id: assistantMsgId,
+          organizationId: ctx.activeOrg.id,
+          conversationId: parsedInput.conversationId,
+          userId: null,
+          role: "write_proposal",
+          content: proseMessage,
+          writeProposalAction: validation.action,
+          writeProposalInput: validation.input,
+          writeProposalStatus: "pending",
+          rawModelOutput: parsed,
+          validationResult: { kind: "write_proposal", action: validation.action },
+          modelName: modelResult.modelName,
+          modelTokensUsed: modelResult.tokensUsed,
+        })
+        await audit(
+          {
+            db: ctx.db,
+            organizationId: ctx.activeOrg.id,
+            actorUserId: ctx.session.user.id,
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+          "ai_assistant.write_proposed",
+          {
+            resourceType: "ai_assistant_message",
+            resourceId: assistantMsgId,
+            metadata: { action: validation.action },
+          },
+        )
+        revalidatePath("/assistant")
+        return {
+          kind: "write_proposal" as const,
+          userMsgId,
+          assistantMsgId,
+          proposalId: assistantMsgId,
+          action: validation.action,
+          input: validation.input,
+          summaryForUser: validation.summaryForUser,
+          proseMessage,
+        }
+      }
+
       case "retrieve": {
         // Invoke the retriever (allow-listed). It uses withOrgContext
         // internally; RLS bounds visibility.
@@ -258,4 +314,192 @@ export const assistantTurn = orgAction
         }
       }
     }
+  })
+
+/**
+ * 17b — `confirmWriteProposal`. The ONLY path that invokes a writer
+ * orgAction. Per AI1: every AI write routes through the IDENTICAL
+ * human orgAction path. The user MUST explicitly affirm via
+ * `confirmed: z.literal(true)` (no default; the input schema requires
+ * the literal `true` — `false`, `"yes"`, or omission all fail).
+ *
+ * Tamper defense: the stored proposal input is RE-VALIDATED through
+ * the writer's canonical inputSchema before the orgAction is invoked.
+ * Same pattern as `confirmAiWorkflowDraft` (module 16a).
+ */
+export const confirmWriteProposal = orgAction
+  .metadata({ actionName: "ai_assistant.confirm_write" })
+  .inputSchema(confirmWriteProposalInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const allowed = await hasPermission(ctx.session.user.id, PERMISSION_KEY)
+    if (!allowed) {
+      throw new ActionError(
+        "FORBIDDEN",
+        "Your role does not have permission to use the AI assistant.",
+      )
+    }
+
+    const [proposal] = await ctx.db
+      .select()
+      .from(aiAssistantMessages)
+      .where(
+        and(
+          eq(aiAssistantMessages.id, parsedInput.proposalId),
+          eq(aiAssistantMessages.organizationId, ctx.activeOrg.id),
+          eq(aiAssistantMessages.role, "write_proposal"),
+          isNull(aiAssistantMessages.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!proposal) {
+      throw new ActionError("NOT_FOUND", "Write proposal not found in this organization.")
+    }
+    if (proposal.writeProposalStatus !== "pending") {
+      throw new ActionError(
+        "VALIDATION",
+        `Proposal is not pending (status: ${proposal.writeProposalStatus ?? "unknown"}).`,
+      )
+    }
+    if (!proposal.writeProposalAction || !proposal.writeProposalInput) {
+      throw new ActionError("VALIDATION", "Proposal is missing action or input.")
+    }
+
+    // Re-validate the stored input through the writer's CANONICAL
+    // inputSchema. Defense against tampering of the draft row between
+    // proposal and confirm. If the schema or allowlist changed since
+    // the proposal was created, re-validation catches that too.
+    const action = proposal.writeProposalAction as AssistantWriterName
+    if (!(action in ASSISTANT_WRITERS)) {
+      throw new ActionError("VALIDATION", `Action "${action}" is not in the writer allowlist.`)
+    }
+    const schema = ASSISTANT_WRITER_INPUT_SCHEMAS[action]
+    const reparsed = schema.safeParse(proposal.writeProposalInput)
+    if (!reparsed.success) {
+      throw new ActionError(
+        "VALIDATION",
+        "Stored proposal input no longer passes validation. Re-prompt the assistant.",
+      )
+    }
+
+    // Invoke the canonical orgAction. Same RLS, same audit, same
+    // hasPermission, same input validation that the manual UI runs.
+    const writer = ASSISTANT_WRITERS[action] as unknown as (input: unknown) => Promise<unknown>
+    const result = (await writer(reparsed.data)) as
+      | {
+          data?: unknown
+          serverError?: string
+          validationErrors?: unknown
+        }
+      | null
+      | undefined
+
+    if (result?.serverError) {
+      throw new ActionError(
+        "VALIDATION",
+        `Writer "${action}" rejected the call: ${result.serverError}`,
+      )
+    }
+    if (result?.validationErrors) {
+      throw new ActionError("VALIDATION", `Writer "${action}" reported validation errors.`)
+    }
+
+    const resultingId =
+      typeof result?.data === "object" &&
+      result.data !== null &&
+      "id" in result.data &&
+      typeof (result.data as { id?: unknown }).id === "string"
+        ? (result.data as { id: string }).id
+        : null
+
+    // Mark the proposal confirmed + append a write_confirmed row.
+    await ctx.db
+      .update(aiAssistantMessages)
+      .set({
+        writeProposalStatus: "confirmed",
+        resultingResourceType: action,
+        resultingResourceId: resultingId,
+        updatedAt: new Date(),
+      })
+      .where(eq(aiAssistantMessages.id, proposal.id))
+    const confirmedMsgId = createId()
+    await ctx.db.insert(aiAssistantMessages).values({
+      id: confirmedMsgId,
+      organizationId: ctx.activeOrg.id,
+      conversationId: proposal.conversationId,
+      userId: ctx.session.user.id,
+      role: "write_confirmed",
+      content: `Confirmed: ${action}${resultingId ? ` (id: ${resultingId})` : ""}`,
+    })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "ai_assistant.write_confirmed",
+      {
+        resourceType: "ai_assistant_message",
+        resourceId: proposal.id,
+        metadata: { action, resultingId },
+      },
+    )
+    revalidatePath("/assistant")
+    return { proposalId: proposal.id, action, resultingId }
+  })
+
+/**
+ * 17b — `rejectWriteProposal`. Marks the proposal rejected; does NOT
+ * invoke any orgAction. The AI's proposed mutation is dropped.
+ */
+export const rejectWriteProposal = orgAction
+  .metadata({ actionName: "ai_assistant.reject_write" })
+  .inputSchema(rejectWriteProposalInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const allowed = await hasPermission(ctx.session.user.id, PERMISSION_KEY)
+    if (!allowed) {
+      throw new ActionError(
+        "FORBIDDEN",
+        "Your role does not have permission to use the AI assistant.",
+      )
+    }
+    const result = await ctx.db
+      .update(aiAssistantMessages)
+      .set({ writeProposalStatus: "rejected", updatedAt: new Date() })
+      .where(
+        and(
+          eq(aiAssistantMessages.id, parsedInput.proposalId),
+          eq(aiAssistantMessages.organizationId, ctx.activeOrg.id),
+          eq(aiAssistantMessages.role, "write_proposal"),
+          eq(aiAssistantMessages.writeProposalStatus, "pending"),
+        ),
+      )
+      .returning({ id: aiAssistantMessages.id, conversationId: aiAssistantMessages.conversationId })
+    const first = result[0]
+    if (!first) {
+      throw new ActionError("NOT_FOUND", "Pending proposal not found.")
+    }
+    const rejectedMsgId = createId()
+    await ctx.db.insert(aiAssistantMessages).values({
+      id: rejectedMsgId,
+      organizationId: ctx.activeOrg.id,
+      conversationId: first.conversationId,
+      userId: ctx.session.user.id,
+      role: "write_rejected",
+      content: "Rejected by user.",
+    })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "ai_assistant.write_rejected",
+      { resourceType: "ai_assistant_message", resourceId: first.id },
+    )
+    revalidatePath("/assistant")
+    return { proposalId: first.id }
   })

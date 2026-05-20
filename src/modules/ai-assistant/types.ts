@@ -44,6 +44,23 @@ export const assistantOutputSchema = z.discriminatedUnion("kind", [
       reason: z.string().min(1).max(2000),
     })
     .strict(),
+  /**
+   * 17b — the AI can PROPOSE a write. The proposal is persisted as a
+   * pending row and shown to the user; only `confirmWriteProposal`
+   * (a separate human-initiated orgAction with `confirmed: z.literal(true)`)
+   * actually invokes the underlying orgAction.
+   *
+   * NO `confirmed` field — the model cannot self-confirm. `.strict()`
+   * rejects unknown keys (defense against a model that emits `confirmed: true`).
+   */
+  z
+    .object({
+      kind: z.literal("write_proposal"),
+      action: z.string().min(1).max(120),
+      input: z.record(z.string(), z.unknown()),
+      summaryForUser: z.string().min(1).max(2000),
+    })
+    .strict(),
 ])
 
 export type AssistantOutput = z.infer<typeof assistantOutputSchema>
@@ -56,3 +73,17 @@ export const assistantTurnInput = z.object({
 })
 
 export type AssistantTurnInput = z.infer<typeof assistantTurnInput>
+
+/**
+ * 17b — `confirmWriteProposal` input. Requires `confirmed: z.literal(true)`
+ * with NO default. The user must explicitly affirm. Same posture as
+ * `confirmAiWorkflowDraft` (module 16a).
+ */
+export const confirmWriteProposalInput = z.object({
+  proposalId: z.string().min(1),
+  confirmed: z.literal(true),
+})
+
+export const rejectWriteProposalInput = z.object({
+  proposalId: z.string().min(1),
+})

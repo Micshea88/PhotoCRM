@@ -37,3 +37,14 @@ export function renderNavigation(routeTitle: string, message: string | null): st
   if (message) return `${message} → ${routeTitle}`
   return `Here's where you can do that: ${routeTitle}`
 }
+
+/**
+ * 17b — plain-language rendering of a pending write proposal. The
+ * user sees this in the review UI BEFORE confirming. The summary
+ * comes from the model (the summaryForUser field on the write_proposal
+ * variant); this wrapper adds the action-name disclosure so the user
+ * always knows which orgAction will be invoked.
+ */
+export function renderWriteProposal(args: { action: string; summaryForUser: string }): string {
+  return `${args.summaryForUser}\n\n[This will call the "${args.action}" action — the same one the manual UI uses. Confirm to proceed; reject to cancel.]`
+}

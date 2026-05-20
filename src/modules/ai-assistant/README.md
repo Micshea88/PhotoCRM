@@ -1,8 +1,7 @@
 # ai-assistant module
 
-The conversational AI surface. Module 17a — **READ + NAVIGATE only**.
-The write surface (proposed writes through the existing orgActions
-with explicit human confirmation per write) lands in **17b**.
+The conversational AI surface. Modules 17a (READ + NAVIGATE) and 17b
+(PROPOSE WRITE → human-confirm → invoke canonical orgAction).
 
 ## AI LAYER GUIDING PRINCIPLE — IT IS A TOOL, NOT THE LEADER
 
@@ -16,58 +15,89 @@ verbatim from the user's instruction:
 > asked for that specific action. Every AI write = a human request
 > routed through the identical human action path."
 
-This module's enforcement in 17a:
+This module's enforcement (17a + 17b):
 
-- The AI has **NO write path against other modules' data** in 17a.
-  Mathematically incapable, not just policy-bound — `writers.ts` does
-  not exist; `assistantOutputSchema` has no `write_proposal` variant;
-  ESLint forbids `@/modules/*/actions` imports module-wide.
 - Reads go through `queries.ts` surfaces only. RLS bounds visibility
   exactly to what the requesting user could see by clicking through
   the UI.
 - The assistant is invoked from a human-initiated request
   (`assistantTurn` action). It has no cron caller; it never
   self-fires.
+- The AI cannot write directly. It can only PROPOSE a write
+  (`write_proposal` output) — a row is persisted as `pending` and the
+  user must call `confirmWriteProposal({ confirmed: z.literal(true) })`
+  for the canonical orgAction to be invoked. The AI cannot self-confirm
+  (the model output schema has no `confirmed` field; `.strict()`
+  rejects it).
+- Writers route through the IDENTICAL human orgAction path. `writers.ts`
+  is the only file in this module permitted to import
+  `@/modules/<x>/actions` (ESLint + static-grep enforce). The writer
+  allowlist is narrow (9 V1 entries); destructive deletes are excluded.
 
-## What's here (17a)
+## What's here
 
-- `schema.ts` — `ai_assistant_messages` table (transcript + audit).
+- `schema.ts` — `ai_assistant_messages` table (transcript + audit +
+  write-proposal lifecycle: action / input / status / resulting
+  resource id).
 - `retrievers.ts` — the **fixed read allowlist**. Each entry wraps a
   `queries.ts` function which uses `withOrgContext`. RLS bounds
   visibility automatically.
+- `writers.ts` (17b) — the **fixed write allowlist** (9 V1 entries).
+  ONLY file in this module permitted to import
+  `@/modules/<x>/actions`. Each entry pairs with the action's
+  canonical Zod inputSchema imported verbatim from the source
+  module's `types.ts`. No AI-permissive variants.
 - `route-catalog.ts` — hand-maintained ~9 routes. The AI cannot
   invent routes.
-- `catalog.ts` — derives the combined catalog from retrievers + routes
-  at module load.
+- `catalog.ts` — derives the combined catalog from retrievers +
+  routes (+ writers, in 17b) at module load.
 - `prompt.ts` — system-prompt builder (mirrors
   `ai-workflow-builder/prompt.ts`).
 - `validate.ts` — the validation gate. Imports canonical schemas
-  verbatim. No repair branch. Four kinds: `reply` / `retrieve` /
-  `navigate` / `refusal`. **No `write_proposal` variant in 17a.**
-- `render.ts` — plain-language rendering of retriever summaries +
-  navigation prose.
+  verbatim. No repair branch. Five kinds: `reply` / `retrieve` /
+  `navigate` / `refusal` / `write_proposal`.
+- `render.ts` — plain-language rendering of retriever summaries,
+  navigation prose, and write-proposal review text.
 - `rate-limit.ts` — per-user / per-org / per-day quotas. Operator-cost
   backstop, NOT a user paywall (see below).
-- `actions.ts` — single `assistantTurn` orgAction gated by
-  `hasPermission('use_ai_assistant')`.
+- `actions.ts` — `assistantTurn` (gated by
+  `hasPermission('use_ai_assistant')`) + `confirmWriteProposal` +
+  `rejectWriteProposal`.
 
-## What does NOT exist in 17a (mathematical-incapacity guarantee)
+## Defense-in-depth: NO covert write back-channel
 
-- `writers.ts` — the orgAction allowlist for writes. Lands in 17b.
-- `confirmWriteProposal` / `rejectWriteProposal` actions.
-- `write_proposal` variant of `assistantOutputSchema`.
-- Any import of `@/modules/*/actions` (ESLint enforces; static-grep
-  test confirms).
+Three layers guarantee the AI cannot write without explicit human
+confirmation:
+
+1. **ESLint**: `@/modules/<x>/actions` imports are blocked everywhere
+   in this module EXCEPT `writers.ts` (`eslint.config.mjs`).
+2. **Static-grep** (Zone 1 — `ai-assistant-privileged-write-bypass.test.ts`):
+   - NO file other than `writers.ts` imports `@/modules/<x>/actions`.
+   - `writers.ts` imports ONLY `@/modules/<x>/actions`,
+     `@/modules/<x>/types`, `zod`, `server-only`.
+3. **Runtime validator**: `validateAssistantOutput` checks the
+   proposed `action` is in `ASSISTANT_WRITER_NAMES` and the proposed
+   `input` parses through the writer's canonical inputSchema. Anything
+   not in the allowlist (`rawSqlExec`, `deleteContact`, `deleteProject`)
+   is rejected.
+
+`assistantTurn` NEVER invokes an orgAction itself. The write happens
+only via the separate `confirmWriteProposal` action — which:
+
+- Requires `confirmed: z.literal(true)` from the USER (no default,
+  no model field).
+- Loads the pending proposal org-scoped (RLS).
+- **Re-validates** the stored input through the canonical schema
+  (tamper-defense — same pattern as `confirmAiWorkflowDraft`).
+- Invokes the canonical orgAction. Same RLS, same audit, same
+  `hasPermission`, same input validation that the manual UI runs.
 
 The static-grep test at
-`tests/integration/ai-assistant-no-db-imports.test.ts` proves:
+`tests/integration/ai-assistant-no-db-imports.test.ts` additionally
+proves `retrievers.ts` does NOT import drizzle / `@/db` / `@/lib/db` /
+`@/modules/<x>/schema`.
 
-- `retrievers.ts` does NOT import drizzle / `@/db` / `@/lib/db` /
-  `@/modules/*/schema`. Reads go through queries.ts.
-- NO file in this module imports `@/modules/*/actions`. There is no
-  write back-channel against other modules' data in 17a.
-
-## The three capabilities (17a ships only the first two)
+## The three capabilities
 
 ### Capability A — READ/RETRIEVE
 
@@ -96,24 +126,47 @@ catalog, it returns a refusal listing what exists.
 V1 catalog has ~9 entries (dashboard, events list, items, settings/\*,
 onboarding). Codegen from the filesystem is a deferred future change.
 
-### Capability C — WRITE (deferred to 17b)
+### Capability C — PROPOSE WRITE (17b)
 
-In 17b, the model will be able to emit `write_proposal` outputs. The
-flow is:
+The model emits `write_proposal` outputs. The flow:
 
 ```
 1. User: "Add the phone number 555-1234 to Jane Doe's contact."
-2. assistantTurn → model proposes { kind: "write_proposal", action: "updateContact", input: {...} }
-3. validate.ts parses input through the SAME Zod schema (updateContactInput)
-   used by the manual UI. Invalid input → rejected; no proposal persisted.
-4. UI renders the proposal in plain language; user clicks Confirm.
-5. confirmWriteProposal({ proposalId, confirmed: z.literal(true) }) invokes
-   the EXACT EXISTING orgAction (updateContact). Same RLS, same audit,
-   same hasPermission, same validation.
+2. assistantTurn → model proposes { kind: "write_proposal", action: "updateContact",
+   input: {...}, summaryForUser: "I'll update Jane's phone. Confirm?" }
+3. validate.ts: action in allowlist + input parses through SAME Zod schema
+   (updateContactInput) used by the manual UI. Invalid → rejected; no proposal
+   persisted.
+4. Proposal persisted as a `write_proposal` row with status="pending".
+   No mutation against the target table occurs at this step.
+5. UI renders the proposal in plain language; user clicks Confirm or Reject.
+6. confirmWriteProposal({ proposalId, confirmed: z.literal(true) }):
+   - Loads the proposal org-scoped (RLS).
+   - Re-validates stored input through the canonical schema (tamper defense).
+   - Invokes the EXACT EXISTING orgAction (updateContact). Same RLS, same
+     audit, same hasPermission, same validation.
+   - Marks the proposal status="confirmed", records resultingResourceType +
+     resultingResourceId.
+   - Appends a `write_confirmed` transcript row.
+7. rejectWriteProposal({ proposalId }) → marks status="rejected"; appends
+   `write_rejected` row.
 ```
 
-Hard constraints locked NOW (per `docs/PIVOTS_LEDGER.md` Section 2,
-Module 17 entry):
+V1 writer allowlist (final):
+
+| Writer                | Source action                     |
+| --------------------- | --------------------------------- |
+| `createContact`       | `@/modules/contacts/actions`      |
+| `updateContact`       | `@/modules/contacts/actions`      |
+| `updateProject`       | `@/modules/projects/actions`      |
+| `createTask`          | `@/modules/tasks/actions`         |
+| `updateTask`          | `@/modules/tasks/actions`         |
+| `markTaskDone`        | `@/modules/tasks/actions`         |
+| `updateOpportunity`   | `@/modules/opportunities/actions` |
+| `markOpportunityWon`  | `@/modules/opportunities/actions` |
+| `markOpportunityLost` | `@/modules/opportunities/actions` |
+
+Hard constraints (per `docs/PIVOTS_LEDGER.md` Section 2, Module 17):
 
 - Writes route through the IDENTICAL human orgAction path (no AI
   back-channel).
@@ -124,7 +177,11 @@ Module 17 entry):
   from V1 writers allowlist** — own future commit with extra-friction
   confirmation (type-the-name pattern).
 - Status-flip mutators (`markOpportunityWon`, `markTaskDone`, etc.)
-  INCLUDED in 17b — canonical state-change actions.
+  INCLUDED — canonical state-change actions.
+- `createProject` NOT in V1 — users create projects via the manual UI
+  for now; V2 once the AI can handle the multi-step kickoff cleanly.
+- Association adds/removes (project_photographers, task dependencies,
+  checklist items) NOT in V1 — manual UI is sufficient.
 
 ## RBAC
 
@@ -178,12 +235,13 @@ assistant inherits the graceful-disable behavior automatically.
 
 ## Hard rules
 
-1. **No write back-channel against other modules' data in 17a.**
-   `writers.ts` does not exist; the model output schema has no
-   `write_proposal` variant; ESLint blocks `@/modules/*/actions`
-   imports module-wide. Static-grep test enforces.
+1. **Writes go through the writers.ts allowlist only.** ESLint blocks
+   `@/modules/<x>/actions` imports everywhere in this module except
+   `writers.ts`. Zone-1 static-grep test enforces from the other
+   direction (writers.ts may only import actions + types + zod +
+   server-only).
 2. **Reads only through queries.ts.** `retrievers.ts` may not import
-   drizzle / `@/db` / `@/lib/db` / `@/modules/*/schema`. Lint +
+   drizzle / `@/db` / `@/lib/db` / `@/modules/<x>/schema`. Lint +
    static-grep enforce.
 3. **The retriever input schemas are strict; no `orgId` field.** RLS
    uses `app.current_org` set by the layout, never a model argument.
@@ -192,18 +250,20 @@ assistant inherits the graceful-disable behavior automatically.
 5. **No `repair` path in `validate.ts`.** Failed validation is final;
    reply to user with a rejection. Same posture as
    ai-workflow-builder/validate.ts.
-6. **Rate limits are operator-cost backstops, not paywalls.** Don't
+6. **Model cannot self-confirm.** `write_proposal` output schema has
+   NO `confirmed` field; `.strict()` rejects it. `confirmWriteProposal`
+   requires `confirmed: z.literal(true)` from the USER.
+7. **Tamper defense.** `confirmWriteProposal` re-validates stored input
+   through the canonical schema before invoking the orgAction.
+8. **Rate limits are operator-cost backstops, not paywalls.** Don't
    re-frame this surface as a paid-plan gate without an explicit
    product-decision checkpoint.
-7. **Module 15 + Module 16 + `src/lib/ai-model.ts` are byte-unchanged
-   in 17a's commit.** Pre-commit `git diff` of those surfaces MUST
-   be empty.
+9. **Module 15 + Module 16 + `src/lib/ai-model.ts` are byte-unchanged
+   in 17a's and 17b's commits.** Pre-commit `git diff` of those
+   surfaces MUST be empty.
 
 ## What's deferred (named owners)
 
-- **17b**: writers.ts + write_proposal flow + confirm/reject actions +
-  Zone 1/2/4 tests (privileged-write bypass / prompt injection forcing
-  write / write-input validation gate).
 - **Batch writes** ("update all contacts matching X"): own future
   module, own plan-first checkpoint.
 - **Multi-turn refinement of a pending write proposal**: V2 of this

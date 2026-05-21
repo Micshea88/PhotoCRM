@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { US_STATE_CODES } from "@/lib/format/us-states"
 
 /**
  * Contact category. Per Requirements §6.1. Stored as text; validated
@@ -26,18 +27,37 @@ export const lifecycleStatusSchema = z.enum(LIFECYCLE_STATUSES)
 export type LifecycleStatus = z.infer<typeof lifecycleStatusSchema>
 
 /**
- * Shape stored in `contacts.mailing_address jsonb`. All fields optional —
- * U.S.-centric defaults (state, zip) but international-tolerant
- * (country fallback). The jsonb column accepts arbitrary keys; consumers
- * should parse through this schema.
+ * Shape stored in `contacts.mailing_address jsonb`. US-only per LOC1
+ * (no country field, no international tolerance). State is the 2-letter
+ * postal code, validated against the canonical set in
+ * `@/lib/format/us-states`. ZIP is 5-digit or ZIP+4 (`12345` or
+ * `12345-6789`). All fields optional — a partial address (e.g., city
+ * only) is allowed because Phase 4 importers sometimes have just the
+ * city. The jsonb column accepts arbitrary keys; consumers should
+ * parse through this schema.
  */
+const stateCodeSchema = z
+  .string()
+  .transform((v) => v.trim().toUpperCase())
+  .refine(
+    (v): v is (typeof US_STATE_CODES)[number] => (US_STATE_CODES as readonly string[]).includes(v),
+    {
+      message: "State must be a 2-letter US state or territory code",
+    },
+  )
+
+const zipSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{5}(-\d{4})?$/, "ZIP must be 5 digits or ZIP+4 (12345 or 12345-6789)")
+
 export const mailingAddressSchema = z
   .object({
-    street: z.string().max(200).optional(),
+    street1: z.string().max(200).optional(),
+    street2: z.string().max(200).optional(),
     city: z.string().max(120).optional(),
-    state: z.string().max(120).optional(),
-    zip: z.string().max(40).optional(),
-    country: z.string().max(80).optional(),
+    state: stateCodeSchema.optional(),
+    zip: zipSchema.optional(),
   })
   .strict()
 

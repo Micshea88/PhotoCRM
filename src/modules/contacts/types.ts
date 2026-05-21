@@ -109,7 +109,49 @@ export const searchContactsInput = z.object({
   limit: z.number().int().min(1).max(50).default(10),
 })
 
+// ─── Bulk restore (P4.2) ──────────────────────────────────────────────
+export const bulkRestoreContactsInput = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(100),
+})
+
+// ─── Contact notes (P4.2) ─────────────────────────────────────────────
+export const createContactNoteInput = z.object({
+  contactId: z.string().min(1),
+  body: z.string().min(1).max(10000),
+})
+export const updateContactNoteInput = z.object({
+  id: z.string().min(1),
+  body: z.string().min(1).max(10000),
+})
+export const deleteContactNoteInput = z.object({ id: z.string().min(1) })
+
+// ─── Contact↔company associations (P4.2) ──────────────────────────────
+const optionalRole = z
+  .string()
+  .max(120)
+  .transform((v) => (v.trim() === "" ? null : v.trim()))
+  .nullable()
+  .optional()
+
+export const addContactCompanyAssociationInput = z.object({
+  contactId: z.string().min(1),
+  companyId: z.string().min(1),
+  role: optionalRole,
+})
+export const updateContactCompanyAssociationInput = z.object({
+  id: z.string().min(1),
+  role: optionalRole,
+})
+export const removeContactCompanyAssociationInput = z.object({ id: z.string().min(1) })
+
 export type CreateContactInput = z.infer<typeof createContactInput>
 export type CreateContactFormValues = z.input<typeof createContactInput>
 export type UpdateContactInput = z.infer<typeof updateContactInput>
 export type SearchContactsInput = z.infer<typeof searchContactsInput>
+export type BulkRestoreContactsInput = z.infer<typeof bulkRestoreContactsInput>
+export type CreateContactNoteInput = z.infer<typeof createContactNoteInput>
+export type UpdateContactNoteInput = z.infer<typeof updateContactNoteInput>
+export type AddContactCompanyAssociationInput = z.infer<typeof addContactCompanyAssociationInput>
+export type UpdateContactCompanyAssociationInput = z.infer<
+  typeof updateContactCompanyAssociationInput
+>

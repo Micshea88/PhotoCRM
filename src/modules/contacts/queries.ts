@@ -1,7 +1,7 @@
 import "server-only"
 import { and, eq, ilike, isNull, or, sql } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
-import { contacts } from "./schema"
+import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
 import { companies } from "@/modules/companies/schema"
 
 interface ListOptions {
@@ -50,7 +50,7 @@ export async function getContactForOrg(id: string, opts: ListOptions = {}) {
 /**
  * Typeahead / unified search: matches name (first OR last) and primary
  * email. Case-insensitive `ILIKE %q%`. Result includes the joined company
- * name so the caller can build the standard `"Last, First — Company"`
+ * name so the caller can build the standard `"First Last — Company"`
  * label without a follow-up query.
  */
 export async function searchContactsByName(q: string, limit = 10) {
@@ -122,5 +122,58 @@ export async function listContactsByTags(tags: string[]) {
       .from(contacts)
       .where(and(sql`${contacts.tags} @> ${tags}::text[]`, isNull(contacts.deletedAt)))
       .orderBy(contacts.lastName, contacts.firstName)
+  })
+}
+
+/**
+ * Soft-deleted contacts (trash view). Same shape as listContactsForOrg
+ * but inverts the deletedAt filter and orders by most-recently-deleted
+ * first so the trash UI shows the latest tombstones at the top.
+ */
+export async function listDeletedContactsForOrg() {
+  return withOrgContext(async (tx) => {
+    return tx
+      .select()
+      .from(contacts)
+      .where(sql`${contacts.deletedAt} IS NOT NULL`)
+      .orderBy(sql`${contacts.deletedAt} DESC NULLS LAST`)
+  })
+}
+
+// ─── Contact notes (P4.2) ─────────────────────────────────────────────
+
+/**
+ * Time-stamped notes for one contact, most recent first.
+ * Soft-deleted notes are excluded.
+ */
+export async function listContactNotes(contactId: string) {
+  return withOrgContext(async (tx) => {
+    return tx
+      .select()
+      .from(contactNotes)
+      .where(and(eq(contactNotes.contactId, contactId), isNull(contactNotes.deletedAt)))
+      .orderBy(sql`${contactNotes.createdAt} DESC`)
+  })
+}
+
+// ─── Contact ↔ company associations (P4.2) ─────────────────────────────
+
+/**
+ * All additional company associations for a contact (excluding the
+ * primary contacts.company_id, which the caller renders separately).
+ * Joined with companies so the caller has the company name + slug for
+ * display without a follow-up query.
+ */
+export async function listContactCompanyAssociations(contactId: string) {
+  return withOrgContext(async (tx) => {
+    return tx
+      .select({
+        association: contactCompanyAssociations,
+        company: companies,
+      })
+      .from(contactCompanyAssociations)
+      .innerJoin(companies, eq(contactCompanyAssociations.companyId, companies.id))
+      .where(and(eq(contactCompanyAssociations.contactId, contactId), isNull(companies.deletedAt)))
+      .orderBy(contactCompanyAssociations.createdAt)
   })
 }

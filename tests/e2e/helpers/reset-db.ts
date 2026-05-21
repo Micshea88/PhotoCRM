@@ -9,9 +9,13 @@ import { Pool } from "pg"
  */
 const TABLES_TO_TRUNCATE = [
   "audit_log",
+  "call_log",
   "companies",
+  "contact_company_associations",
+  "contact_notes",
   "contacts",
   "custom_field_definitions",
+  "faq_entries",
   "files",
   "items",
   "member_permission_override",

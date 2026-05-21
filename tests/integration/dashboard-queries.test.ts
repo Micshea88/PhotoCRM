@@ -380,14 +380,15 @@ describe("getDefaultSavedView — returns null for an unseeded org", () => {
     await withTestDb(async (db) => {
       const env = await seedTwoOrgsAsOwner(db)
       await seedDefaultSavedViewsForOrg(db, env.orgA)
-      // V1 only seeds objectType="task". Probing for a different type
-      // should miss the default.
+      // P4.2 push 1: the seed now also includes "All Contacts" for
+      // objectType="contact". Use a type that's NOT in the default set
+      // (project / opportunity / company) to test the null-return path.
       const rows = await db
         .select()
         .from(savedViews)
         .where(
           and(
-            eq(savedViews.objectType, "contact"),
+            eq(savedViews.objectType, "opportunity"),
             eq(savedViews.isDefault, true),
             isNull(savedViews.ownerUserId),
             isNull(savedViews.deletedAt),

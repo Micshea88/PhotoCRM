@@ -170,9 +170,12 @@ describe("contacts module — db-level invariants", () => {
 })
 
 describe("contactLabel display helper", () => {
+  // Output format updated 2026-05-21 from "Last, First — Company" to
+  // "First Last — Company" per PIVOTS_LEDGER LOC1 (natural reading
+  // order; same display rule, simpler phrasing).
   it("formats with company when present", () => {
     expect(contactLabel({ firstName: "Kelly", lastName: "Smith" }, "Evergreen Planning")).toBe(
-      "Smith, Kelly — Evergreen Planning",
+      "Kelly Smith — Evergreen Planning",
     )
   })
 
@@ -183,11 +186,11 @@ describe("contactLabel display helper", () => {
         lastName: "Smith",
         primaryEmail: "kelly@example.com",
       }),
-    ).toBe("Smith, Kelly — kelly@example.com")
+    ).toBe("Kelly Smith — kelly@example.com")
   })
 
   it("returns just the name when neither company nor email", () => {
-    expect(contactLabel({ firstName: "Kelly", lastName: "Smith" })).toBe("Smith, Kelly")
+    expect(contactLabel({ firstName: "Kelly", lastName: "Smith" })).toBe("Kelly Smith")
   })
 
   it("handles missing first name", () => {
@@ -202,7 +205,7 @@ describe("contactLabel display helper", () => {
         { firstName: "Kelly", lastName: "Smith", primaryEmail: "kelly@example.com" },
         "   ",
       ),
-    ).toBe("Smith, Kelly — kelly@example.com")
+    ).toBe("Kelly Smith — kelly@example.com")
   })
 
   it("falls back to '(unknown contact)' when both names absent", () => {

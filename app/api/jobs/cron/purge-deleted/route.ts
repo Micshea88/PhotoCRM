@@ -4,6 +4,9 @@ import { verifyCronAuth } from "@/modules/jobs/cron-auth"
 import { items } from "@/modules/items/schema"
 import { files } from "@/modules/files/schema"
 import { paymentInstallments } from "@/modules/invoices/schema"
+import { contacts, contactNotes } from "@/modules/contacts/schema"
+import { callLog } from "@/modules/calls/schema"
+import { faqEntries } from "@/modules/help/schema"
 import { audit } from "@/modules/audit/audit"
 import { blob } from "@/lib/blob"
 import { log } from "@/lib/log"
@@ -131,18 +134,128 @@ export async function GET(request: Request) {
     )
   }
 
+  // -------- Contacts (P4.2 — closes pre-existing gap) --------
+  const contactRows = await db
+    .select({ id: contacts.id, organizationId: contacts.organizationId })
+    .from(contacts)
+    .where(and(isNotNull(contacts.deletedAt), lt(contacts.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const contactOrgCounts = new Map<string, number>()
+  for (const r of contactRows) {
+    contactOrgCounts.set(r.organizationId, (contactOrgCounts.get(r.organizationId) ?? 0) + 1)
+  }
+  for (const [orgId, count] of contactOrgCounts) {
+    await audit({ db, organizationId: orgId, actorUserId: null }, "purge.contacts", {
+      metadata: { count, retentionDays: RETENTION_DAYS },
+    })
+  }
+  if (contactRows.length > 0) {
+    await db.delete(contacts).where(
+      inArray(
+        contacts.id,
+        contactRows.map((r) => r.id),
+      ),
+    )
+  }
+
+  // -------- Contact notes (P4.2) --------
+  const contactNoteRows = await db
+    .select({ id: contactNotes.id, organizationId: contactNotes.organizationId })
+    .from(contactNotes)
+    .where(and(isNotNull(contactNotes.deletedAt), lt(contactNotes.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const contactNoteOrgCounts = new Map<string, number>()
+  for (const r of contactNoteRows) {
+    contactNoteOrgCounts.set(
+      r.organizationId,
+      (contactNoteOrgCounts.get(r.organizationId) ?? 0) + 1,
+    )
+  }
+  for (const [orgId, count] of contactNoteOrgCounts) {
+    await audit({ db, organizationId: orgId, actorUserId: null }, "purge.contact_notes", {
+      metadata: { count, retentionDays: RETENTION_DAYS },
+    })
+  }
+  if (contactNoteRows.length > 0) {
+    await db.delete(contactNotes).where(
+      inArray(
+        contactNotes.id,
+        contactNoteRows.map((r) => r.id),
+      ),
+    )
+  }
+
+  // -------- Call log (P4.2) --------
+  const callRows = await db
+    .select({ id: callLog.id, organizationId: callLog.organizationId })
+    .from(callLog)
+    .where(and(isNotNull(callLog.deletedAt), lt(callLog.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const callOrgCounts = new Map<string, number>()
+  for (const r of callRows) {
+    callOrgCounts.set(r.organizationId, (callOrgCounts.get(r.organizationId) ?? 0) + 1)
+  }
+  for (const [orgId, count] of callOrgCounts) {
+    await audit({ db, organizationId: orgId, actorUserId: null }, "purge.call_log", {
+      metadata: { count, retentionDays: RETENTION_DAYS },
+    })
+  }
+  if (callRows.length > 0) {
+    await db.delete(callLog).where(
+      inArray(
+        callLog.id,
+        callRows.map((r) => r.id),
+      ),
+    )
+  }
+  // Note on call recordings: the recording file (if any) is referenced
+  // via call_log.recording_file_id but its lifecycle is owned by the
+  // `files` table's own soft-delete + purge. We do NOT cascade-delete
+  // the file when the call_log row is purged — the FK is ON DELETE
+  // SET NULL. Orphan recordings are reaped by the files purge above
+  // once the file itself is soft-deleted.
+
+  // -------- FAQ entries (P4.2 — global, no organization_id) --------
+  // FAQ entries are product-level, not org-scoped. Audit rows here
+  // would have organizationId=null, which the audit() helper accepts
+  // for system-level events.
+  const faqRows = await db
+    .select({ id: faqEntries.id })
+    .from(faqEntries)
+    .where(and(isNotNull(faqEntries.deletedAt), lt(faqEntries.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+  if (faqRows.length > 0) {
+    await db.delete(faqEntries).where(
+      inArray(
+        faqEntries.id,
+        faqRows.map((r) => r.id),
+      ),
+    )
+  }
+
   return Response.json({
     ok: true,
     purged: {
       items: itemRows.length,
       files: fileRows.length,
       paymentInstallments: installmentRows.length,
+      contacts: contactRows.length,
+      contactNotes: contactNoteRows.length,
+      callLog: callRows.length,
+      faqEntries: faqRows.length,
     },
     cutoff: cutoff.toISOString(),
     batchLimit: BATCH_LIMIT,
     moreToProcess:
       itemRows.length === BATCH_LIMIT ||
       fileRows.length === BATCH_LIMIT ||
-      installmentRows.length === BATCH_LIMIT,
+      installmentRows.length === BATCH_LIMIT ||
+      contactRows.length === BATCH_LIMIT ||
+      contactNoteRows.length === BATCH_LIMIT ||
+      callRows.length === BATCH_LIMIT ||
+      faqRows.length === BATCH_LIMIT,
   })
 }

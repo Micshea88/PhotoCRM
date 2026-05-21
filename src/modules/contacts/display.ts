@@ -1,22 +1,22 @@
 /**
- * `contactLabel` — the canonical display label for a contact, per
- * Requirements §6.1 ("Contact disambiguation display rule, mandatory,
- * applies everywhere"). Two same-named contacts must always be
- * distinguishable at a glance in lists, pickers, autocompletes,
- * association fields, and search results.
+ * `contactLabel` — the canonical display label for a contact (the
+ * "Contact disambiguation display rule"). Two same-named contacts
+ * must always be distinguishable at a glance in lists, pickers,
+ * autocompletes, association fields, and search results.
  *
  * Pure function. No DB access. The caller resolves the company by
  * `companyId` (via `getCompanyForOrg` / `searchCompaniesByName` /
  * the contacts query that already joins) and passes either the
  * `companyName` string or `null` / `undefined` for "no company".
  *
- * Output:
- *   - with companyName: `"Last, First — Company"`
- *   - without companyName, with primaryEmail: `"Last, First — email@example.com"`
- *   - without either: `"Last, First"`
+ * Output (updated 2026-05-21 per PIVOTS_LEDGER LOC1 — natural
+ * reading order "First Last", not "Last, First"):
+ *   - with companyName: `"First Last — Company"`
+ *   - without companyName, with primaryEmail: `"First Last — email@example.com"`
+ *   - without either: `"First Last"`
  *
  * Edge cases handled defensively:
- *   - Missing first/last name: falls back to whichever is present.
+ *   - Missing first OR last name: falls back to whichever is present.
  *   - Both names missing (shouldn't happen — both are NOT NULL on the
  *     schema): returns `"(unknown contact)"` rather than throw.
  */
@@ -31,10 +31,10 @@ export function contactLabel(contact: ContactLabelInput, companyName?: string | 
   const last = (contact.lastName ?? "").trim()
 
   let name: string
-  if (last && first) {
-    name = `${last}, ${first}`
-  } else if (last || first) {
-    name = last || first
+  if (first && last) {
+    name = `${first} ${last}`
+  } else if (first || last) {
+    name = first || last
   } else {
     name = "(unknown contact)"
   }

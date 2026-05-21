@@ -27,13 +27,18 @@ jsonb`, standard lifecycle.
 ## The "Name — Company" display rule (MANDATORY)
 
 > Anywhere a contact appears in a list, picker, autocomplete,
-> association field, or search result, the display is **"Last, First
-> — Company"** (falling back to "Last, First — email" when there is no
-> company, or "Last, First" when neither). Two same-named contacts
+> association field, or search result, the display is **"First Last
+> — Company"** (falling back to "First Last — email" when there is no
+> company, or "First Last" when neither). Two same-named contacts
 > are always distinguishable at a glance without opening either
 > record. This is a display rule, low cost, but it must be enforced
 > consistently or the two-Kelly-Smiths problem persists in the UI
 > even when the data is correct.
+>
+> Revised 2026-05-21 (P4.2 push 1) from the original "Last, First"
+> ordering to natural reading order "First Last". Same dedup
+> property, simpler phrasing. See PIVOTS_LEDGER §1 row for the
+> canonical rule.
 
 Implementation: `contactLabel` in `display.ts`. Pure function; the
 caller resolves the `companyName` via `getContactForOrg` /
@@ -69,23 +74,46 @@ loosen cross-org isolation — verified by the cross-org attack test in
 `tests/integration/assignment-scoped-rls.test.ts` AND by the DO-block
 probe inside the migration itself.
 
+## P4.2 additions (this commit — push 1 of 4)
+
+Three new schema tables related to contacts:
+
+- **`contact_company_associations`** — many-to-many contact↔company
+  with an optional free-form `role` text. The existing
+  `contacts.company_id` stays as the "primary" company (fast-path
+  indexed FK); additional roled associations go in this table. The
+  detail-page Companies tab will render the primary on top + the
+  association list below (UI ships in a later push).
+- **`contact_notes`** — time-stamped notes for the activity feed. The
+  legacy `contacts.notes` / `contacts.internal_notes` scalar columns
+  stay in the schema for back-compat but the P4.2 UI writes only to
+  `contact_notes`.
+- **`call_log`** (in `src/modules/calls/`) — manual + future
+  RingCentral. Manual entries get `source="manual"`, `external_id=null`.
+  Partial unique on `(org, source, external_id) WHERE external_id IS
+NOT NULL` prevents webhook dupes in the future integration.
+
+Plus a new `faq_entries` table (in `src/modules/help/`) which is
+**global** (no organization_id, no RLS) — seeded by the migration.
+
+Mailing address Zod schema (in `types.ts`) was rewritten in this
+commit to remove `country` and split `street` → `street1` + `street2`
+per LOC1 (US-only).
+
 ## What's deferred (named consumers)
 
-- **Activity timeline.** Sourced from messages / payments /
-  workflow_executions / etc., not a separate table. The detail page
-  renders it by querying those tables filtered to this contact_id.
-  Lands per consumer module.
+- **Activity timeline.** Sourced from notes + calls + messages /
+  payments / workflow_executions / etc. The detail page renders it
+  by querying those tables filtered to this contact_id. Notes + calls
+  ship in P4.2 push 3; other sources land per consumer module.
 - **Duplicate detection UI.** The `(organization_id, primary_email)`
-  index is in place; the matching algorithm (email / phone / name+
-  address) and merge flow are Phase 4 work (Requirements §6.1).
-- **Bulk operations** (tag, add to workflow, email, SMS, export,
-  delete, reassign owner). Phase 4 — needs a list-view UI first.
-- **CSV import + AI interpretation.** Requirements §6.27. Whole
-  module (4.27); lands in Phase 4.
-- **Routes.** No `/contacts` page yet. Lands in Phase 2 when the
-  saved-views engine is built — both ship together because the
-  contacts list IS a saved-view configuration per Requirements
-  §4.11.
+  index is in place; the matching algorithm and merge flow are
+  Phase 4 work.
+- **Bulk operations** beyond bulk restore (tag, add to workflow,
+  email, SMS, export, reassign owner). Phase 4.
+- **CSV import + AI interpretation.** Own module — Phase 4.
+- **Routes.** P4.2 pushes 2-4 ship: list (saved-views-powered), new,
+  detail (5 tabs incl. inline editing), trash with bulk restore.
 
 ## Hard rules
 

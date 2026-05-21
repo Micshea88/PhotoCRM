@@ -65,6 +65,24 @@ const DEFAULT_SAVED_VIEWS: DefaultSavedView[] = [
     visibleColumns: ["assigneeUserId", "title", "dueDate", "status", "priority"],
     grouping: "assigneeUserId",
   },
+  // P4.2 — the contacts list is saved-view powered. Per the user's
+  // PUSH-1 spec we ship ONE default for V1 ("All Contacts" with no
+  // filter); studios create their own custom views from there.
+  {
+    objectType: "contact",
+    name: "All Contacts",
+    filters: [],
+    sort: { field: "lastName", direction: "asc" },
+    visibleColumns: [
+      "displayLabel",
+      "primaryEmail",
+      "primaryPhone",
+      "contactType",
+      "lifecycleStatus",
+      "tags",
+    ],
+    grouping: null,
+  },
 ]
 
 /**

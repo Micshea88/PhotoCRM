@@ -26,10 +26,18 @@ describe("seedDefaultSavedViewsForOrg — Team This Week", () => {
 
       await seedDefaultSavedViewsForOrg(db, orgId)
 
+      // Filter to the task view specifically since the seed now ships
+      // multiple default views (added "All Contacts" in P4.2).
       const rows = await db
         .select()
         .from(savedViews)
-        .where(and(eq(savedViews.organizationId, orgId), isNull(savedViews.deletedAt)))
+        .where(
+          and(
+            eq(savedViews.organizationId, orgId),
+            eq(savedViews.objectType, "task"),
+            isNull(savedViews.deletedAt),
+          ),
+        )
       expect(rows.length).toBe(1)
       const view = rows[0]!
       expect(view.objectType).toBe("task")

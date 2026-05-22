@@ -3,42 +3,72 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
-import { contactLabel } from "../display"
-import { formatPhoneDisplay } from "@/lib/format/phone"
 import { archiveContact, deleteContact } from "../actions"
-
-export interface ContactRow {
-  id: string
-  firstName: string
-  lastName: string
-  primaryEmail: string | null
-  primaryPhone: string | null
-  contactType: string | null
-  lifecycleStatus: string | null
-  tags: string[] | null
-  companyName: string | null
-}
+import { resolveContactColumns, type ColumnConfigItem, type ContactRow } from "./columns"
 
 const DELETE_BODY =
   "This contact will be moved to Deleted and automatically purged after 90 days. You can restore it before then on the Deleted page."
 
+interface ContactsTableProps {
+  rows: ContactRow[]
+  columnConfig: ColumnConfigItem[]
+  onColumnConfigChange: (next: ColumnConfigItem[]) => void
+  onOpenEditColumns: () => void
+}
+
+export type { ContactRow }
+
 /**
- * Client table for /contacts. Rows are clickable: clicking anywhere
- * EXCEPT the trailing ⋮ menu navigates to /contacts/[id]. The menu
- * uses stopPropagation on its trigger so it never triggers row
- * navigation. Edit / Archive / Delete are wired here; Delete opens
- * the DeleteConfirmModal.
+ * Client table for /contacts with the Push 2b machinery:
+ *
+ *   - Column visibility, order, and width derived from `columnConfig`.
+ *   - Direct table-header drag (via @dnd-kit) to reorder visible
+ *     columns. Reorder writes a new `columnConfig` back through
+ *     `onColumnConfigChange`.
+ *   - Right-edge drag on a column header to resize that column.
+ *     Mouse events bypass dnd-kit (different region) and update width
+ *     in the parent's column config.
+ *   - "Edit columns" affordance pinned to the trailing menu column
+ *     (far right of the header row).
+ *   - Vertical dividers between every column header + body cell.
+ *
+ * Row click → navigate to /contacts/[id]. Trailing ⋮ menu uses
+ * stopPropagation so it never triggers row navigation. Edit / Archive
+ * / Delete behaviors unchanged from Push 2a.
  */
-export function ContactsTable({ rows }: { rows: ContactRow[] }) {
+export function ContactsTable({
+  rows,
+  columnConfig,
+  onColumnConfigChange,
+  onOpenEditColumns,
+}: ContactsTableProps) {
   const router = useRouter()
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [busyDelete, setBusyDelete] = useState(false)
+
+  const resolved = resolveContactColumns(columnConfig)
+  const visibleIds = resolved.visible.map((c) => c.id)
 
   function onArchive(id: string) {
     void (async () => {
@@ -64,57 +94,121 @@ export function ContactsTable({ rows }: { rows: ContactRow[] }) {
     router.refresh()
   }
 
+  // ── DnD: reorder visible columns by dragging the header ─────────────
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+  function onHeaderDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const ids = visibleIds
+    const oldIndex = ids.indexOf(String(active.id))
+    const newIndex = ids.indexOf(String(over.id))
+    if (oldIndex < 0 || newIndex < 0) return
+    const reorderedVisible = arrayMove(ids, oldIndex, newIndex)
+    // Reproject the full column_config: visible ones in the new order,
+    // hidden ones at the end in their existing relative order. The
+    // "order" indexes get re-numbered sequentially.
+    const visibleSet = new Set(reorderedVisible)
+    const next: ColumnConfigItem[] = [
+      ...reorderedVisible.map((id) => {
+        const existing = resolved.all.find((c) => c.id === id)
+        return {
+          id,
+          visible: true,
+          order: 0, // re-numbered below
+          width: existing?.width ?? null,
+        }
+      }),
+      ...resolved.all
+        .filter((c) => !visibleSet.has(c.id))
+        .map((c) => ({ id: c.id, visible: c.visible, order: 0, width: c.width })),
+    ].map((c, i) => ({ ...c, order: i }))
+    onColumnConfigChange(next)
+  }
+
+  // ── Width drag ─────────────────────────────────────────────────────
+  function startResize(columnId: string, startX: number, startWidth: number) {
+    function onMove(e: MouseEvent) {
+      const delta = e.clientX - startX
+      const next = Math.max(60, startWidth + delta)
+      onColumnConfigChange(
+        resolved.all.map((c) =>
+          c.id === columnId ? { id: c.id, visible: c.visible, order: c.order, width: next } : c,
+        ),
+      )
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+    }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }
+
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
-        <table className="w-full text-sm">
+      <div className="overflow-auto rounded-lg border border-[var(--color-border)]">
+        <table className="w-full border-separate border-spacing-0 text-sm">
           <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
             <tr>
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Email</th>
-              <th className="px-4 py-2">Phone</th>
-              <th className="px-4 py-2">Type</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Tags</th>
-              <th className="w-12 px-2 py-2" />
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={onHeaderDragEnd}
+              >
+                <SortableContext items={visibleIds} strategy={horizontalListSortingStrategy}>
+                  {resolved.visible.map((col) => {
+                    const cfg = resolved.all.find((c) => c.id === col.id)
+                    return (
+                      <SortableHeaderCell
+                        key={col.id}
+                        id={col.id}
+                        label={col.label}
+                        width={cfg?.width ?? col.defaultWidth}
+                        onResizeStart={(startX, startWidth) => {
+                          startResize(col.id, startX, startWidth)
+                        }}
+                      />
+                    )
+                  })}
+                </SortableContext>
+              </DndContext>
+              <th className="w-12 border-b border-[var(--color-border)] px-2 py-2 text-right">
+                <button
+                  type="button"
+                  onClick={onOpenEditColumns}
+                  className="text-[10px] text-[var(--color-muted-foreground)] hover:underline"
+                  aria-label="Edit columns"
+                >
+                  ⚙
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr
                 key={row.id}
-                className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-accent)]/30"
+                className="cursor-pointer hover:bg-[var(--color-accent)]/30"
                 onClick={() => {
                   router.push(`/contacts/${row.id}`)
                 }}
               >
-                <td className="px-4 py-2 font-medium">
-                  {contactLabel(
-                    {
-                      firstName: row.firstName,
-                      lastName: row.lastName,
-                      primaryEmail: row.primaryEmail,
-                    },
-                    row.companyName,
-                  )}
-                </td>
-                <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                  {row.primaryEmail ?? ""}
-                </td>
-                <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                  {formatPhoneDisplay(row.primaryPhone)}
-                </td>
-                <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                  {row.contactType ?? ""}
-                </td>
-                <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                  {row.lifecycleStatus ?? ""}
-                </td>
-                <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                  {(row.tags ?? []).join(", ")}
-                </td>
+                {resolved.visible.map((col) => {
+                  const cfg = resolved.all.find((c) => c.id === col.id)
+                  const width = cfg?.width ?? col.defaultWidth
+                  return (
+                    <td
+                      key={col.id}
+                      className="border-t border-r border-[var(--color-border)] px-4 py-2"
+                      style={{ width: width ? `${String(width)}px` : undefined }}
+                    >
+                      {col.render(row)}
+                    </td>
+                  )
+                })}
                 <td
-                  className="px-2 py-2 text-right"
+                  className="w-12 border-t border-[var(--color-border)] px-2 py-2 text-right"
                   onClick={(e) => {
                     e.stopPropagation()
                   }}
@@ -171,3 +265,54 @@ export function ContactsTable({ rows }: { rows: ContactRow[] }) {
     </>
   )
 }
+
+function SortableHeaderCell({
+  id,
+  label,
+  width,
+  onResizeStart,
+}: {
+  id: string
+  label: string
+  width: number | null
+  onResizeStart: (startX: number, startWidth: number) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : undefined,
+    width: width ? `${String(width)}px` : undefined,
+  }
+  // The drag listeners attach to the header BODY, not the resize handle —
+  // so the right-edge cursor:col-resize region remains independently
+  // mouse-down-grabbable for width.
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      className="relative border-r border-b border-[var(--color-border)] px-4 py-2"
+    >
+      <span {...attributes} {...listeners} className="cursor-grab select-none">
+        {label}
+      </span>
+      <span
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={(e) => {
+          // Capture starting width from the DOM rect — header may have
+          // been laid out by flex with no fixed width yet.
+          const th = e.currentTarget.parentElement
+          const startWidth = th ? th.getBoundingClientRect().width : (width ?? 120)
+          onResizeStart(e.clientX, startWidth)
+        }}
+        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-primary)]/40"
+      />
+    </th>
+  )
+}
+
+// ContactRow is re-exported above so the page can import it from this file
+// (kept for back-compat with existing page imports).

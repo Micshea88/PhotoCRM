@@ -20,6 +20,17 @@ export const savedViewObjectTypeSchema = z.enum(SAVED_VIEW_OBJECT_TYPES)
 export type SavedViewObjectType = z.infer<typeof savedViewObjectTypeSchema>
 
 /**
+ * Three-tier visibility model.
+ *
+ *   private        — owner only
+ *   shared_users   — owner + the users listed in shared_with_user_ids
+ *   org            — every member of the org
+ */
+export const VISIBILITY_LEVELS = ["private", "shared_users", "org"] as const
+export const visibilitySchema = z.enum(VISIBILITY_LEVELS)
+export type Visibility = z.infer<typeof visibilitySchema>
+
+/**
  * Canonical filter shape. The list-view renderer reads these and
  * applies them per object_type. `op` values are the set this engine
  * supports out of the box; modules can extend by handling new ops
@@ -60,36 +71,89 @@ export const sortSchema = z
   })
   .strict()
 
+/**
+ * Column-config item shape. One entry per column the host list view
+ * knows about. `order` is the persisted display index (0-based);
+ * `visible` toggles the column off; `width` is in pixels (NULL =
+ * renderer default).
+ */
+export const columnConfigItemSchema = z
+  .object({
+    id: z.string().min(1).max(120),
+    visible: z.boolean(),
+    order: z.number().int().nonnegative(),
+    width: z.number().int().positive().nullable(),
+  })
+  .strict()
+export const columnConfigSchema = z.array(columnConfigItemSchema).max(64)
+export type ColumnConfigItem = z.infer<typeof columnConfigItemSchema>
+
 const filtersJsonSchema = z.array(filterSchema).max(64).optional().nullable()
 const sortJsonSchema = z
   .union([sortSchema, z.array(sortSchema).max(8)])
   .optional()
   .nullable()
-const visibleColumnsSchema = z.array(z.string().min(1).max(120)).max(64).optional().nullable()
+const columnConfigJsonSchema = columnConfigSchema.optional().nullable()
 const groupingSchema = z.string().max(120).optional().nullable()
 const customFieldsSchema = z.record(z.string(), z.unknown()).optional().nullable()
+const sharedWithUserIdsSchema = z.array(z.string().min(1).max(64)).max(64).optional().nullable()
 
-export const createSavedViewInput = z.object({
-  objectType: savedViewObjectTypeSchema,
-  name: z.string().min(1).max(120),
-  shared: z.boolean().default(false),
-  filters: filtersJsonSchema,
-  sort: sortJsonSchema,
-  visibleColumns: visibleColumnsSchema,
-  grouping: groupingSchema,
-  customFields: customFieldsSchema,
-})
+/**
+ * 8-view soft limit per user per object type, enforced at the action
+ * layer (see actions.ts:createSavedView). System defaults
+ * (owner_user_id IS NULL) do not count toward the limit.
+ */
+export const SAVED_VIEW_PER_USER_LIMIT = 8
 
-export const updateSavedViewInput = z.object({
-  id: z.string(),
-  name: z.string().min(1).max(120).optional(),
-  shared: z.boolean().optional(),
-  filters: filtersJsonSchema,
-  sort: sortJsonSchema,
-  visibleColumns: visibleColumnsSchema,
-  grouping: groupingSchema,
-  customFields: customFieldsSchema,
-})
+export const createSavedViewInput = z
+  .object({
+    objectType: savedViewObjectTypeSchema,
+    name: z.string().min(1).max(120),
+    visibility: visibilitySchema.default("private"),
+    sharedWithUserIds: sharedWithUserIdsSchema,
+    filters: filtersJsonSchema,
+    sort: sortJsonSchema,
+    columnConfig: columnConfigJsonSchema,
+    grouping: groupingSchema,
+    customFields: customFieldsSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.visibility === "shared_users" &&
+      (!data.sharedWithUserIds || data.sharedWithUserIds.length === 0)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sharedWithUserIds"],
+        message: "sharedWithUserIds must be a non-empty list when visibility is 'shared_users'",
+      })
+    }
+  })
+
+export const updateSavedViewInput = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1).max(120).optional(),
+    visibility: visibilitySchema.optional(),
+    sharedWithUserIds: sharedWithUserIdsSchema,
+    filters: filtersJsonSchema,
+    sort: sortJsonSchema,
+    columnConfig: columnConfigJsonSchema,
+    grouping: groupingSchema,
+    customFields: customFieldsSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.visibility === "shared_users" &&
+      (!data.sharedWithUserIds || data.sharedWithUserIds.length === 0)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sharedWithUserIds"],
+        message: "sharedWithUserIds must be a non-empty list when visibility is 'shared_users'",
+      })
+    }
+  })
 
 export const deleteSavedViewInput = z.object({ id: z.string() })
 export const restoreSavedViewInput = z.object({ id: z.string() })

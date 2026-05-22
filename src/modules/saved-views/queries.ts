@@ -1,57 +1,59 @@
 import "server-only"
-import { and, eq, isNull, or, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
-import { savedViews } from "./schema"
+import { savedViews, userObjectViewPrefs } from "./schema"
 
 interface ListOptions {
   withDeleted?: boolean
 }
 
 /**
- * All saved views of one object type that the user can see — i.e.,
- * their own + every shared view in the org. RLS scopes to org; the
- * owner-vs-shared filter is applied here.
+ * All saved views of one object type that the user can see. RLS at the
+ * DB layer (saved_views_select policy) does the heavy lifting now —
+ * the 3-tier visibility filter is enforced by the policy using
+ * `app.current_user_id`. This query only adds the soft-delete filter +
+ * object_type filter on top.
  *
- * `userId` is the authenticated user resolving the list. The action
- * layer passes `ctx.session.user.id`; tests can pass any string.
+ * The `userId` parameter remains in the signature for back-compat and
+ * for testing contexts that want to assert visibility against a
+ * specific user — but is no longer used to construct the WHERE clause.
+ * The user identity comes from the RLS GUC.
  */
 export async function listSavedViewsForObject(
   objectType: string,
-  userId: string,
+  _userId: string,
   opts: ListOptions = {},
 ) {
   return withOrgContext(async (tx) => {
-    const visibility = or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true))
     const where = opts.withDeleted
-      ? and(eq(savedViews.objectType, objectType), visibility)
-      : and(eq(savedViews.objectType, objectType), visibility, isNull(savedViews.deletedAt))
+      ? eq(savedViews.objectType, objectType)
+      : and(eq(savedViews.objectType, objectType), isNull(savedViews.deletedAt))
     return tx.select().from(savedViews).where(where).orderBy(savedViews.name)
   })
 }
 
 /**
- * Single view, scoped by the same owner-or-shared visibility. Returns
- * null if the view exists but the user can't see it (private + not
- * the owner).
+ * Single view by id. RLS gates visibility — returns null if the row
+ * exists but the user can't see it.
  */
-export async function getSavedViewForUser(id: string, userId: string) {
+export async function getSavedViewForUser(id: string, _userId: string) {
   return withOrgContext(async (tx) => {
     const [row] = await tx
       .select()
       .from(savedViews)
-      .where(
-        and(
-          eq(savedViews.id, id),
-          or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true)),
-          isNull(savedViews.deletedAt),
-        ),
-      )
+      .where(and(eq(savedViews.id, id), isNull(savedViews.deletedAt)))
       .limit(1)
     return row ?? null
   })
 }
 
-/** Shared views for the active org, scoped by object type. */
+/**
+ * Org-visible views for the active org, scoped by object type.
+ * RLS will additionally let through 'shared_users' views the caller is
+ * a member of and the caller's own views — use listSavedViewsForObject
+ * if you want everything the caller can see; this one narrows to the
+ * org-wide set only.
+ */
 export async function listSharedSavedViews(objectType: string) {
   return withOrgContext(async (tx) => {
     return tx
@@ -60,7 +62,7 @@ export async function listSharedSavedViews(objectType: string) {
       .where(
         and(
           eq(savedViews.objectType, objectType),
-          eq(savedViews.shared, true),
+          eq(savedViews.visibility, "org"),
           isNull(savedViews.deletedAt),
         ),
       )
@@ -68,7 +70,7 @@ export async function listSharedSavedViews(objectType: string) {
   })
 }
 
-/** A user's own views (private + shared). */
+/** A user's own views (private + the ones they own with shared visibility). */
 export async function listMySavedViews(userId: string, objectType?: string) {
   return withOrgContext(async (tx) => {
     const where = objectType
@@ -84,8 +86,10 @@ export async function listMySavedViews(userId: string, objectType?: string) {
 
 /**
  * Admin helper — list every view in the org regardless of owner /
- * shared. Used by the Phase 4 settings admin UI; do NOT use from
- * user-facing routes.
+ * visibility. RLS would normally hide private views from non-owners;
+ * this helper is intended for an admin UI that runs with elevated
+ * context. In V1 we have no such UI; the helper is provided for
+ * completeness and tests.
  */
 export async function listAllSavedViewsForOrg(opts: ListOptions = {}) {
   return withOrgContext(async (tx) => {
@@ -99,16 +103,15 @@ export async function listAllSavedViewsForOrg(opts: ListOptions = {}) {
 
 /**
  * Returns the seeded org-default saved view for one object type, or
- * `null` if the org wasn't seeded (no auto-seed for organizations
- * created before the default-view seed shipped). Default views have
- * `is_default=true` AND `owner_user_id IS NULL` AND `shared=true` per
- * seed.ts's "default-view semantics" docblock — they are immutable and
- * visible to every member of the org.
+ * `null` if the org wasn't seeded. Default views have `is_default=true`
+ * AND `owner_user_id IS NULL` AND `visibility='org'` per seed.ts —
+ * they are immutable and visible to every member of the org. The RLS
+ * SELECT policy includes a `is_default AND owner_user_id IS NULL`
+ * branch so default views remain visible regardless of `app.current_user_id`.
  *
- * V1 has one seed: `Team This Week` (objectType="task"). The P4.1
- * dashboard's "Team This Week" widget calls this with `"task"` to
- * load the spec, then resolves the `<startOfWeek>` / `<endOfWeek>`
- * placeholders against the current US Sunday-Saturday week (LOC1).
+ * V1 seeds: `Team This Week` (objectType="task") and `All Contacts`
+ * (objectType="contact"). The dashboard's "Team This Week" widget
+ * calls this with "task" to load the spec.
  *
  * RLS-scoped via withOrgContext.
  */
@@ -126,6 +129,28 @@ export async function getDefaultSavedView(
           isNull(savedViews.ownerUserId),
           isNull(savedViews.deletedAt),
         ),
+      )
+      .limit(1)
+    return row ?? null
+  })
+}
+
+/**
+ * Per-user list-view preferences for one object type. Returns null if
+ * the user has no prefs row yet (which is the common case for any user
+ * who hasn't reordered tabs or visited /<object>s before).
+ *
+ * RLS: the user_object_view_prefs SELECT policy gates to own row
+ * (user_id = app.current_user_id), so we don't need a manual
+ * userId-filter here.
+ */
+export async function getUserViewPrefs(userId: string, objectType: string) {
+  return withOrgContext(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(userObjectViewPrefs)
+      .where(
+        and(eq(userObjectViewPrefs.userId, userId), eq(userObjectViewPrefs.objectType, objectType)),
       )
       .limit(1)
     return row ?? null

@@ -169,6 +169,13 @@
       "when": 1779417582660,
       "tag": "0023_awesome_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779458414688,
+      "tag": "0024_push_2b_saved_views_visibility_columns",
+      "breakpoints": true
     }
   ]
 }

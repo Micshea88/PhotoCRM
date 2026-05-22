@@ -1,8 +1,10 @@
 import "server-only"
-import { and, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm"
+import { and, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
 import { contacts } from "./schema"
 import { companies } from "@/modules/companies/schema"
+import { tasks } from "@/modules/tasks/schema"
+import { projectContacts } from "@/modules/projects/schema"
 
 /**
  * Active filter overrides for /contacts list. These come from URL search
@@ -33,6 +35,18 @@ import { companies } from "@/modules/companies/schema"
  *                     contacts.created_at. `createdTo` is interpreted
  *                     as end-of-day (the SQL adds 1 day and uses `<`).
  */
+/**
+ * Operator for a custom-field filter, paired with the field type that
+ * produced it. Each entry comes from the More Filters drawer's
+ * Custom Fields sub-panel; the action layer normalises them into URL
+ * params on the client and re-parses here.
+ */
+export interface CustomFieldFilter {
+  fieldId: string
+  op: "contains" | "eq" | "in" | "min" | "max" | "from" | "to"
+  value: string
+}
+
 export interface ContactFilterOverrides {
   q?: string
   contactType?: string
@@ -43,6 +57,14 @@ export interface ContactFilterOverrides {
   leadSource?: string
   createdFrom?: string
   createdTo?: string
+  // Push 2b — "More filters" panel:
+  hasPhone?: boolean
+  hasEmail?: boolean
+  lastActivityFrom?: string
+  lastActivityTo?: string
+  openTasksFrom?: string
+  openTasksTo?: string
+  customFields?: CustomFieldFilter[]
 }
 
 /**
@@ -98,6 +120,111 @@ export async function listContactsForView(filters: ContactFilterOverrides) {
           ilike(companies.name, pattern),
         ),
       )
+    }
+
+    // ── Push 2b — additional filters from the More filters drawer ──
+
+    // Has Phone / Has Email — "set, not empty string". Existing rows use
+    // null for "not provided"; create flows trim/coerce empty to null,
+    // but legacy data could have whitespace — defensive AND NULLIF != ''.
+    if (filters.hasPhone === true) {
+      conditions.push(
+        and(
+          isNotNull(contacts.primaryPhone),
+          sql`NULLIF(${contacts.primaryPhone}, '') IS NOT NULL`,
+        ),
+      )
+    }
+    if (filters.hasEmail === true) {
+      conditions.push(
+        and(
+          isNotNull(contacts.primaryEmail),
+          sql`NULLIF(${contacts.primaryEmail}, '') IS NOT NULL`,
+        ),
+      )
+    }
+
+    // Last Activity Date — V1 proxies updated_at. Future: when the
+    // activity-log shipper lands, point this at the activity table's
+    // (contact_id, occurred_at) most-recent. Documented in the More
+    // filters panel as "Last activity (proxy: updated)".
+    if (filters.lastActivityFrom) {
+      conditions.push(sql`${contacts.updatedAt} >= ${filters.lastActivityFrom}::date`)
+    }
+    if (filters.lastActivityTo) {
+      conditions.push(
+        sql`${contacts.updatedAt} < (${filters.lastActivityTo}::date + INTERVAL '1 day')`,
+      )
+    }
+
+    // Open tasks — contacts whose linked projects have ≥1 open task with
+    // a due date in the range. Tasks have project_id (no direct
+    // contact_id); the project_contacts join carries the relation.
+    // "Open" = status != 'done' AND deleted_at IS NULL.
+    if (filters.openTasksFrom || filters.openTasksTo) {
+      const fromSql = filters.openTasksFrom
+        ? sql`AND t.due_date >= ${filters.openTasksFrom}::date`
+        : sql``
+      const toSql = filters.openTasksTo
+        ? sql`AND t.due_date < (${filters.openTasksTo}::date + INTERVAL '1 day')`
+        : sql``
+      conditions.push(sql`EXISTS (
+        SELECT 1
+        FROM ${projectContacts} pc
+        JOIN ${tasks} t ON t.project_id = pc.project_id
+        WHERE pc.contact_id = ${contacts.id}
+          AND t.status != 'done'
+          AND t.deleted_at IS NULL
+          ${fromSql} ${toSql}
+      )`)
+    }
+
+    // Custom fields — values stored on contacts.custom_fields jsonb,
+    // keyed by definition id. The drawer encodes one filter per
+    // (fieldId, op) into the URL; here we translate each into a SQL
+    // predicate using jsonb operators. The custom-fields module is
+    // the source of truth for legal ops per field type; we trust the
+    // caller to send semantically-valid (fieldId, op) pairs.
+    if (filters.customFields && filters.customFields.length > 0) {
+      for (const f of filters.customFields) {
+        const key = sql.raw(`'${f.fieldId.replace(/'/g, "''")}'`)
+        switch (f.op) {
+          case "contains":
+            // jsonb ->> key returns text; ILIKE matches case-insensitive.
+            conditions.push(sql`${contacts.customFields} ->> ${key} ILIKE ${`%${f.value}%`}`)
+            break
+          case "eq":
+            conditions.push(sql`${contacts.customFields} ->> ${key} = ${f.value}`)
+            break
+          case "in": {
+            // multi_select stored as a JSON array; we OR each provided value
+            // against array containment via ?| operator.
+            const values = f.value.split(",").filter(Boolean)
+            if (values.length > 0) {
+              conditions.push(sql`(${contacts.customFields} -> ${key}) ?| ${values}::text[]`)
+            }
+            break
+          }
+          case "min":
+            conditions.push(
+              sql`(${contacts.customFields} ->> ${key})::numeric >= ${Number(f.value)}`,
+            )
+            break
+          case "max":
+            conditions.push(
+              sql`(${contacts.customFields} ->> ${key})::numeric <= ${Number(f.value)}`,
+            )
+            break
+          case "from":
+            conditions.push(sql`(${contacts.customFields} ->> ${key})::date >= ${f.value}::date`)
+            break
+          case "to":
+            conditions.push(
+              sql`(${contacts.customFields} ->> ${key})::date < (${f.value}::date + INTERVAL '1 day')`,
+            )
+            break
+        }
+      }
     }
 
     return tx

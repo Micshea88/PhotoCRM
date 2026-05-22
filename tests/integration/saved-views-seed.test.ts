@@ -43,10 +43,10 @@ describe("seedDefaultSavedViewsForOrg — Team This Week", () => {
       expect(view.objectType).toBe("task")
       expect(view.name).toBe("Team This Week")
       expect(view.ownerUserId).toBeNull()
-      expect(view.shared).toBe(true)
+      expect(view.visibility).toBe("org")
       expect(view.isDefault).toBe(true)
       expect(view.grouping).toBe("assigneeUserId")
-      expect(view.visibleColumns).toEqual([
+      expect(view.columnConfig.map((c) => c.id)).toEqual([
         "assigneeUserId",
         "title",
         "dueDate",

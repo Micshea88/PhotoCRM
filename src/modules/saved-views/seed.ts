@@ -3,45 +3,39 @@ import { and, eq, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
 import { savedViews } from "./schema"
+import type { ColumnConfigItem } from "./types"
 
 type DbHandle = NodePgDatabase<typeof schema>
 
 /**
  * Default saved views seeded per organization. Per Requirements §4.10 +
- * §4.11, Team This Week and Vendor Matrix are saved-view CONFIGURATIONS
+ * §4.11, Team This Week and All Contacts are saved-view CONFIGURATIONS
  * over existing data (tasks, contacts), not bespoke features.
- *
- * V1 seeds Team This Week only — its column keys (`assigneeUserId`,
- * `title`, `dueDate`, `status`, `priority`) all exist on the tasks
- * schema today. Vendor Matrix is documented in the README example as
- * the equivalent contact config; it can be seeded once the contacts
- * list-view renderer ships and confirms its column keys.
  *
  * ─── DEFAULT-VIEW SEMANTICS ───────────────────────────────────────────
  *
- * `owner_user_id = NULL` + `is_default = true` + `shared = true`:
+ * `owner_user_id = NULL` + `is_default = true` + `visibility = 'org'`:
  *
- *   - VISIBLE to every org member (org RLS + shared=true).
- *   - IMMUTABLE — the owner-only mutation rule throws FORBIDDEN for any
- *     caller because no requester can match a NULL owner. The seeded
- *     default cannot be edited or soft-deleted by users.
+ *   - VISIBLE to every org member (RLS SELECT policy has an explicit
+ *     branch for is_default-with-null-owner).
+ *   - IMMUTABLE — the RLS UPDATE/DELETE policies reject mutations
+ *     where owner_user_id ≠ current_user. NULL ≠ any real user id, so
+ *     no one can mutate these. The action layer enforces the same.
  *   - CUSTOMIZABLE via `duplicateSavedView` — the clone is private +
- *     owned by the caller (per `actions.ts:duplicateSavedView`). This
- *     is the V1 workflow for "I want a tweaked version of the default."
+ *     owned by the caller.
  *
- * The "this week" date window is stored as the literal placeholder
- * strings `<startOfWeek>` / `<endOfWeek>`; the Phase 4 task list-view
- * renderer resolves them at render time against the caller's
+ * "This week" date placeholders (`<startOfWeek>` / `<endOfWeek>`) are
+ * resolved at render time by the list-view renderer in the caller's
  * timezone. Storing concrete dates at seed time would freeze the
  * window to org-create day.
  *
  * ─── IDEMPOTENCY ──────────────────────────────────────────────────────
  *
- * The partial unique index on (org, owner_user_id, object_type, name)
- * does NOT prevent duplicate inserts with `owner_user_id = NULL`
- * because Postgres treats NULLs as distinct in unique indexes by
- * default. So we do an explicit existence check instead of
- * onConflictDoNothing.
+ * Partial unique index does NOT prevent duplicate inserts with
+ * `owner_user_id = NULL` (Postgres treats NULLs as distinct in unique
+ * indexes by default). We do an explicit existence check before
+ * insert, scoped by (org, object_type, name, is_default, owner_user_id
+ * IS NULL, deleted_at IS NULL).
  */
 
 interface DefaultSavedView {
@@ -49,8 +43,12 @@ interface DefaultSavedView {
   name: string
   filters: unknown[]
   sort: Record<string, unknown> | unknown[]
-  visibleColumns: string[]
+  columnConfig: ColumnConfigItem[]
   grouping: string | null
+}
+
+function columnsAsConfig(ids: string[]): ColumnConfigItem[] {
+  return ids.map((id, index) => ({ id, visible: true, order: index, width: null }))
 }
 
 const DEFAULT_SAVED_VIEWS: DefaultSavedView[] = [
@@ -62,34 +60,40 @@ const DEFAULT_SAVED_VIEWS: DefaultSavedView[] = [
       { field: "dueDate", op: "lte", value: "<endOfWeek>" },
     ],
     sort: { field: "dueDate", direction: "asc" },
-    visibleColumns: ["assigneeUserId", "title", "dueDate", "status", "priority"],
+    columnConfig: columnsAsConfig(["assigneeUserId", "title", "dueDate", "status", "priority"]),
     grouping: "assigneeUserId",
   },
-  // P4.2 — the contacts list is saved-view powered. Per the user's
-  // PUSH-1 spec we ship ONE default for V1 ("All Contacts" with no
-  // filter); studios create their own custom views from there.
+  // P4.2 — the contacts list is saved-view powered. "All Contacts" is the
+  // immutable org-wide default tab; users create custom views by
+  // duplicating or starting from scratch. The column_config here is the
+  // org-wide default; per-user column tweaks land on a duplicated view
+  // (per the "force Save as new view on All Contacts" UX rule).
   {
     objectType: "contact",
     name: "All Contacts",
     filters: [],
     sort: { field: "lastName", direction: "asc" },
-    visibleColumns: [
+    columnConfig: columnsAsConfig([
       "displayLabel",
       "primaryEmail",
       "primaryPhone",
       "contactType",
       "lifecycleStatus",
       "tags",
-    ],
+    ]),
     grouping: null,
   },
 ]
 
 /**
  * Idempotent seed for the V1 default saved views. Bootstrap-trust:
- * caller MUST have set `app.current_org` to `orgId` first — RLS WITH
- * CHECK on saved_views requires it. Both production callers (the BA
+ * caller MUST have set `app.current_org` to `orgId` first — the RLS
+ * INSERT policy requires it. Both production callers (the BA
  * org-create hook and the dev seed script) satisfy this.
+ *
+ * Note on RLS INSERT: the policy allows inserts where owner_user_id
+ * IS NULL AND is_default = true regardless of app.current_user_id,
+ * so the seed runs even from contexts that don't set that GUC.
  */
 export async function seedDefaultSavedViewsForOrg(db: DbHandle, orgId: string): Promise<void> {
   for (const view of DEFAULT_SAVED_VIEWS) {
@@ -114,10 +118,10 @@ export async function seedDefaultSavedViewsForOrg(db: DbHandle, orgId: string): 
       objectType: view.objectType,
       name: view.name,
       ownerUserId: null,
-      shared: true,
+      visibility: "org",
       filters: view.filters,
       sort: view.sort,
-      visibleColumns: view.visibleColumns,
+      columnConfig: view.columnConfig,
       grouping: view.grouping,
       isDefault: true,
     })

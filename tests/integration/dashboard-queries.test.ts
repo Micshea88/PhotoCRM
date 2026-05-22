@@ -346,7 +346,7 @@ describe("getDefaultSavedView — returns the seeded default", () => {
         .limit(1)
       expect(row).toBeTruthy()
       expect(row?.name).toBe("Team This Week")
-      expect(row?.shared).toBe(true)
+      expect(row?.visibility).toBe("org")
     })
   })
 })

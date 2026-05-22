@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { and, eq, isNull, or } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { withTestDb, setOrgContext } from "../helpers/db"
 import { createOrganization, createUser } from "../helpers/factories"
@@ -8,11 +8,11 @@ import { auditLog } from "@/modules/audit/schema"
 import { audit } from "@/modules/audit/audit"
 
 describe("saved-views module — db-level invariants", () => {
-  it("creates a view with jsonb filters/sort/visibleColumns + audit row", async () => {
+  it("creates a view with jsonb filters/sort/columnConfig + audit row", async () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
       const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId)
+      await setOrgContext(db, orgId, "owner", userId)
 
       const id = createId()
       await db.insert(savedViews).values({
@@ -21,10 +21,15 @@ describe("saved-views module — db-level invariants", () => {
         objectType: "contact",
         name: "Vendor Matrix",
         ownerUserId: userId,
-        shared: true,
+        visibility: "org",
         filters: [{ field: "contactType", op: "eq", value: "Vendor" }],
         sort: { field: "lastName", direction: "asc" },
-        visibleColumns: ["firstName", "lastName", "company", "category"],
+        columnConfig: [
+          { id: "firstName", visible: true, order: 0, width: null },
+          { id: "lastName", visible: true, order: 1, width: null },
+          { id: "company", visible: true, order: 2, width: null },
+          { id: "category", visible: true, order: 3, width: null },
+        ],
         grouping: "category",
         createdBy: userId,
         updatedBy: userId,
@@ -43,7 +48,7 @@ describe("saved-views module — db-level invariants", () => {
 
       const [row] = await db.select().from(savedViews).where(eq(savedViews.id, id))
       expect(row?.name).toBe("Vendor Matrix")
-      expect(row?.shared).toBe(true)
+      expect(row?.visibility).toBe("org")
       expect(row?.filters).toEqual([{ field: "contactType", op: "eq", value: "Vendor" }])
       expect(row?.grouping).toBe("category")
 
@@ -56,7 +61,7 @@ describe("saved-views module — db-level invariants", () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
       const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId)
+      await setOrgContext(db, orgId, "owner", userId)
 
       await db.insert(savedViews).values({
         id: createId(),
@@ -86,27 +91,34 @@ describe("saved-views module — db-level invariants", () => {
       const userA = await createUser(db)
       const userB = await createUser(db)
       const orgId = await createOrganization(db, userA)
-      await setOrgContext(db, orgId)
+      await setOrgContext(db, orgId, "owner", userA)
 
-      // Both users create a view named "My VIPs" — both succeed.
+      // Both users create an org-visible view named "My VIPs" — both
+      // succeed; visibility=org means each user can see both rows
+      // through the RLS SELECT policy.
       await db.insert(savedViews).values({
         id: createId(),
         organizationId: orgId,
         objectType: "contact",
         name: "My VIPs",
         ownerUserId: userA,
+        visibility: "org",
         createdBy: userA,
         updatedBy: userA,
       })
+      await setOrgContext(db, orgId, "owner", userB)
       await db.insert(savedViews).values({
         id: createId(),
         organizationId: orgId,
         objectType: "contact",
         name: "My VIPs",
         ownerUserId: userB,
+        visibility: "org",
         createdBy: userB,
         updatedBy: userB,
       })
+      // Reading as userA — both are visible because both are 'org'.
+      await setOrgContext(db, orgId, "owner", userA)
       const rows = await db
         .select()
         .from(savedViews)
@@ -119,7 +131,7 @@ describe("saved-views module — db-level invariants", () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
       const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId)
+      await setOrgContext(db, orgId, "owner", userId)
 
       const firstId = createId()
       await db.insert(savedViews).values({
@@ -153,64 +165,70 @@ describe("saved-views module — db-level invariants", () => {
     })
   })
 
-  it("owner-or-shared visibility filter matches the action-layer rule", async () => {
+  it("3-tier visibility — RLS hides private views from non-owners but shows org + shared_users", async () => {
     await withTestDb(async (db) => {
       const userA = await createUser(db)
       const userB = await createUser(db)
+      const userC = await createUser(db)
       const orgId = await createOrganization(db, userA)
-      await setOrgContext(db, orgId)
 
-      // userA creates: one private, one shared.
-      await db.insert(savedViews).values([
-        {
-          id: createId(),
-          organizationId: orgId,
-          objectType: "contact",
-          name: "A private",
-          ownerUserId: userA,
-          shared: false,
-          createdBy: userA,
-          updatedBy: userA,
-        },
-        {
-          id: createId(),
-          organizationId: orgId,
-          objectType: "contact",
-          name: "A shared",
-          ownerUserId: userA,
-          shared: true,
-          createdBy: userA,
-          updatedBy: userA,
-        },
-      ])
-      // userB creates one private.
+      // userA creates: private + org + shared_users (with B)
+      await setOrgContext(db, orgId, "owner", userA)
       await db.insert(savedViews).values({
         id: createId(),
         organizationId: orgId,
         objectType: "contact",
-        name: "B private",
-        ownerUserId: userB,
-        shared: false,
-        createdBy: userB,
-        updatedBy: userB,
+        name: "A private",
+        ownerUserId: userA,
+        visibility: "private",
+        createdBy: userA,
+        updatedBy: userA,
+      })
+      await db.insert(savedViews).values({
+        id: createId(),
+        organizationId: orgId,
+        objectType: "contact",
+        name: "A org",
+        ownerUserId: userA,
+        visibility: "org",
+        createdBy: userA,
+        updatedBy: userA,
+      })
+      await db.insert(savedViews).values({
+        id: createId(),
+        organizationId: orgId,
+        objectType: "contact",
+        name: "A shared with B",
+        ownerUserId: userA,
+        visibility: "shared_users",
+        sharedWithUserIds: [userB],
+        createdBy: userA,
+        updatedBy: userA,
       })
 
-      // userB should see: their own "B private" + userA's shared "A shared". NOT "A private".
-      const visibleToB = await db
-        .select({ name: savedViews.name })
-        .from(savedViews)
-        .where(
-          and(
-            eq(savedViews.organizationId, orgId),
-            isNull(savedViews.deletedAt),
-            or(eq(savedViews.ownerUserId, userB), eq(savedViews.shared, true)),
-          ),
-        )
-        .orderBy(savedViews.name)
-      const names = visibleToB.map((v) => v.name)
-      expect(names).toContain("B private")
-      expect(names).toContain("A shared")
-      expect(names).not.toContain("A private")
+      // RLS as userB — sees the org one + the shared-with-me one, not the private one.
+      await setOrgContext(db, orgId, "owner", userB)
+      const visibleToB = (
+        await db
+          .select({ name: savedViews.name })
+          .from(savedViews)
+          .where(eq(savedViews.organizationId, orgId))
+      ).map((r) => r.name)
+      expect(visibleToB).toContain("A org")
+      expect(visibleToB).toContain("A shared with B")
+      expect(visibleToB).not.toContain("A private")
+
+      // RLS as userC — sees only the org one. Not in shared list.
+      await setOrgContext(db, orgId, "owner", userC)
+      const visibleToC = (
+        await db
+          .select({ name: savedViews.name })
+          .from(savedViews)
+          .where(eq(savedViews.organizationId, orgId))
+      ).map((r) => r.name)
+      expect(visibleToC).toContain("A org")
+      expect(visibleToC).not.toContain("A shared with B")
+      expect(visibleToC).not.toContain("A private")
     })
   })
 })

@@ -21,20 +21,27 @@ from this engine.
   `deleteSavedView` (soft), `restoreSavedView`, `duplicateSavedView`.
   Owner-only mutations.
 
-## Visibility model
+## Visibility model (Push 2b — 3-tier, enforced at DB)
 
-| Row state                  | Visible to              |
-| -------------------------- | ----------------------- |
-| `shared = true`            | Every member of the org |
-| `shared = false` (private) | The owner only          |
+| `visibility`   | Visible to                                          |
+| -------------- | --------------------------------------------------- |
+| `private`      | Owner only                                          |
+| `shared_users` | Owner + every user in `shared_with_user_ids text[]` |
+| `org`          | Every member of the org                             |
 
-The DB RLS policy is **org-isolation only** — the owner-vs-shared
-filter is applied at the queries.ts layer. Why: pushing
-`current_user_id` into the RLS session settings would require another
-`set_config` call in every `withOrgContext` / `orgAction`. V1 carries
-`app.current_org` + `app.current_role` only; the user-id-aware filter
-lives in queries. Phase 4 may extend if a hard-policy boundary is
-needed.
+System defaults (`owner_user_id IS NULL AND is_default = true`) bypass
+the visibility filter — they're always visible to every org member.
+
+**RLS enforces visibility at the database layer** using
+`current_setting('app.current_user_id')`. The SELECT policy has four
+branches: owned / org / shared-with-me / system-default. The
+INSERT/UPDATE/DELETE policies are scoped to "own views only," with an
+explicit carve-out for the seed path so null-owner system defaults can
+be inserted from `seedDefaultSavedViewsForOrg`.
+
+`app.current_user_id` is set by `runWithOrgContext` (page renders) and
+by `safe-action` (mutations). The test harness's `setOrgContext`
+accepts a `userId` arg.
 
 ## Mutation policy — owner-only writes
 
@@ -70,9 +77,11 @@ admin override action if needed.
 
 or an array of those for multi-column sort (max 8 columns).
 
-`visible_columns jsonb` is a string array of column keys per the
-object type's column registry (defined by the list-view renderer in
-each module).
+`column_config jsonb` is an array of `{id, visible, order, width}`
+entries. Replaces the legacy `visible_columns text[]` in Push 2b — the
+new shape carries column order + per-column width in addition to
+visibility. The list-view renderer in each module owns its column
+registry; the saved-view persists only the per-column tweaks.
 
 `grouping` is a single column key (text) or null. Multi-column
 grouping is not in V1.

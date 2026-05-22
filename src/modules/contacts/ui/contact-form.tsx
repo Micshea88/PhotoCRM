@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { US_STATE_CODES, US_STATE_LABELS } from "@/lib/format/us-states"
 import { parsePhoneInput } from "@/lib/format/phone"
+import { normalizeUrl } from "@/lib/format/url"
 import { CompanyPicker, type CompanyOption } from "@/modules/companies/ui/company-picker"
 import { CustomFieldsRenderer } from "@/modules/custom-fields/ui/custom-fields-renderer"
 import type { CustomFieldDefinition } from "@/modules/custom-fields/schema"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "../types"
 import { createContact, addContactCompanyAssociation } from "../actions"
+import { LeadSourceCombobox } from "./lead-source-combobox"
 
 interface ReferralOption {
   id: string
@@ -70,12 +72,16 @@ export function ContactForm({
   referrals,
   owners,
   customFieldDefinitions,
+  leadSourceValues,
   currentUserId,
 }: {
   companies: CompanyOption[]
   referrals: ReferralOption[]
   owners: OwnerOption[]
   customFieldDefinitions: CustomFieldDefinition[]
+  /** Custom lead-source values currently in use by other contacts.
+   * Merged with the seeded defaults inside LeadSourceCombobox. */
+  leadSourceValues: string[]
   currentUserId: string
 }) {
   const router = useRouter()
@@ -102,7 +108,6 @@ export function ContactForm({
   const [facebookUrl, setFacebookUrl] = useState("")
   const [website, setWebsite] = useState("")
   const [leadSource, setLeadSource] = useState("")
-  const [sourceDetail, setSourceDetail] = useState("")
   const [referredByContactId, setReferredByContactId] = useState("")
   const [contactType, setContactType] = useState<string>("")
   const [lifecycleStatus, setLifecycleStatus] = useState<string>("")
@@ -171,10 +176,9 @@ export function ContactForm({
       dob: dob || "",
       anniversaryDate: anniversaryDate || "",
       instagramHandle: instagramHandle.trim() || "",
-      facebookUrl: facebookUrl.trim() || "",
-      website: website.trim() || "",
+      facebookUrl: normalizeUrl(facebookUrl),
+      website: normalizeUrl(website),
       leadSource: leadSource.trim() || "",
-      sourceDetail: sourceDetail.trim() || "",
       referredByContactId: referredByContactId || null,
       contactType: contactType ? (contactType as (typeof CONTACT_TYPES)[number]) : undefined,
       lifecycleStatus: lifecycleStatus
@@ -265,6 +269,28 @@ export function ContactForm({
               required
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="dob">Date of birth</Label>
+            <Input
+              id="dob"
+              type="date"
+              value={dob}
+              onChange={(e) => {
+                setDob(e.target.value)
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="anniversaryDate">Anniversary</Label>
+            <Input
+              id="anniversaryDate"
+              type="date"
+              value={anniversaryDate}
+              onChange={(e) => {
+                setAnniversaryDate(e.target.value)
+              }}
+            />
+          </div>
         </div>
       </section>
 
@@ -337,9 +363,9 @@ export function ContactForm({
         </div>
       </section>
 
-      {/* Contact channels */}
+      {/* Communication */}
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Contact channels</h2>
+        <h2 className="text-lg font-semibold">Communication</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="primaryEmail">Primary email</Label>
@@ -390,9 +416,9 @@ export function ContactForm({
         </div>
       </section>
 
-      {/* Mailing address */}
+      {/* Address */}
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Mailing address</h2>
+        <h2 className="text-lg font-semibold">Address</h2>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="street1">Street</Label>
@@ -458,38 +484,9 @@ export function ContactForm({
         </div>
       </section>
 
-      {/* Dates */}
+      {/* Social profiles */}
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Dates</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="dob">Date of birth</Label>
-            <Input
-              id="dob"
-              type="date"
-              value={dob}
-              onChange={(e) => {
-                setDob(e.target.value)
-              }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="anniversaryDate">Anniversary</Label>
-            <Input
-              id="anniversaryDate"
-              type="date"
-              value={anniversaryDate}
-              onChange={(e) => {
-                setAnniversaryDate(e.target.value)
-              }}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Online */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Online</h2>
+        <h2 className="text-lg font-semibold">Social profiles</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="instagramHandle">Instagram handle</Label>
@@ -506,8 +503,8 @@ export function ContactForm({
             <Label htmlFor="facebookUrl">Facebook URL</Label>
             <Input
               id="facebookUrl"
-              type="url"
               value={facebookUrl}
+              placeholder="facebook.com/yourstudio"
               onChange={(e) => {
                 setFacebookUrl(e.target.value)
               }}
@@ -517,8 +514,8 @@ export function ContactForm({
             <Label htmlFor="website">Website</Label>
             <Input
               id="website"
-              type="url"
               value={website}
+              placeholder="yourstudio.com"
               onChange={(e) => {
                 setWebsite(e.target.value)
               }}
@@ -527,19 +524,18 @@ export function ContactForm({
         </div>
       </section>
 
-      {/* Source + classification */}
+      {/* Lead generation */}
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Source &amp; classification</h2>
+        <h2 className="text-lg font-semibold">Lead generation</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="leadSource">Lead source</Label>
-            <Input
+            <LeadSourceCombobox
               id="leadSource"
               value={leadSource}
-              placeholder="Instagram, referral, Google…"
-              onChange={(e) => {
-                setLeadSource(e.target.value)
-              }}
+              onChange={setLeadSource}
+              existingValues={leadSourceValues}
+              allowAnyOption
             />
           </div>
           <div className="space-y-2">
@@ -559,18 +555,6 @@ export function ContactForm({
                 </option>
               ))}
             </select>
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="sourceDetail">Source detail</Label>
-            <textarea
-              id="sourceDetail"
-              rows={2}
-              className="block w-full rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
-              value={sourceDetail}
-              onChange={(e) => {
-                setSourceDetail(e.target.value)
-              }}
-            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="contactType">Contact type</Label>

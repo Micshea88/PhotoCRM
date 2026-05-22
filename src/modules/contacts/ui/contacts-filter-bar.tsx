@@ -1,10 +1,12 @@
 "use client"
 
-import { useCallback, useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Popover } from "@/components/ui/popover"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "../types"
+import { LeadSourceCombobox } from "./lead-source-combobox"
 
 export interface FilterBarProps {
   tagOptions: string[]
@@ -18,15 +20,21 @@ export interface FilterBarProps {
  * State lives entirely in URL search params — onChange updates the URL,
  * which triggers a server re-render with new filtered data.
  *
- * Filter chips collapse into native `<details>` widgets so the sub-panel
- * UX works without a popover library. Each chip's `<summary>` shows the
- * applied value when set; clicking the summary opens/closes the panel.
+ * Search: live + debounced (~300ms). No explicit submit button — typing
+ * pushes the URL once typing pauses. "Clear all" resets filters + the
+ * search box together.
+ *
+ * Filter chips: each chip is a Popover (custom component). Popover closes
+ * on outside-click, Escape, or click-the-chip-again.
  */
+const SEARCH_DEBOUNCE_MS = 300
+
 export function ContactsFilterBar(props: FilterBarProps) {
   const router = useRouter()
   const params = useSearchParams()
   const [, startTransition] = useTransition()
   const [searchInput, setSearchInput] = useState(params.get("q") ?? "")
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateParam = useCallback(
     (key: string, value: string | string[] | null) => {
@@ -44,6 +52,21 @@ export function ContactsFilterBar(props: FilterBarProps) {
     },
     [params, router],
   )
+
+  // Debounce the search box. Each keystroke schedules a push 300ms out;
+  // a new keystroke cancels the pending push. The URL only changes once
+  // the user pauses, so the server doesn't re-render on every key.
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const current = params.get("q") ?? ""
+    if (searchInput === current) return
+    debounceRef.current = setTimeout(() => {
+      updateParam("q", searchInput.trim() || null)
+    }, SEARCH_DEBOUNCE_MS)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [searchInput, params, updateParam])
 
   function clearAll() {
     setSearchInput("")
@@ -97,13 +120,7 @@ export function ContactsFilterBar(props: FilterBarProps) {
   return (
     <div className="space-y-3">
       {/* Search */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          updateParam("q", searchInput.trim() || null)
-        }}
-        className="flex items-center gap-2"
-      >
+      <div className="flex items-center gap-2">
         <Input
           type="search"
           placeholder="Search name, email, phone, or company…"
@@ -113,15 +130,12 @@ export function ContactsFilterBar(props: FilterBarProps) {
           }}
           className="flex-1"
         />
-        <Button type="submit" variant="outline" size="sm">
-          Search
-        </Button>
         {hasAnyFilter && (
           <Button type="button" variant="outline" size="sm" onClick={clearAll}>
             Clear all
           </Button>
         )}
-      </form>
+      </div>
 
       {/* Filter chips */}
       <div className="flex flex-wrap items-start gap-2">
@@ -240,26 +254,15 @@ export function ContactsFilterBar(props: FilterBarProps) {
         </FilterChip>
 
         <FilterChip label="Lead source" value={activeLeadSource}>
-          {props.leadSourceOptions.length === 0 ? (
-            <p className="text-xs text-[var(--color-muted-foreground)]">
-              No lead sources yet. Set lead source on a contact to filter by it.
-            </p>
-          ) : (
-            <select
-              className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm"
-              value={activeLeadSource}
-              onChange={(e) => {
-                updateParam("leadSource", e.target.value || null)
-              }}
-            >
-              <option value="">— Any —</option>
-              {props.leadSourceOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          )}
+          <LeadSourceCombobox
+            value={activeLeadSource}
+            onChange={(v) => {
+              updateParam("leadSource", v || null)
+            }}
+            existingValues={props.leadSourceOptions}
+            allowAnyOption
+            anyLabel="— Any —"
+          />
         </FilterChip>
 
         <FilterChip
@@ -344,25 +347,29 @@ function FilterChip({
 }) {
   const active = !!value
   return (
-    <details className="relative">
-      <summary
-        className={`flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1 text-xs ${
-          active
-            ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-            : "border-[var(--color-border)]"
-        }`}
-      >
-        <span>{label}</span>
-        {active && (
-          <>
-            <span className="text-[var(--color-muted-foreground)]">:</span>
-            <span className="font-medium">{value}</span>
-          </>
-        )}
-      </summary>
-      <div className="absolute top-full left-0 z-10 mt-1 min-w-[240px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-3 shadow-md">
-        {children}
-      </div>
-    </details>
+    <Popover
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className={`flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+            active
+              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+              : "border-[var(--color-border)]"
+          }`}
+        >
+          <span>{label}</span>
+          {active && (
+            <>
+              <span className="text-[var(--color-muted-foreground)]">:</span>
+              <span className="font-medium">{value}</span>
+            </>
+          )}
+        </button>
+      )}
+    >
+      {children}
+    </Popover>
   )
 }

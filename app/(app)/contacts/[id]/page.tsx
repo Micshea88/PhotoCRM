@@ -139,14 +139,14 @@ function OverviewPane({
 
   return (
     <div className="space-y-6">
-      <Section title="Contact channels">
+      <Section title="Communication">
         <FieldRow label="Primary email" value={contact.primaryEmail} />
         <FieldRow label="Secondary email" value={contact.secondaryEmail} />
         <FieldRow label="Primary phone" value={formatPhoneDisplay(contact.primaryPhone)} />
         <FieldRow label="Secondary phone" value={formatPhoneDisplay(contact.secondaryPhone)} />
       </Section>
 
-      <Section title="Mailing address">
+      <Section title="Address">
         {!hasAddress ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No mailing address.</p>
         ) : (
@@ -158,20 +158,19 @@ function OverviewPane({
         )}
       </Section>
 
-      <Section title="Dates">
+      <div className="space-y-2 px-4">
         <FieldRow label="Date of birth" value={contact.dob} />
         <FieldRow label="Anniversary" value={contact.anniversaryDate} />
-      </Section>
+      </div>
 
-      <Section title="Online">
+      <Section title="Social profiles">
         <FieldRow label="Instagram handle" value={contact.instagramHandle} />
         <FieldRow label="Facebook URL" value={contact.facebookUrl} />
         <FieldRow label="Website" value={contact.website} />
       </Section>
 
-      <Section title="Source & classification">
+      <Section title="Lead generation">
         <FieldRow label="Lead source" value={contact.leadSource} />
-        <FieldRow label="Source detail" value={contact.sourceDetail} />
         <FieldRow
           label="Referred by"
           value={referredBy ? `${referredBy.firstName} ${referredBy.lastName}` : null}

@@ -7,6 +7,7 @@ import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listContactsForOrg } from "@/modules/contacts/queries"
+import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
 import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
 
@@ -20,16 +21,17 @@ export default async function NewContactPage() {
   const baRole = (member?.role ?? "member") as BetterAuthRole
   const tentativeRole = extendedFromBetterAuth(baRole)
 
-  const { companies, contacts, customFields } = await runWithOrgContext(
+  const { companies, contacts, customFields, leadSources } = await runWithOrgContext(
     { orgId, role: tentativeRole, userId: session.user.id },
     async () => {
       const extended = (await getExtendedMemberRole(session.user.id)) ?? tentativeRole
       // Re-enter to set the final role for the data fetches.
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
-        const [companiesRows, contactRows, customFieldRows] = await Promise.all([
+        const [companiesRows, contactRows, customFieldRows, leadSourceRows] = await Promise.all([
           listCompaniesForOrg(),
           listContactsForOrg(),
           listFieldDefinitionsForRecordType("contact"),
+          listDistinctContactLeadSources(),
         ])
         return {
           companies: companiesRows.map((c) => ({ id: c.id, name: c.name })),
@@ -39,6 +41,7 @@ export default async function NewContactPage() {
             lastName: c.lastName,
           })),
           customFields: customFieldRows,
+          leadSources: leadSourceRows,
         }
       })
     },
@@ -73,6 +76,7 @@ export default async function NewContactPage() {
         referrals={contacts}
         owners={owners}
         customFieldDefinitions={customFields}
+        leadSourceValues={leadSources}
         currentUserId={session.user.id}
       />
     </div>

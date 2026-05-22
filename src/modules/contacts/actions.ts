@@ -306,7 +306,7 @@ export const bulkRestoreContacts = orgAction
       },
     )
     revalidatePath("/contacts")
-    revalidatePath("/contacts/trash")
+    revalidatePath("/contacts/deleted")
     return { restoredIds }
   })
 

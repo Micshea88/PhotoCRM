@@ -2,7 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
 
-export default async function ContactsTrashPage() {
+export default async function ContactsDeletedPage() {
   const session = await getSession()
   if (!session?.user) redirect("/sign-in")
   if (!session.session.activeOrganizationId) redirect("/onboarding/create-organization")
@@ -16,7 +16,7 @@ export default async function ContactsTrashPage() {
         >
           ← Contacts
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Trash</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Deleted</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Soft-deleted contacts. Restore with one click or wait 90 days for permanent purge.
         </p>

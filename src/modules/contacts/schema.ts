@@ -83,6 +83,12 @@ export const contacts = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: text("deleted_by").references(() => user.id, { onDelete: "set null" }),
+    // P4.2 push 2a.5 — Archived state, separate from soft-delete. Archived
+    // contacts are hidden from the main list + filters, surface only on
+    // /contacts/archived, and are NOT auto-purged. Soft-delete still
+    // applies (deleted_at) — archive is a less-destructive halfway state.
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedBy: text("archived_by").references(() => user.id, { onDelete: "set null" }),
   },
   (t) => [
     index("contacts_org_deleted_created_idx").on(t.organizationId, t.deletedAt, t.createdAt.desc()),
@@ -93,6 +99,9 @@ export const contacts = pgTable(
     index("contacts_tags_gin_idx").using("gin", t.tags),
     // Email index for duplicate detection (Requirements §6.1).
     index("contacts_org_email_idx").on(t.organizationId, t.primaryEmail),
+    // P4.2 push 2a.5 — fast filter for the main list query which excludes
+    // archived contacts by default.
+    index("contacts_org_archived_deleted_idx").on(t.organizationId, t.archivedAt, t.deletedAt),
   ],
 )
 

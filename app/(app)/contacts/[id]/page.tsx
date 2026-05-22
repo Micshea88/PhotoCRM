@@ -11,6 +11,8 @@ import { contactLabel } from "@/modules/contacts/display"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import { ContactTabs } from "@/modules/contacts/ui/contact-tabs"
 import { DeleteContactButton } from "@/modules/contacts/ui/delete-contact-button"
+import { ArchiveContactButton } from "@/modules/contacts/ui/archive-contact-button"
+import { Button } from "@/components/ui/button"
 
 interface MailingAddressView {
   street1?: string
@@ -87,8 +89,19 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               {contact.lifecycleStatus ? ` · ${contact.lifecycleStatus}` : ""}
             </p>
           )}
+          {contact.archivedAt && (
+            <span className="mt-2 inline-block rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs text-[var(--color-muted-foreground)]">
+              Archived
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <Link href={`/contacts/${contact.id}/edit`}>
+            <Button type="button" variant="outline" size="sm">
+              Edit
+            </Button>
+          </Link>
+          {!contact.archivedAt && <ArchiveContactButton id={contact.id} />}
           <DeleteContactButton id={contact.id} />
         </div>
       </div>

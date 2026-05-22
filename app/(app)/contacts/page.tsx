@@ -7,18 +7,18 @@ import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listSavedViewsForObject } from "@/modules/saved-views/queries"
+import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import {
   listContactsForView,
   listDistinctContactLeadSources,
   listDistinctContactTags,
   type ContactFilterOverrides,
 } from "@/modules/contacts/filter-spec"
-import { contactLabel } from "@/modules/contacts/display"
 import { Button } from "@/components/ui/button"
 import { ContactsFilterBar } from "@/modules/contacts/ui/contacts-filter-bar"
 import { ContactsOverflowMenu } from "@/modules/contacts/ui/contacts-overflow-menu"
+import { ContactsTable } from "@/modules/contacts/ui/contacts-table"
 import { SavedViewsBar } from "@/modules/saved-views/ui/saved-views-bar"
-import { formatPhoneDisplay } from "@/lib/format/phone"
 
 function parseFilters(
   searchParams: Record<string, string | string[] | undefined>,
@@ -65,13 +65,14 @@ export default async function ContactsPage({
     async () => {
       const extended = (await getExtendedMemberRole(session.user.id)) ?? tentativeRole
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
-        const [contactRows, tagOpts, leadSourceOpts, companyRows, savedViewRows] =
+        const [contactRows, tagOpts, leadSourceOpts, companyRows, savedViewRows, hiddenSources] =
           await Promise.all([
             listContactsForView(filters),
             listDistinctContactTags(),
             listDistinctContactLeadSources(),
             listCompaniesForOrg(),
             listSavedViewsForObject("contact", session.user.id),
+            listHiddenLeadSources(),
           ])
         return {
           contacts: contactRows,
@@ -83,6 +84,7 @@ export default async function ContactsPage({
             name: v.name,
             isDefault: v.isDefault,
           })),
+          hiddenLeadSources: hiddenSources,
         }
       })
     },
@@ -117,6 +119,7 @@ export default async function ContactsPage({
         ownerOptions={owners}
         companyOptions={data.companies}
         leadSourceOptions={data.leadSources}
+        hiddenLeadSources={data.hiddenLeadSources}
       />
 
       {data.contacts.length === 0 ? (
@@ -126,56 +129,19 @@ export default async function ContactsPage({
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
-              <tr>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Email</th>
-                <th className="px-4 py-2">Phone</th>
-                <th className="px-4 py-2">Type</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Tags</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.contacts.map(({ contact, company }) => (
-                <tr
-                  key={contact.id}
-                  className="border-t border-[var(--color-border)] hover:bg-[var(--color-accent)]/30"
-                >
-                  <td className="px-4 py-2">
-                    <Link href={`/contacts/${contact.id}`} className="font-medium hover:underline">
-                      {contactLabel(
-                        {
-                          firstName: contact.firstName,
-                          lastName: contact.lastName,
-                          primaryEmail: contact.primaryEmail,
-                        },
-                        company?.name,
-                      )}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                    {contact.primaryEmail ?? ""}
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                    {formatPhoneDisplay(contact.primaryPhone)}
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                    {contact.contactType ?? ""}
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                    {contact.lifecycleStatus ?? ""}
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                    {(contact.tags ?? []).join(", ")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ContactsTable
+          rows={data.contacts.map(({ contact, company }) => ({
+            id: contact.id,
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+            primaryEmail: contact.primaryEmail,
+            primaryPhone: contact.primaryPhone,
+            contactType: contact.contactType,
+            lifecycleStatus: contact.lifecycleStatus,
+            tags: contact.tags,
+            companyName: company?.name ?? null,
+          }))}
+        />
       )}
 
       <p className="text-xs text-[var(--color-muted-foreground)]">

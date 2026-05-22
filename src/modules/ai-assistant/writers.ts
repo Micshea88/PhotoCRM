@@ -1,7 +1,17 @@
 import "server-only"
 import type { z } from "zod"
-import { createContact, updateContact } from "@/modules/contacts/actions"
-import { createContactInput, updateContactInput } from "@/modules/contacts/types"
+import {
+  archiveContact,
+  createContact,
+  unarchiveContact,
+  updateContact,
+} from "@/modules/contacts/actions"
+import {
+  archiveContactInput,
+  createContactInput,
+  unarchiveContactInput,
+  updateContactInput,
+} from "@/modules/contacts/types"
 import { updateProject } from "@/modules/projects/actions"
 import { updateProjectInput } from "@/modules/projects/types"
 import { createTask, updateTask, markTaskDone } from "@/modules/tasks/actions"
@@ -54,6 +64,8 @@ import {
 export const ASSISTANT_WRITERS = {
   createContact,
   updateContact,
+  archiveContact,
+  unarchiveContact,
   updateProject,
   createTask,
   updateTask,
@@ -74,6 +86,8 @@ export const ASSISTANT_WRITERS = {
 export const ASSISTANT_WRITER_INPUT_SCHEMAS = {
   createContact: createContactInput,
   updateContact: updateContactInput,
+  archiveContact: archiveContactInput,
+  unarchiveContact: unarchiveContactInput,
   updateProject: updateProjectInput,
   createTask: createTaskInput,
   updateTask: updateTaskInput,

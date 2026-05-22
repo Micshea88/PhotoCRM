@@ -123,6 +123,8 @@ export const updateContactInput = createContactInput.partial().extend({ id: z.st
 
 export const deleteContactInput = z.object({ id: z.string() })
 export const restoreContactInput = z.object({ id: z.string() })
+export const archiveContactInput = z.object({ id: z.string().min(1) })
+export const unarchiveContactInput = z.object({ id: z.string().min(1) })
 
 export const searchContactsInput = z.object({
   q: z.string().min(1).max(200),
@@ -167,6 +169,8 @@ export const removeContactCompanyAssociationInput = z.object({ id: z.string().mi
 export type CreateContactInput = z.infer<typeof createContactInput>
 export type CreateContactFormValues = z.input<typeof createContactInput>
 export type UpdateContactInput = z.infer<typeof updateContactInput>
+export type ArchiveContactInput = z.infer<typeof archiveContactInput>
+export type UnarchiveContactInput = z.infer<typeof unarchiveContactInput>
 export type SearchContactsInput = z.infer<typeof searchContactsInput>
 export type BulkRestoreContactsInput = z.infer<typeof bulkRestoreContactsInput>
 export type CreateContactNoteInput = z.infer<typeof createContactNoteInput>

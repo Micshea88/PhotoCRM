@@ -23,6 +23,9 @@ export function ContactsOverflowMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild>
+          <Link href="/contacts/archived">Archived</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <Link href="/contacts/deleted">Deleted</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

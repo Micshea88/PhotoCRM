@@ -39,6 +39,7 @@ export function LeadSourceCombobox({
   value,
   onChange,
   existingValues,
+  hiddenSources = [],
   allowAnyOption = false,
   anyLabel = "— None —",
 }: {
@@ -48,6 +49,11 @@ export function LeadSourceCombobox({
   /** Custom values currently in use on real contacts. Merged with
    * defaults; duplicates collapse case-insensitively. */
   existingValues: string[]
+  /** Sources the org has hidden via /settings/lead-sources. Filtered
+   * from the visible options (case-insensitive). The currently-selected
+   * value is NEVER filtered — if a contact already carries a hidden
+   * value, the user must still see + be able to keep it. */
+  hiddenSources?: string[]
   /** If true, renders an "Any" / "None" sentinel at the top of the
    * list with value="". Used by the filter chip; the form does NOT
    * set this. */
@@ -58,17 +64,18 @@ export function LeadSourceCombobox({
   const [newValue, setNewValue] = useState("")
 
   const options = useMemo(() => {
+    const hiddenLower = new Set(hiddenSources.map((s) => s.toLowerCase()))
     const seen = new Set<string>()
     const out: string[] = []
     for (const d of LEAD_SOURCE_DEFAULTS) {
       seen.add(d.toLowerCase())
-      out.push(d)
+      if (!hiddenLower.has(d.toLowerCase())) out.push(d)
     }
     const customs = existingValues
-      .filter((v) => v && !seen.has(v.toLowerCase()))
+      .filter((v) => v && !seen.has(v.toLowerCase()) && !hiddenLower.has(v.toLowerCase()))
       .sort((a, b) => a.localeCompare(b))
     return [...out, ...customs]
-  }, [existingValues])
+  }, [existingValues, hiddenSources])
 
   if (addingNew) {
     return (

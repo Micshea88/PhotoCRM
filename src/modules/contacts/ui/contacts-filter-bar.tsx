@@ -13,6 +13,7 @@ export interface FilterBarProps {
   ownerOptions: { id: string; name: string | null; email: string }[]
   companyOptions: { id: string; name: string }[]
   leadSourceOptions: string[]
+  hiddenLeadSources: string[]
 }
 
 /**
@@ -120,7 +121,18 @@ export function ContactsFilterBar(props: FilterBarProps) {
   return (
     <div className="space-y-3">
       {/* Search */}
-      <div className="flex items-center gap-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          // No-op equivalent: typing already pushes the URL via the
+          // debounce effect. The button exists as a visual + a11y
+          // affordance; pressing it re-asserts the current value
+          // (and clears any pending debounce timer by calling
+          // updateParam immediately).
+          updateParam("q", searchInput.trim() || null)
+        }}
+        className="flex items-center gap-2"
+      >
         <Input
           type="search"
           placeholder="Search name, email, phone, or company…"
@@ -130,12 +142,15 @@ export function ContactsFilterBar(props: FilterBarProps) {
           }}
           className="flex-1"
         />
+        <Button type="submit" variant="outline" size="sm">
+          Search
+        </Button>
         {hasAnyFilter && (
           <Button type="button" variant="outline" size="sm" onClick={clearAll}>
             Clear all
           </Button>
         )}
-      </div>
+      </form>
 
       {/* Filter chips */}
       <div className="flex flex-wrap items-start gap-2">
@@ -260,6 +275,7 @@ export function ContactsFilterBar(props: FilterBarProps) {
               updateParam("leadSource", v || null)
             }}
             existingValues={props.leadSourceOptions}
+            hiddenSources={props.hiddenLeadSources}
             allowAnyOption
             anyLabel="— Any —"
           />

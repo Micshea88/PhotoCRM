@@ -7,13 +7,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { US_STATE_CODES, US_STATE_LABELS } from "@/lib/format/us-states"
-import { parsePhoneInput } from "@/lib/format/phone"
+import { formatPhoneDisplay, parsePhoneInput } from "@/lib/format/phone"
 import { normalizeUrl } from "@/lib/format/url"
 import { CompanyPicker, type CompanyOption } from "@/modules/companies/ui/company-picker"
 import { CustomFieldsRenderer } from "@/modules/custom-fields/ui/custom-fields-renderer"
 import type { CustomFieldDefinition } from "@/modules/custom-fields/schema"
+import type { Contact } from "../schema"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "../types"
-import { createContact, addContactCompanyAssociation } from "../actions"
+import {
+  addContactCompanyAssociation,
+  createContact,
+  removeContactCompanyAssociation,
+  updateContact,
+  updateContactCompanyAssociation,
+} from "../actions"
 import { LeadSourceCombobox } from "./lead-source-combobox"
 
 interface ReferralOption {
@@ -32,6 +39,25 @@ interface ExtraCompanyRow {
   key: string
   companyId: string | null
   role: string
+  /** Present when the row was hydrated from an existing association.
+   * Drives the reconcile path on submit (compare vs. current value;
+   * call update if role changed, remove if the row is gone). */
+  existingAssocId?: string
+  existingRole?: string | null
+}
+
+interface InitialAssociation {
+  id: string
+  companyId: string
+  role: string | null
+}
+
+interface MailingAddressShape {
+  street1?: string
+  street2?: string
+  city?: string
+  state?: string
+  zip?: string
 }
 
 function formatValidationErrors(errors: unknown): string {
@@ -52,16 +78,16 @@ function formatValidationErrors(errors: unknown): string {
 }
 
 /**
- * New-contact form. Single long form per the LOC1 directive (all
- * intrinsic fields visible at once, no progressive disclosure). The
- * Primary Company is one CompanyPicker; "+ Add another company" rows
- * each get their own CompanyPicker + free-form role. Submit creates
- * the contact, then sequentially inserts the additional associations,
- * then redirects to the detail page.
+ * Contact form for BOTH create and edit. Pass `initialContact` (+
+ * optional `initialAssociations`) to put the form in edit mode —
+ * state hydrates from those values, submit calls `updateContact`
+ * + reconciles association add/update/remove, redirects to the
+ * detail page on success.
  *
- * Phone fields are normalized to 10-digit storage form on submit via
- * parsePhoneInput. Empty mailing-address fields are stripped so the
- * Zod strict refine doesn't choke on blank state/zip strings.
+ * Phone fields format on blur via formatPhoneDisplay; storage form
+ * is normalized to 10 raw digits via parsePhoneInput. Mailing
+ * address jsonb fields are stripped if blank. URL fields run
+ * through normalizeUrl (auto-prepends https://).
  *
  * Errors mid-association (e.g., a duplicate role attempt) surface
  * inline; the contact itself is already created at that point. The
@@ -73,7 +99,10 @@ export function ContactForm({
   owners,
   customFieldDefinitions,
   leadSourceValues,
+  hiddenLeadSources,
   currentUserId,
+  initialContact,
+  initialAssociations,
 }: {
   companies: CompanyOption[]
   referrals: ReferralOption[]
@@ -82,48 +111,92 @@ export function ContactForm({
   /** Custom lead-source values currently in use by other contacts.
    * Merged with the seeded defaults inside LeadSourceCombobox. */
   leadSourceValues: string[]
+  /** Org-level hidden sources (from org_lead_source_overrides). The
+   * combobox filters these out. */
+  hiddenLeadSources: string[]
   currentUserId: string
+  /** Edit mode. When present, the form pre-fills from this contact
+   * and submits via `updateContact`. */
+  initialContact?: Contact
+  /** Existing contact-company associations to hydrate (edit mode
+   * only). New rows the user adds go through `addContactCompanyAssociation`;
+   * rows the user removes go through `removeContactCompanyAssociation`;
+   * rows whose role changed go through `updateContactCompanyAssociation`. */
+  initialAssociations?: InitialAssociation[]
 }) {
   const router = useRouter()
+  const isEdit = !!initialContact
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>(companies)
 
+  const initialAddress = (initialContact?.mailingAddress ?? {}) as MailingAddressShape
+
   // Form state
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
-  const [primaryCompanyId, setPrimaryCompanyId] = useState<string | null>(null)
-  const [primaryEmail, setPrimaryEmail] = useState("")
-  const [secondaryEmail, setSecondaryEmail] = useState("")
-  const [primaryPhone, setPrimaryPhone] = useState("")
-  const [secondaryPhone, setSecondaryPhone] = useState("")
-  const [street1, setStreet1] = useState("")
-  const [street2, setStreet2] = useState("")
-  const [city, setCity] = useState("")
-  const [stateCode, setStateCode] = useState("")
-  const [zip, setZip] = useState("")
-  const [dob, setDob] = useState("")
-  const [anniversaryDate, setAnniversaryDate] = useState("")
-  const [instagramHandle, setInstagramHandle] = useState("")
-  const [facebookUrl, setFacebookUrl] = useState("")
-  const [website, setWebsite] = useState("")
-  const [leadSource, setLeadSource] = useState("")
-  const [referredByContactId, setReferredByContactId] = useState("")
-  const [contactType, setContactType] = useState<string>("")
-  const [lifecycleStatus, setLifecycleStatus] = useState<string>("")
-  const [tagsRaw, setTagsRaw] = useState("")
-  const [ownerUserId, setOwnerUserId] = useState<string>(currentUserId)
-  const [notes, setNotes] = useState("")
-  const [internalNotes, setInternalNotes] = useState("")
-  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
-  const [extraCompanies, setExtraCompanies] = useState<ExtraCompanyRow[]>([])
+  const [firstName, setFirstName] = useState(initialContact?.firstName ?? "")
+  const [lastName, setLastName] = useState(initialContact?.lastName ?? "")
+  const [primaryCompanyId, setPrimaryCompanyId] = useState<string | null>(
+    initialContact?.companyId ?? null,
+  )
+  const [primaryEmail, setPrimaryEmail] = useState(initialContact?.primaryEmail ?? "")
+  const [secondaryEmail, setSecondaryEmail] = useState(initialContact?.secondaryEmail ?? "")
+  const [primaryPhone, setPrimaryPhone] = useState(
+    formatPhoneDisplay(initialContact?.primaryPhone ?? ""),
+  )
+  const [secondaryPhone, setSecondaryPhone] = useState(
+    formatPhoneDisplay(initialContact?.secondaryPhone ?? ""),
+  )
+  const [street1, setStreet1] = useState(initialAddress.street1 ?? "")
+  const [street2, setStreet2] = useState(initialAddress.street2 ?? "")
+  const [city, setCity] = useState(initialAddress.city ?? "")
+  const [stateCode, setStateCode] = useState(initialAddress.state ?? "")
+  const [zip, setZip] = useState(initialAddress.zip ?? "")
+  const [dob, setDob] = useState(initialContact?.dob ?? "")
+  const [anniversaryDate, setAnniversaryDate] = useState(initialContact?.anniversaryDate ?? "")
+  const [instagramHandle, setInstagramHandle] = useState(initialContact?.instagramHandle ?? "")
+  const [facebookUrl, setFacebookUrl] = useState(initialContact?.facebookUrl ?? "")
+  const [website, setWebsite] = useState(initialContact?.website ?? "")
+  const [leadSource, setLeadSource] = useState(initialContact?.leadSource ?? "")
+  const [referredByContactId, setReferredByContactId] = useState(
+    initialContact?.referredByContactId ?? "",
+  )
+  const [contactType, setContactType] = useState<string>(initialContact?.contactType ?? "")
+  const [lifecycleStatus, setLifecycleStatus] = useState<string>(
+    initialContact?.lifecycleStatus ?? "",
+  )
+  const [tagsRaw, setTagsRaw] = useState((initialContact?.tags ?? []).join(", "))
+  const [ownerUserId, setOwnerUserId] = useState<string>(
+    initialContact?.ownerUserId ?? currentUserId,
+  )
+  const [notes, setNotes] = useState(initialContact?.notes ?? "")
+  const [internalNotes, setInternalNotes] = useState(initialContact?.internalNotes ?? "")
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialContact?.customFields ?? {},
+  )
+  const [extraCompanies, setExtraCompanies] = useState<ExtraCompanyRow[]>(
+    (initialAssociations ?? []).map((a) => ({
+      key: a.id,
+      companyId: a.companyId,
+      role: a.role ?? "",
+      existingAssocId: a.id,
+      existingRole: a.role,
+    })),
+  )
+  const [removedAssocIds, setRemovedAssocIds] = useState<string[]>([])
 
   function addExtraCompanyRow() {
     setExtraCompanies((prev) => [...prev, { key: crypto.randomUUID(), companyId: null, role: "" }])
   }
 
   function removeExtraCompanyRow(key: string) {
-    setExtraCompanies((prev) => prev.filter((r) => r.key !== key))
+    setExtraCompanies((prev) => {
+      const target = prev.find((r) => r.key === key)
+      const existingId = target?.existingAssocId
+      if (existingId) {
+        setRemovedAssocIds((ids) => [...ids, existingId])
+      }
+      return prev.filter((r) => r.key !== key)
+    })
   }
 
   function updateExtraCompanyRow(key: string, patch: Partial<ExtraCompanyRow>) {
@@ -191,29 +264,81 @@ export function ContactForm({
       customFields: Object.keys(customFieldValues).length > 0 ? customFieldValues : null,
     }
 
-    const result = await createContact(payload)
-    if (result.serverError) {
-      setError(result.serverError)
-      setSubmitting(false)
-      return
-    }
-    if (result.validationErrors) {
-      setError(formatValidationErrors(result.validationErrors))
-      setSubmitting(false)
-      return
-    }
-    const newId = result.data?.id
-    if (!newId) {
-      setError("Unknown error creating contact.")
-      setSubmitting(false)
-      return
+    let contactId: string
+
+    if (initialContact) {
+      const result = await updateContact({ id: initialContact.id, ...payload })
+      if (result.serverError) {
+        setError(result.serverError)
+        setSubmitting(false)
+        return
+      }
+      if (result.validationErrors) {
+        setError(formatValidationErrors(result.validationErrors))
+        setSubmitting(false)
+        return
+      }
+      contactId = initialContact.id
+    } else {
+      const result = await createContact(payload)
+      if (result.serverError) {
+        setError(result.serverError)
+        setSubmitting(false)
+        return
+      }
+      if (result.validationErrors) {
+        setError(formatValidationErrors(result.validationErrors))
+        setSubmitting(false)
+        return
+      }
+      const newId = result.data?.id
+      if (!newId) {
+        setError("Unknown error creating contact.")
+        setSubmitting(false)
+        return
+      }
+      contactId = newId
     }
 
-    // Sequentially attach additional company associations. Surface the
-    // first failure inline; the contact is already created so the user
-    // can navigate to the detail page and finish manually.
+    // Reconcile additional company associations. Three buckets:
+    //   1. Rows the user removed (existingAssocId in removedAssocIds)
+    //      → removeContactCompanyAssociation
+    //   2. Existing rows whose role changed (existingAssocId present
+    //      AND role differs from existingRole) → updateContactCompanyAssociation
+    //   3. New rows (no existingAssocId) → addContactCompanyAssociation
+    //
+    // The contact itself is already saved at this point. The first
+    // failure surfaces inline; the user can re-try associations from
+    // the detail page.
+
+    for (const removedId of removedAssocIds) {
+      const removeResult = await removeContactCompanyAssociation({ id: removedId })
+      if (removeResult.serverError) {
+        setError(`Saved, but removing an association failed: ${removeResult.serverError}`)
+        setSubmitting(false)
+        return
+      }
+    }
+
     for (const row of extraCompanies) {
       if (!row.companyId) continue
+      const newRole = row.role.trim() || null
+
+      if (row.existingAssocId) {
+        if (newRole !== (row.existingRole ?? null)) {
+          const upd = await updateContactCompanyAssociation({
+            id: row.existingAssocId,
+            role: newRole ?? undefined,
+          })
+          if (upd.serverError) {
+            setError(`Saved, but updating a role failed: ${upd.serverError}`)
+            setSubmitting(false)
+            return
+          }
+        }
+        continue
+      }
+
       if (row.companyId === primaryCompanyId && !row.role.trim()) {
         setError(
           "Additional company matches the primary with no role — add a role label or remove the row.",
@@ -222,18 +347,18 @@ export function ContactForm({
         return
       }
       const assocResult = await addContactCompanyAssociation({
-        contactId: newId,
+        contactId,
         companyId: row.companyId,
         role: row.role.trim() || undefined,
       })
       if (assocResult.serverError) {
-        setError(`Contact created, but one association failed: ${assocResult.serverError}`)
+        setError(`Saved, but one association failed: ${assocResult.serverError}`)
         setSubmitting(false)
         return
       }
     }
 
-    router.push(`/contacts/${newId}`)
+    router.push(`/contacts/${contactId}`)
     router.refresh()
   }
 
@@ -399,6 +524,9 @@ export function ContactForm({
               onChange={(e) => {
                 setPrimaryPhone(e.target.value)
               }}
+              onBlur={() => {
+                setPrimaryPhone(formatPhoneDisplay(primaryPhone))
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -410,6 +538,9 @@ export function ContactForm({
               value={secondaryPhone}
               onChange={(e) => {
                 setSecondaryPhone(e.target.value)
+              }}
+              onBlur={() => {
+                setSecondaryPhone(formatPhoneDisplay(secondaryPhone))
               }}
             />
           </div>
@@ -535,6 +666,7 @@ export function ContactForm({
               value={leadSource}
               onChange={setLeadSource}
               existingValues={leadSourceValues}
+              hiddenSources={hiddenLeadSources}
               allowAnyOption
             />
           </div>
@@ -690,7 +822,13 @@ export function ContactForm({
           Cancel
         </Button>
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Creating…" : "Create contact"}
+          {submitting
+            ? isEdit
+              ? "Saving…"
+              : "Creating…"
+            : isEdit
+              ? "Save changes"
+              : "Create contact"}
         </Button>
       </div>
     </form>

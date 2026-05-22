@@ -1,24 +1,30 @@
 import "server-only"
-import { and, eq, ilike, isNull, or, sql } from "drizzle-orm"
+import { and, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
 import { companies } from "@/modules/companies/schema"
 
 interface ListOptions {
   withDeleted?: boolean
+  /** Include archived contacts. Defaults to false — archived rows
+   * surface only on /contacts/archived. */
+  withArchived?: boolean
 }
 
 /**
- * All non-deleted contacts for the active org, ordered by last_name. RLS
- * scopes to org; no manual org_id filter. Caller passes `withDeleted: true`
- * to include tombstones (admin tooling only).
+ * All non-deleted, non-archived contacts for the active org, ordered
+ * by last_name. RLS scopes to org; no manual org_id filter. Caller
+ * passes `withDeleted` / `withArchived` to broaden.
  */
 export async function listContactsForOrg(opts: ListOptions = {}) {
   return withOrgContext(async (tx) => {
+    const conds = []
+    if (!opts.withDeleted) conds.push(isNull(contacts.deletedAt))
+    if (!opts.withArchived) conds.push(isNull(contacts.archivedAt))
     return tx
       .select()
       .from(contacts)
-      .where(opts.withDeleted ? undefined : isNull(contacts.deletedAt))
+      .where(conds.length > 0 ? and(...conds) : undefined)
       .orderBy(contacts.lastName, contacts.firstName)
   })
 }
@@ -137,6 +143,21 @@ export async function listDeletedContactsForOrg() {
       .from(contacts)
       .where(sql`${contacts.deletedAt} IS NOT NULL`)
       .orderBy(sql`${contacts.deletedAt} DESC NULLS LAST`)
+  })
+}
+
+/**
+ * Archived contacts — separate from deleted. Returns active (non-deleted)
+ * contacts where `archived_at IS NOT NULL`, most-recently-archived first.
+ * Powers /contacts/archived.
+ */
+export async function listArchivedContactsForOrg() {
+  return withOrgContext(async (tx) => {
+    return tx
+      .select()
+      .from(contacts)
+      .where(and(isNotNull(contacts.archivedAt), isNull(contacts.deletedAt)))
+      .orderBy(sql`${contacts.archivedAt} DESC NULLS LAST`)
   })
 }
 

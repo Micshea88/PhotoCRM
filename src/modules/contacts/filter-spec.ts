@@ -55,7 +55,10 @@ export interface ContactFilterOverrides {
  */
 export async function listContactsForView(filters: ContactFilterOverrides) {
   return withOrgContext(async (tx) => {
-    const conditions: (SQL | undefined)[] = [isNull(contacts.deletedAt)]
+    const conditions: (SQL | undefined)[] = [
+      isNull(contacts.deletedAt),
+      isNull(contacts.archivedAt),
+    ]
 
     if (filters.contactType) {
       conditions.push(eq(contacts.contactType, filters.contactType))

@@ -14,6 +14,7 @@ import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
 import {
   addContactCompanyAssociationInput,
+  archiveContactInput,
   bulkRestoreContactsInput,
   createContactInput,
   createContactNoteInput,
@@ -21,6 +22,7 @@ import {
   deleteContactNoteInput,
   removeContactCompanyAssociationInput,
   restoreContactInput,
+  unarchiveContactInput,
   updateContactCompanyAssociationInput,
   updateContactInput,
   updateContactNoteInput,
@@ -233,6 +235,87 @@ export const deleteContact = orgAction
       { resourceType: "contact", resourceId: parsedInput.id },
     )
     revalidatePath("/contacts")
+    return { id: parsedInput.id }
+  })
+
+/**
+ * Archive a contact — separate state from soft-delete. Archived
+ * contacts disappear from the main list + filter queries but stay
+ * recoverable indefinitely (no auto-purge). The Restore button on
+ * `/contacts/archived` calls `unarchiveContact`.
+ *
+ * Unlike soft-delete, archive does NOT need a typed-confirmation
+ * modal — easily reversible, low-stakes. Detail page renders an
+ * "Archive" button next to "Delete" that calls this directly.
+ */
+export const archiveContact = orgAction
+  .metadata({ actionName: "contacts.archive" })
+  .inputSchema(archiveContactInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({ archivedAt: new Date(), archivedBy: ctx.session.user.id })
+      .where(
+        and(
+          eq(contacts.id, parsedInput.id),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+          isNull(contacts.archivedAt),
+        ),
+      )
+      .returning({ id: contacts.id })
+    if (result.length === 0) {
+      throw new ActionError("NOT_FOUND", "Contact not found or already archived")
+    }
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "contacts.archived",
+      { resourceType: "contact", resourceId: parsedInput.id },
+    )
+    revalidatePath("/contacts")
+    revalidatePath("/contacts/archived")
+    revalidatePath(`/contacts/${parsedInput.id}`)
+    return { id: parsedInput.id }
+  })
+
+export const unarchiveContact = orgAction
+  .metadata({ actionName: "contacts.unarchive" })
+  .inputSchema(unarchiveContactInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({ archivedAt: null, archivedBy: null })
+      .where(
+        and(
+          eq(contacts.id, parsedInput.id),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNotNull(contacts.archivedAt),
+        ),
+      )
+      .returning({ id: contacts.id })
+    if (result.length === 0) {
+      throw new ActionError("NOT_FOUND", "Archived contact not found")
+    }
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "contacts.unarchived",
+      { resourceType: "contact", resourceId: parsedInput.id },
+    )
+    revalidatePath("/contacts")
+    revalidatePath("/contacts/archived")
+    revalidatePath(`/contacts/${parsedInput.id}`)
     return { id: parsedInput.id }
   })
 

@@ -5,7 +5,7 @@ import { getSession } from "@/modules/auth/session"
 import { getCurrentMember } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
-import { LEAD_SOURCE_DEFAULTS } from "@/modules/contacts/ui/lead-source-combobox"
+import { LEAD_SOURCE_DEFAULTS } from "@/modules/lead-sources/types"
 import { countContactsPerLeadSource, listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { LeadSourcesSettings } from "@/modules/lead-sources/ui/lead-sources-settings"
 

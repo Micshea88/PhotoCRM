@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
-import { LEAD_SOURCE_DEFAULTS } from "@/modules/contacts/ui/lead-source-combobox"
+import { LEAD_SOURCE_DEFAULTS } from "@/modules/lead-sources/types"
 import { deleteLeadSourceValue, hideLeadSource, showLeadSource } from "../actions"
 
 interface CustomRow {

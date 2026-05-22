@@ -3,23 +3,7 @@
 import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-
-/**
- * Seeded list of lead-source options shown by default. Per the
- * micro-commit scope. Listed in the order they should appear in the
- * dropdown. Free-text values entered later by users get merged
- * alphabetically below this list.
- */
-export const LEAD_SOURCE_DEFAULTS = [
-  "Vendor referral",
-  "Client referral",
-  "Google",
-  "Instagram",
-  "Facebook",
-  "Website",
-  "Networking event",
-  "Other",
-] as const
+import { LEAD_SOURCE_DEFAULTS } from "@/modules/lead-sources/types"
 
 /**
  * Lead-source picker. Dropdown of (seeded defaults) + (any custom

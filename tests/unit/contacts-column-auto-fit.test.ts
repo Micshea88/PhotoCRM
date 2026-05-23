@@ -40,14 +40,14 @@ describe("measureColumnAutoFit", () => {
   it("picks the widest of header label and cell values, plus padding", () => {
     const { ctx } = makeStub(8)
     // header is 4 chars (32 px); cells are 6 + 11 + 3 chars (88 px widest).
-    // 88 + padding 24 = 112.
+    // 88 + padding 32 (2c.1.1 default) = 120.
     const width = measureColumnAutoFit({
       ctx,
       font: "14px system-ui",
       headerLabel: "Name",
       cellValues: ["Lovely", "Janetheunit", "abc"],
     })
-    expect(width).toBe(112)
+    expect(width).toBe(120)
   })
 
   it("clamps below the floor", () => {
@@ -60,7 +60,7 @@ describe("measureColumnAutoFit", () => {
       min: 60,
       max: 400,
     })
-    // measured = 8 (char) + 24 (padding) = 32, clamped to min 60.
+    // measured = 8 (char) + 32 (padding) = 40, clamped to min 60.
     expect(width).toBe(60)
   })
 
@@ -75,7 +75,7 @@ describe("measureColumnAutoFit", () => {
       min: 60,
       max: 400,
     })
-    // measured ≈ 200 * 8 + 24 = 1624, clamped to max 400.
+    // measured ≈ 200 * 8 + 32 = 1632, clamped to max 400.
     expect(width).toBe(400)
   })
 

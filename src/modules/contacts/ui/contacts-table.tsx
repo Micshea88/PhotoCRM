@@ -174,15 +174,16 @@ export function ContactsTable({
     document.addEventListener("mouseup", onUp)
   }
 
-  // ── Auto-fit on dblclick (Push 2c.1) ────────────────────────────────
+  // ── Auto-fit on dblclick (Push 2c.1; tightened 2c.1.1) ──────────────
   // Measure the widest content via canvas measureText so CSS truncation
-  // doesn't fool the width. Clamped to [60, 400] inside the helper.
+  // doesn't fool the width. Uses def.measureText (not def.render) so
+  // a future render returning JSX doesn't silently mismeasure.
   function autoFitColumn(columnId: string, hostEl: Element) {
     const ctx = getMeasurementContext()
     if (!ctx) return
     const def = resolved.all.find((c) => c.id === columnId)?.def
     if (!def) return
-    const cellValues = rows.map((r) => def.render(r))
+    const cellValues = rows.map((r) => def.measureText(r))
     const next = measureColumnAutoFit({
       ctx,
       font: fontFromElement(hostEl),
@@ -270,11 +271,24 @@ export function ContactsTable({
                 {resolved.visible.map((col) => {
                   const cfg = resolved.all.find((c) => c.id === col.id)
                   const width = cfg?.width ?? col.defaultWidth
+                  const measured = col.measureText(row)
                   return (
                     <td
                       key={col.id}
-                      className="border-t border-r border-[var(--color-border)] px-4 py-2"
-                      style={{ width: width ? `${String(width)}px` : undefined }}
+                      // Push 2c.1.1 — truncate with ellipsis so narrow
+                      // user-set widths actually shrink (HubSpot pattern).
+                      // The default table-layout: auto refuses to shrink
+                      // columns below the widest unbreakable content
+                      // (emails have no spaces) — overflow-hidden +
+                      // whitespace-nowrap + text-ellipsis lifts that
+                      // constraint. `title` on the cell reveals the
+                      // untruncated text on hover.
+                      className="overflow-hidden border-t border-r border-[var(--color-border)] px-4 py-2 text-ellipsis whitespace-nowrap"
+                      style={{
+                        width: width ? `${String(width)}px` : undefined,
+                        maxWidth: width ? `${String(width)}px` : undefined,
+                      }}
+                      title={measured}
                     >
                       {col.render(row)}
                     </td>

@@ -447,8 +447,8 @@ function MapStep({
       <div>
         <h2 className="text-base font-medium">Map columns to contact fields</h2>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-          {String(rowCount)} data row{rowCount === 1 ? "" : "s"} found. We&apos;ve auto-mapped
-          familiar headers — confirm or change below. Each row needs at least one of{" "}
+          {rowCount === 1 ? "1 data row found." : `${String(rowCount)} data rows found.`} We&apos;ve
+          auto-mapped familiar headers — confirm or change below. Each row needs at least one of{" "}
           <strong>Full name</strong>, <strong>Last name</strong>, or <strong>Primary email</strong>{" "}
           mapped.
         </p>

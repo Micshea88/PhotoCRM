@@ -34,7 +34,10 @@ export interface MeasureColumnAutoFitParams {
   max?: number
 }
 
-const DEFAULT_PADDING = 24
+// Push 2c.1.1 — bumped from 24 → 32 after a real-world phone column
+// auto-fit wrapped to 2 lines. 32px matches actual cell padding (px-4
+// L+R = 32) plus a sort/resize-handle allowance.
+const DEFAULT_PADDING = 32
 const DEFAULT_MIN = 60
 const DEFAULT_MAX = 400
 

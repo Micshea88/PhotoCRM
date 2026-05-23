@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, eq, ilike, inArray, isNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { z } from "zod"
 import { ActionError, orgAction } from "@/lib/safe-action"
@@ -82,6 +82,28 @@ export const previewContactsImport = orgAction
 
     const emailList = [...emails]
     const phoneList = [...phones]
+    // Build the dedupe predicate with Drizzle's `inArray` helper.
+    // Earlier (Push 2c) this used a hand-rolled `= ANY(${arr}::text[])`
+    // template which Drizzle expands into `($2, $3, ...)::text[]` —
+    // PG rejects that as "cannot cast type record to text[]". A
+    // single-row import slipped past every test until 2c.1's
+    // production trace surfaced it. `inArray` produces `col IN ($1, ...)`
+    // which PG accepts.
+    const orParts: SQL[] = []
+    if (emailList.length > 0) {
+      orParts.push(inArray(sql`LOWER(${contacts.primaryEmail})`, emailList))
+    }
+    if (phoneList.length > 0) {
+      orParts.push(
+        inArray(
+          sql`REGEXP_REPLACE(COALESCE(${contacts.primaryPhone}, ''), '\\D', '', 'g')`,
+          phoneList,
+        ),
+      )
+    }
+    // If nothing to match against, return no matches — but still keep
+    // the predicate well-formed so Drizzle emits a valid query.
+    const matchPredicate = orParts.length > 0 ? or(...orParts) : sql`false`
     const matches = await ctx.db
       .select({
         id: contacts.id,
@@ -96,17 +118,7 @@ export const previewContactsImport = orgAction
           eq(contacts.organizationId, ctx.activeOrg.id),
           isNull(contacts.deletedAt),
           isNull(contacts.archivedAt),
-          emailList.length > 0 || phoneList.length > 0
-            ? sql`(${
-                emailList.length > 0
-                  ? sql`LOWER(${contacts.primaryEmail}) = ANY(${emailList}::text[])`
-                  : sql`false`
-              } OR ${
-                phoneList.length > 0
-                  ? sql`REGEXP_REPLACE(COALESCE(${contacts.primaryPhone}, ''), '\\D', '', 'g') = ANY(${phoneList}::text[])`
-                  : sql`false`
-              })`
-            : sql`false`,
+          matchPredicate,
         ),
       )
 
@@ -263,6 +275,10 @@ async function loadBulkContext(
   }
   const companiesByName = new Map<string, string>()
   if (companyNames.size > 0) {
+    // Same Drizzle `ANY(record)::text[]` trap as the contact-matcher
+    // above had — also, `ilike(col, ANY(...))` was nonsensical (ilike
+    // takes a single pattern). Use case-insensitive equality via
+    // LOWER + inArray. companyNames is already lowercased.
     const rows = await ctx.db
       .select({ id: companies.id, name: companies.name })
       .from(companies)
@@ -270,7 +286,7 @@ async function loadBulkContext(
         and(
           eq(companies.organizationId, ctx.activeOrg.id),
           isNull(companies.deletedAt),
-          ilike(companies.name, sql`ANY(${[...companyNames]}::text[])`),
+          inArray(sql`LOWER(${companies.name})`, [...companyNames]),
         ),
       )
     for (const r of rows) companiesByName.set(r.name.toLowerCase(), r.id)

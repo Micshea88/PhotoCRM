@@ -34,6 +34,26 @@ export interface ContactColumnDef {
   /** Default width in pixels (overridable per saved view). null = grow */
   defaultWidth: number | null
   render: (row: ContactRow) => string
+  /**
+   * Push 2c.1.1 — exact visible string for auto-fit width measurement.
+   * Defaults to mirroring `render`. Override when the rendered text and
+   * the measured text need to diverge (e.g., a future render returns
+   * JSX with icons; measureText returns just the words).
+   */
+  measureText: (row: ContactRow) => string
+}
+
+// Push 2c.1.1 — each entry's measureText returns the EXACT visible
+// rendered string so canvas measureText (used by the divider-dblclick
+// auto-fit) sees the same text the user sees. For columns where the
+// render function already returns a plain string, measureText is the
+// same function. Listed explicitly per column so a future render change
+// (e.g., adding an icon prefix) won't silently break auto-fit accuracy.
+function displayLabelText(row: ContactRow): string {
+  return contactLabel(
+    { firstName: row.firstName, lastName: row.lastName, primaryEmail: row.primaryEmail },
+    row.companyName,
+  )
 }
 
 export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
@@ -41,15 +61,8 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     id: "displayLabel",
     label: "Name",
     defaultWidth: null,
-    render: (row) =>
-      contactLabel(
-        {
-          firstName: row.firstName,
-          lastName: row.lastName,
-          primaryEmail: row.primaryEmail,
-        },
-        row.companyName,
-      ),
+    render: displayLabelText,
+    measureText: displayLabelText,
   },
   // Push 2c.1 — first name and last name as their own togglable columns.
   // Default-hidden (resolveContactColumns adds missing registry ids as
@@ -60,54 +73,63 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     label: "First name",
     defaultWidth: 140,
     render: (row) => row.firstName,
+    measureText: (row) => row.firstName,
   },
   lastName: {
     id: "lastName",
     label: "Last name",
     defaultWidth: 140,
     render: (row) => row.lastName,
+    measureText: (row) => row.lastName,
   },
   primaryEmail: {
     id: "primaryEmail",
     label: "Email",
     defaultWidth: null,
     render: (row) => row.primaryEmail ?? "",
+    measureText: (row) => row.primaryEmail ?? "",
   },
   primaryPhone: {
     id: "primaryPhone",
     label: "Phone",
     defaultWidth: 160,
     render: (row) => formatPhoneDisplay(row.primaryPhone),
+    measureText: (row) => formatPhoneDisplay(row.primaryPhone),
   },
   contactType: {
     id: "contactType",
     label: "Type",
     defaultWidth: 140,
     render: (row) => row.contactType ?? "",
+    measureText: (row) => row.contactType ?? "",
   },
   lifecycleStatus: {
     id: "lifecycleStatus",
     label: "Status",
     defaultWidth: 140,
     render: (row) => row.lifecycleStatus ?? "",
+    measureText: (row) => row.lifecycleStatus ?? "",
   },
   tags: {
     id: "tags",
     label: "Tags",
     defaultWidth: null,
     render: (row) => (row.tags ?? []).join(", "),
+    measureText: (row) => (row.tags ?? []).join(", "),
   },
   companyName: {
     id: "companyName",
     label: "Company",
     defaultWidth: null,
     render: (row) => row.companyName ?? "",
+    measureText: (row) => row.companyName ?? "",
   },
   createdAt: {
     id: "createdAt",
     label: "Created",
     defaultWidth: 140,
     render: (row) => row.createdAt.slice(0, 10),
+    measureText: (row) => row.createdAt.slice(0, 10),
   },
 }
 

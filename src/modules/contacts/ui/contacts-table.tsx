@@ -17,6 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { MoreVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -239,7 +240,10 @@ export function ContactsTable({
                   })}
                 </SortableContext>
               </DndContext>
-              <th className="w-10 border-b border-[var(--color-border)] px-2 py-2" />
+              <th
+                aria-label="Row actions"
+                className="w-12 shrink-0 border-b border-[var(--color-border)] px-2 py-2"
+              />
             </tr>
           </thead>
           <tbody>
@@ -295,42 +299,58 @@ export function ContactsTable({
                   )
                 })}
                 <td
-                  className="w-12 border-t border-[var(--color-border)] px-2 py-2 text-right"
+                  className="w-12 shrink-0 border-t border-[var(--color-border)] px-2 py-2"
                   onClick={(e) => {
                     e.stopPropagation()
                   }}
                 >
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      aria-label={`Actions for ${row.firstName} ${row.lastName}`}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-[var(--color-accent)]"
-                    >
-                      ⋮
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          router.push(`/contacts/${row.id}/edit`)
+                  {/*
+                   * Push 2c.2 — kebab cell restored to feature-parity with
+                   * Push 2a.5. The Push 2c rewrite for the bulk-checkbox
+                   * column left this rendering in place, but Push 2c.1.1's
+                   * overflow-hidden + maxWidth cascade on the data cells
+                   * combined with a w-10 ↔ w-12 header/body mismatch caused
+                   * the kebab to scroll off the right edge on narrow
+                   * viewports. Fixed by matching widths + `shrink-0` so the
+                   * cell never collapses, and switching from the ⋮ glyph
+                   * to the Lucide MoreVertical icon for visibility.
+                   */}
+                  <div className="flex justify-center">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        aria-label={`Actions for ${row.firstName} ${row.lastName}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
                         }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]"
                       >
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          onArchive(row.id)
-                        }}
-                      >
-                        Archive
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setDeleteTargetId(row.id)
-                        }}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <MoreVertical className="h-4 w-4" aria-hidden="true" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            router.push(`/contacts/${row.id}/edit`)
+                          }}
+                        >
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            onArchive(row.id)
+                          }}
+                        >
+                          Archive
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setDeleteTargetId(row.id)
+                          }}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </td>
               </tr>
             ))}

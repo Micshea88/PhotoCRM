@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
 import { runWithOrgContext } from "@/lib/org-context"
 import { getSession } from "@/modules/auth/session"
@@ -19,8 +18,6 @@ import {
   type ContactsPageSize,
   type CustomFieldFilter,
 } from "@/modules/contacts/filter-spec"
-import { Button } from "@/components/ui/button"
-import { ContactsOverflowMenu } from "@/modules/contacts/ui/contacts-overflow-menu"
 import { ContactsShell } from "@/modules/contacts/ui/contacts-shell"
 import type { SavedViewTab } from "@/modules/saved-views/ui/saved-views-tab-strip"
 import type { Visibility } from "@/modules/saved-views/types"
@@ -274,22 +271,6 @@ export default async function ContactsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Contacts</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            People — the permanent record. Switch views to slice the list, customize columns, or
-            save a new view.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/contacts/new">
-            <Button>New contact</Button>
-          </Link>
-          <ContactsOverflowMenu />
-        </div>
-      </div>
-
       <ContactsShell
         contacts={data.contacts}
         totalCount={data.totalCount}

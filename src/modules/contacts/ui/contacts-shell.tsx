@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -9,12 +10,13 @@ import {
 } from "@/modules/saved-views/ui/saved-views-tab-strip"
 import type { OrgMember } from "@/modules/saved-views/ui/visibility-modal"
 import type { Filter, Sort } from "@/modules/saved-views/types"
-import { BulkActionsMenu } from "./bulk-actions-menu"
+import { ContactsActionsDropdown } from "./contacts-actions-dropdown"
 import { ContactsFilterBar } from "./contacts-filter-bar"
 import { ContactsPagination } from "./contacts-pagination"
 import { ContactsTable, type ContactRow } from "./contacts-table"
 import { EditColumnsDrawer } from "./edit-columns-drawer"
 import { MoreFiltersDrawer, type CustomFieldDef } from "./more-filters-drawer"
+import { SelectionBanner } from "./selection-banner"
 import { CONTACT_COLUMN_REGISTRY, type ColumnConfigItem } from "./columns"
 import type { ContactsPageSize } from "../pagination"
 
@@ -173,6 +175,35 @@ export function ContactsShell({
 
   return (
     <div className="space-y-4">
+      {/*
+       * Push 2c.2 — page header lifted into the shell so the top-right
+       * toolbar (Actions / Import / New contact) can share state with
+       * the Edit columns drawer below. The page itself is a server
+       * component and can't open the drawer without prop-drilling.
+       */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Contacts</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            People — the permanent record. Switch views to slice the list, customize columns, or
+            save a new view.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ContactsActionsDropdown
+            onOpenEditColumns={() => {
+              setEditColumnsOpen(true)
+            }}
+          />
+          <Link href="/contacts/import">
+            <Button variant="outline">Import</Button>
+          </Link>
+          <Link href="/contacts/new">
+            <Button>New contact</Button>
+          </Link>
+        </div>
+      </div>
+
       <SavedViewsTabStrip
         views={views}
         activeViewId={activeViewId}
@@ -216,24 +247,24 @@ export function ContactsShell({
         }
       />
 
-      <div className="flex items-center justify-between gap-2">
+      {/*
+       * Push 2c.2 — selection banner replaces the "Actions" dropdown's
+       * 1+-selected face. The 0-selected face's org-level items moved
+       * to the top-header ContactsActionsDropdown above.
+       */}
+      <SelectionBanner
+        selectedIds={[...selectedIds]}
+        ownerOptions={ownerOptions}
+        tagOptions={tagOptions}
+        onClear={() => {
+          setSelectedIds(new Set())
+        }}
+      />
+      {selectedIds.size === 0 && (
         <p className="text-xs text-[var(--color-muted-foreground)]">
-          {selectedIds.size > 0
-            ? `${String(selectedIds.size)} selected`
-            : `${String(totalCount)} contact${totalCount === 1 ? "" : "s"}`}
+          {String(totalCount)} contact{totalCount === 1 ? "" : "s"}
         </p>
-        <BulkActionsMenu
-          selectedIds={[...selectedIds]}
-          ownerOptions={ownerOptions}
-          tagOptions={tagOptions}
-          onOpenEditColumns={() => {
-            setEditColumnsOpen(true)
-          }}
-          onAfterAction={() => {
-            setSelectedIds(new Set())
-          }}
-        />
-      </div>
+      )}
 
       {cappedOut ? (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-6 text-sm">

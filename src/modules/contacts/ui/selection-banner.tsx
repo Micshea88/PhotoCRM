@@ -1,16 +1,9 @@
 "use client"
 
-import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
 import {
@@ -23,29 +16,33 @@ import {
 import { LIFECYCLE_STATUSES, type LifecycleStatus } from "../types"
 
 /**
- * Push 2c — top-right table toolbar with two faces:
+ * Push 2c.2 — selection banner.
  *
- *   - 0 selected: { Edit columns, Import contacts }
- *   - 1+ selected: { Delete N, Change owner, Change status, Add tag, Remove tag }
+ * Replaces the row-above-table "Actions" dropdown's 1+-selected state
+ * with a HubSpot-style contextual banner. Appears only when at least
+ * one contact row is selected; bulk-action buttons render inline on
+ * the right.
  *
- * Each bulk action opens a small inline modal collecting the
- * action-specific argument(s), then dispatches the server action and
- * clears the selection via `onAfterAction`. Errors surface via the
- * shared alert() — same convention as the saved-views tab strip.
+ * Visual: matches the SavedViewBanner pattern from Push 2c (light
+ * primary-tinted background, primary-tinted border, rounded). Sits
+ * above the table, below the saved-view banner.
+ *
+ * Accessibility:
+ *   - The "N selected" count is wrapped in aria-live="polite" so screen
+ *     readers announce selection changes without grabbing focus.
+ *   - Esc key globally clears the selection while this banner is open.
  */
-export function BulkActionsMenu({
+export function SelectionBanner({
   selectedIds,
   ownerOptions,
   tagOptions,
-  onOpenEditColumns,
-  onAfterAction,
+  onClear,
 }: {
   selectedIds: string[]
   ownerOptions: { id: string; name: string | null; email: string }[]
   tagOptions: string[]
-  onOpenEditColumns: () => void
-  /** Called after a successful bulk action — host clears selection + refreshes. */
-  onAfterAction: () => void
+  /** Called after a successful bulk action OR when the user clicks Clear / hits Esc. */
+  onClear: () => void
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -56,7 +53,24 @@ export function BulkActionsMenu({
   const [removeTagOpen, setRemoveTagOpen] = useState(false)
 
   const count = selectedIds.length
-  const hasSelection = count > 0
+
+  // Esc clears the selection. Window-level so it works regardless of
+  // focus (table cells don't typically receive keyboard focus on click).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return
+      // Don't steal Esc when a modal is open — let the modal close first.
+      if (deleteOpen || ownerOpen || statusOpen || addTagOpen || removeTagOpen) return
+      if (count === 0) return
+      onClear()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [count, onClear, deleteOpen, ownerOpen, statusOpen, addTagOpen, removeTagOpen])
+
+  if (count === 0) return null
 
   async function runAndFinish(fn: () => Promise<{ serverError?: string }>) {
     setBusy(true)
@@ -66,71 +80,85 @@ export function BulkActionsMenu({
       alert(result.serverError)
       return
     }
-    onAfterAction()
+    onClear()
     router.refresh()
   }
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Actions"
-          className="inline-flex h-9 items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm hover:bg-[var(--color-accent)]"
-          disabled={busy}
-        >
-          <span>{hasSelection ? `Actions (${String(count)})` : "Actions"}</span>
-          <span aria-hidden="true">▾</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {!hasSelection && (
-            <>
-              <DropdownMenuItem onSelect={onOpenEditColumns}>Edit columns</DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/contacts/import">Import contacts</Link>
-              </DropdownMenuItem>
-            </>
-          )}
-          {hasSelection && (
-            <>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setDeleteOpen(true)
-                }}
-              >
-                Delete {String(count)}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setOwnerOpen(true)
-                }}
-              >
-                Change owner
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setStatusOpen(true)
-                }}
-              >
-                Change status
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setAddTagOpen(true)
-                }}
-              >
-                Add tag
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setRemoveTagOpen(true)
-                }}
-              >
-                Remove tag
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div
+        role="region"
+        aria-label="Bulk actions for selected contacts"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 px-3 py-2 text-sm"
+      >
+        <div className="flex items-center gap-3">
+          <span aria-live="polite" className="font-medium">
+            {String(count)} selected
+          </span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs text-[var(--color-muted-foreground)] underline-offset-2 hover:text-[var(--color-foreground)] hover:underline"
+            disabled={busy}
+          >
+            Clear
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setOwnerOpen(true)
+            }}
+          >
+            Change owner
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setStatusOpen(true)
+            }}
+          >
+            Change status
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setAddTagOpen(true)
+            }}
+          >
+            Add tag
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setRemoveTagOpen(true)
+            }}
+          >
+            Remove tag
+          </Button>
+          <Button
+            size="sm"
+            // Destructive style — red bg via inline class since the
+            // current Button variant set doesn't ship a "destructive".
+            className="bg-red-600 text-white hover:bg-red-700"
+            disabled={busy}
+            onClick={() => {
+              setDeleteOpen(true)
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
 
       <DeleteConfirmModal
         open={deleteOpen}
@@ -217,6 +245,10 @@ export function BulkActionsMenu({
     </>
   )
 }
+
+// ─── Modals ────────────────────────────────────────────────────────────
+// Identical shape to the modals that lived in the old bulk-actions-menu;
+// kept inline here so SelectionBanner is self-contained.
 
 function ChangeOwnerModal({
   open,

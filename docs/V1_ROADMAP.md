@@ -83,6 +83,7 @@ Goals shipped after V1 validates with real users:
 - Saved view categories (Provided / Admin Promoted / etc.)
 - Tickets (customer support)
 - Community space
+- **Restore CRM changes** — full per-record version history with restore. Each field update captures the previous value so users can undo any change after the fact. Requires versioning schema (a `record_changes` table keyed by `(record_type, record_id)` with `field_path`, `old_value`, `new_value`, `actor_user_id`, `changed_at`), a restore action that re-applies a captured snapshot, and a conflict-resolution UI for the case where the field has changed since the snapshot was taken. The Push 2c.2 "Restore records" affordance restores soft-deleted _rows_ — this V2 feature would restore individual _field changes_. Deferred because the storage + UI cost is substantial and V1 users can manually retype.
 
 ---
 

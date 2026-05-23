@@ -14,6 +14,14 @@ export interface FilterBarProps {
   companyOptions: { id: string; name: string }[]
   leadSourceOptions: string[]
   hiddenLeadSources: string[]
+  /**
+   * Optional content appended to the chip row as a sibling of the chips.
+   * Used by the contacts shell to inline the "+ More filters" button so
+   * it sits immediately after the last chip on the same flex line (and
+   * wraps with the chips on narrow viewports instead of dropping to its
+   * own row).
+   */
+  trailingChips?: React.ReactNode
 }
 
 /**
@@ -347,6 +355,7 @@ export function ContactsFilterBar(props: FilterBarProps) {
             )}
           </div>
         </FilterChip>
+        {props.trailingChips}
       </div>
     </div>
   )

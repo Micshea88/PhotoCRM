@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   SavedViewsTabStrip,
@@ -83,8 +83,6 @@ export function ContactsShell({
   customFieldDefs,
 }: ContactsShellProps) {
   const params = useSearchParams()
-  const pathname = usePathname()
-  const router = useRouter()
 
   const activeView = views.find((v) => v.id === activeViewId)
 
@@ -148,12 +146,6 @@ export function ContactsShell({
 
   const resolvedCols = resolveContactColumns(columnConfig)
 
-  function clearAllOverrides() {
-    // Drop every URL param except `view`. Resets the column state too.
-    setColumnConfig(activeView?.columnConfig ?? [])
-    router.push(`${pathname}?view=${activeViewId}`)
-  }
-
   return (
     <div className="space-y-4">
       <SavedViewsTabStrip
@@ -173,29 +165,19 @@ export function ContactsShell({
         companyOptions={companyOptions}
         leadSourceOptions={leadSourceOptions}
         hiddenLeadSources={hiddenLeadSources}
-      />
-
-      <div className="flex items-center justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setMoreFiltersOpen(true)
-          }}
-        >
-          + More filters{morePanelCount > 0 ? ` (${String(morePanelCount)})` : ""}
-        </Button>
-        {isDirty && (
-          <button
+        trailingChips={
+          <Button
             type="button"
-            onClick={clearAllOverrides}
-            className="text-xs text-[var(--color-muted-foreground)] hover:underline"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setMoreFiltersOpen(true)
+            }}
           >
-            Reset view to saved
-          </button>
-        )}
-      </div>
+            + More filters{morePanelCount > 0 ? ` (${String(morePanelCount)})` : ""}
+          </Button>
+        }
+      />
 
       {contacts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">

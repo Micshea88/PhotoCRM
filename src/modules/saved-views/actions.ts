@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, count, eq, isNotNull, isNull } from "drizzle-orm"
+import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
@@ -14,8 +14,8 @@ import {
   createSavedViewInput,
   deleteSavedViewInput,
   duplicateSavedViewInput,
+  MAX_PINNED_VIEWS,
   restoreSavedViewInput,
-  SAVED_VIEW_PER_USER_LIMIT,
   savedViewObjectTypeSchema,
   updateSavedViewInput,
 } from "./types"
@@ -71,27 +71,6 @@ export const createSavedView = orgAction
   .metadata({ actionName: "saved_views.create" })
   .inputSchema(createSavedViewInput)
   .action(async ({ parsedInput, ctx }) => {
-    // 8-view soft limit per user per object_type. System defaults
-    // (owner_user_id IS NULL) do not count.
-    const countRows = await ctx.db
-      .select({ value: count() })
-      .from(savedViews)
-      .where(
-        and(
-          eq(savedViews.organizationId, ctx.activeOrg.id),
-          eq(savedViews.ownerUserId, ctx.session.user.id),
-          eq(savedViews.objectType, parsedInput.objectType),
-          isNull(savedViews.deletedAt),
-        ),
-      )
-    const existingCount = countRows[0]?.value ?? 0
-    if (existingCount >= SAVED_VIEW_PER_USER_LIMIT) {
-      throw new ActionError(
-        "CONFLICT",
-        `You've reached the maximum of ${String(SAVED_VIEW_PER_USER_LIMIT)} saved views for ${parsedInput.objectType}. Delete one first to save another.`,
-      )
-    }
-
     const id = createId()
     await ctx.db.insert(savedViews).values({
       id,
@@ -267,26 +246,6 @@ export const duplicateSavedView = orgAction
       throw new ActionError("NOT_FOUND", "Saved view not found")
     }
 
-    // 8-limit applies to the clone owner too.
-    const dupCountRows = await ctx.db
-      .select({ value: count() })
-      .from(savedViews)
-      .where(
-        and(
-          eq(savedViews.organizationId, ctx.activeOrg.id),
-          eq(savedViews.ownerUserId, ctx.session.user.id),
-          eq(savedViews.objectType, source.objectType),
-          isNull(savedViews.deletedAt),
-        ),
-      )
-    const existingCount = dupCountRows[0]?.value ?? 0
-    if (existingCount >= SAVED_VIEW_PER_USER_LIMIT) {
-      throw new ActionError(
-        "CONFLICT",
-        `You've reached the maximum of ${String(SAVED_VIEW_PER_USER_LIMIT)} saved views for ${source.objectType}. Delete one first to save another.`,
-      )
-    }
-
     const id = createId()
     await ctx.db.insert(savedViews).values({
       id,
@@ -324,20 +283,29 @@ export const duplicateSavedView = orgAction
   })
 
 // ──────────────────────────────────────────────────────────────────────
-// user_object_view_prefs — per-user tab order + last-viewed
+// user_object_view_prefs — per-user pinned tabs, default, last-viewed,
+// page size.
 // ──────────────────────────────────────────────────────────────────────
 
 const updateViewPrefsInput = z.object({
   objectType: savedViewObjectTypeSchema,
-  orderedViewIds: z.array(z.string().min(1).max(64)).max(32).optional(),
+  pinnedViewIds: z.array(z.string().min(1).max(64)).max(MAX_PINNED_VIEWS).optional(),
   lastViewedViewId: z.string().min(1).max(64).nullable().optional(),
+  defaultViewId: z.string().min(1).max(64).nullable().optional(),
+  contactPageSize: z.union([z.literal(25), z.literal(50), z.literal(100)]).optional(),
 })
 
 /**
- * Upsert the caller's view prefs for one object type. Both fields are
- * optional in the input — pass only the one you're changing. The other
- * stays as-is on update; on first-time insert it falls back to the
- * column default.
+ * Upsert the caller's view prefs for one object type. Every field is
+ * optional — pass only what's changing. The Drizzle composite-PK
+ * upsert atomically inserts a row on first call and patches only the
+ * provided fields on subsequent calls, so an "update only last_viewed"
+ * doesn't blow away pinnedViewIds (and vice versa).
+ *
+ * The Zod schema caps pinnedViewIds at MAX_PINNED_VIEWS so a raw POST
+ * with 50 ids fails Zod-side before reaching the DB. The dedicated
+ * pinView action is the friendly-error path for "you already pinned
+ * 6 — unpin one first".
  *
  * No audit: this is per-user UX state, not org-shared data.
  */
@@ -345,25 +313,29 @@ export const updateUserViewPrefs = orgAction
   .metadata({ actionName: "saved_views.prefs.update" })
   .inputSchema(updateViewPrefsInput)
   .action(async ({ parsedInput, ctx }) => {
-    // Drizzle's onConflictDoUpdate with composite PK lets us atomically
-    // upsert. The .set() target uses excluded.<col> only for fields the
-    // caller actually provided, so an "update only last_viewed" call
-    // doesn't blow away orderedViewIds (and vice versa).
     const insertValues = {
       organizationId: ctx.activeOrg.id,
       userId: ctx.session.user.id,
       objectType: parsedInput.objectType,
-      orderedViewIds: parsedInput.orderedViewIds ?? [],
+      pinnedViewIds: parsedInput.pinnedViewIds ?? [],
       lastViewedViewId: parsedInput.lastViewedViewId ?? null,
+      defaultViewId: parsedInput.defaultViewId ?? null,
+      contactPageSize: parsedInput.contactPageSize ?? 50,
       updatedAt: new Date(),
     }
     type Patch = Partial<typeof userObjectViewPrefs.$inferInsert>
     const updateSet: Patch = { updatedAt: new Date() }
-    if (parsedInput.orderedViewIds !== undefined) {
-      updateSet.orderedViewIds = parsedInput.orderedViewIds
+    if (parsedInput.pinnedViewIds !== undefined) {
+      updateSet.pinnedViewIds = parsedInput.pinnedViewIds
     }
     if (parsedInput.lastViewedViewId !== undefined) {
       updateSet.lastViewedViewId = parsedInput.lastViewedViewId
+    }
+    if (parsedInput.defaultViewId !== undefined) {
+      updateSet.defaultViewId = parsedInput.defaultViewId
+    }
+    if (parsedInput.contactPageSize !== undefined) {
+      updateSet.contactPageSize = parsedInput.contactPageSize
     }
     await ctx.db
       .insert(userObjectViewPrefs)
@@ -375,6 +347,187 @@ export const updateUserViewPrefs = orgAction
           userObjectViewPrefs.objectType,
         ],
         set: updateSet,
+      })
+    revalidatePath(`/${parsedInput.objectType}s`)
+    return { ok: true as const }
+  })
+
+const pinViewInput = z.object({
+  objectType: savedViewObjectTypeSchema,
+  viewId: z.string().min(1).max(64),
+})
+
+/**
+ * Add a view to the caller's pinned-tab list for one object_type.
+ * Idempotent — re-pinning an already-pinned id is a no-op (no error).
+ * 6-pinned-cap enforced here with a friendly error.
+ *
+ * The caller must be able to SEE the view via RLS — we re-select the
+ * row first to fail-fast with NOT_FOUND instead of letting a stale
+ * client-side id silently pin.
+ */
+export const pinView = orgAction
+  .metadata({ actionName: "saved_views.pin" })
+  .inputSchema(pinViewInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const [view] = await ctx.db
+      .select({ id: savedViews.id, objectType: savedViews.objectType })
+      .from(savedViews)
+      .where(
+        and(
+          eq(savedViews.id, parsedInput.viewId),
+          eq(savedViews.organizationId, ctx.activeOrg.id),
+          eq(savedViews.objectType, parsedInput.objectType),
+          isNull(savedViews.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!view) throw new ActionError("NOT_FOUND", "Saved view not found")
+
+    const [existing] = await ctx.db
+      .select({ pinned: userObjectViewPrefs.pinnedViewIds })
+      .from(userObjectViewPrefs)
+      .where(
+        and(
+          eq(userObjectViewPrefs.organizationId, ctx.activeOrg.id),
+          eq(userObjectViewPrefs.userId, ctx.session.user.id),
+          eq(userObjectViewPrefs.objectType, parsedInput.objectType),
+        ),
+      )
+      .limit(1)
+    const current = existing?.pinned ?? []
+    if (current.includes(parsedInput.viewId)) {
+      return { ok: true as const }
+    }
+    if (current.length >= MAX_PINNED_VIEWS) {
+      throw new ActionError(
+        "CONFLICT",
+        `You already pinned ${String(MAX_PINNED_VIEWS)} views. Unpin one before pinning another.`,
+      )
+    }
+    const next = [...current, parsedInput.viewId]
+    await ctx.db
+      .insert(userObjectViewPrefs)
+      .values({
+        organizationId: ctx.activeOrg.id,
+        userId: ctx.session.user.id,
+        objectType: parsedInput.objectType,
+        pinnedViewIds: next,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          userObjectViewPrefs.organizationId,
+          userObjectViewPrefs.userId,
+          userObjectViewPrefs.objectType,
+        ],
+        set: { pinnedViewIds: next, updatedAt: new Date() },
+      })
+    revalidatePath(`/${parsedInput.objectType}s`)
+    return { ok: true as const }
+  })
+
+const unpinViewInput = z.object({
+  objectType: savedViewObjectTypeSchema,
+  viewId: z.string().min(1).max(64),
+})
+
+/**
+ * Remove a view from the caller's pinned-tab list. Idempotent — if the
+ * id isn't currently pinned, this is a no-op (no error). Unpinning does
+ * NOT delete the saved view itself; it just hides it from the tab strip.
+ * The view stays accessible via Manage views.
+ *
+ * If the unpinned view was also the caller's default_view_id, we
+ * deliberately leave default_view_id alone — the page-load fallback
+ * still resolves correctly via getSavedViewForUser, and re-pinning
+ * later resurrects the tab.
+ */
+export const unpinView = orgAction
+  .metadata({ actionName: "saved_views.unpin" })
+  .inputSchema(unpinViewInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const [existing] = await ctx.db
+      .select({ pinned: userObjectViewPrefs.pinnedViewIds })
+      .from(userObjectViewPrefs)
+      .where(
+        and(
+          eq(userObjectViewPrefs.organizationId, ctx.activeOrg.id),
+          eq(userObjectViewPrefs.userId, ctx.session.user.id),
+          eq(userObjectViewPrefs.objectType, parsedInput.objectType),
+        ),
+      )
+      .limit(1)
+    const current = existing?.pinned ?? []
+    if (!current.includes(parsedInput.viewId)) {
+      return { ok: true as const }
+    }
+    const next = current.filter((id) => id !== parsedInput.viewId)
+    await ctx.db
+      .update(userObjectViewPrefs)
+      .set({ pinnedViewIds: next, updatedAt: new Date() })
+      .where(
+        and(
+          eq(userObjectViewPrefs.organizationId, ctx.activeOrg.id),
+          eq(userObjectViewPrefs.userId, ctx.session.user.id),
+          eq(userObjectViewPrefs.objectType, parsedInput.objectType),
+        ),
+      )
+    revalidatePath(`/${parsedInput.objectType}s`)
+    return { ok: true as const }
+  })
+
+const setDefaultViewInput = z.object({
+  objectType: savedViewObjectTypeSchema,
+  viewId: z.string().min(1).max(64).nullable(),
+})
+
+/**
+ * Set the caller's default_view_id for one object_type. Pass `viewId:
+ * null` to clear (falls back to the system All Contacts default at
+ * page-load).
+ *
+ * The viewId, when non-null, must point at a view the caller can SEE
+ * (RLS-gated) and that matches the object_type. We don't enforce
+ * "must be one of your pinned views" — a user can default to a view
+ * they have unpinned, and it'll resolve fine at page-load even if not
+ * in the tab strip.
+ */
+export const setDefaultView = orgAction
+  .metadata({ actionName: "saved_views.set_default" })
+  .inputSchema(setDefaultViewInput)
+  .action(async ({ parsedInput, ctx }) => {
+    if (parsedInput.viewId !== null) {
+      const [view] = await ctx.db
+        .select({ id: savedViews.id })
+        .from(savedViews)
+        .where(
+          and(
+            eq(savedViews.id, parsedInput.viewId),
+            eq(savedViews.organizationId, ctx.activeOrg.id),
+            eq(savedViews.objectType, parsedInput.objectType),
+            isNull(savedViews.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!view) throw new ActionError("NOT_FOUND", "Saved view not found")
+    }
+    await ctx.db
+      .insert(userObjectViewPrefs)
+      .values({
+        organizationId: ctx.activeOrg.id,
+        userId: ctx.session.user.id,
+        objectType: parsedInput.objectType,
+        defaultViewId: parsedInput.viewId,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          userObjectViewPrefs.organizationId,
+          userObjectViewPrefs.userId,
+          userObjectViewPrefs.objectType,
+        ],
+        set: { defaultViewId: parsedInput.viewId, updatedAt: new Date() },
       })
     revalidatePath(`/${parsedInput.objectType}s`)
     return { ok: true as const }

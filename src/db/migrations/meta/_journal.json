@@ -183,6 +183,13 @@
       "when": 1779511727401,
       "tag": "0025_backfill_all_contacts_default",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779515574227,
+      "tag": "0026_push_2c_pinned_views_default_pagesize",
+      "breakpoints": true
     }
   ]
 }

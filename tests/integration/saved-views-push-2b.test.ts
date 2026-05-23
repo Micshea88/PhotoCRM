@@ -1,12 +1,11 @@
 /**
- * Push 2b — saved-views action-layer + filter-spec integration tests.
+ * Push 2b — contacts filter-spec integration tests.
  *
- * Covers:
- *   - 8/user/object_type soft limit invariant (count shape verified)
- *   - System defaults don't count toward the limit
- *   - user_object_view_prefs upsert preserves the unchanged field
- *   - SQL behavior for the new contact filter shapes (hasPhone, hasEmail,
- *     custom-fields contains, openTasks EXISTS subquery)
+ * Covers SQL behavior for the new contact filter shapes (hasPhone,
+ * custom-fields contains, last-activity range). The 8-cap / ordered-
+ * view-ids tests that originally lived here moved out in Push 2c:
+ *   - 8-cap removed (unlimited saved views; only pinned tabs are capped)
+ *   - ordered_view_ids → pinned_view_ids (see saved-views-push-2c.test.ts)
  *
  * Per the repo convention (see dashboard-queries.test.ts header), tests
  * inline SQL instead of calling the query helpers — the helpers open
@@ -15,129 +14,11 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { and, eq, isNull, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { withTestDb, setOrgContext } from "../helpers/db"
 import { createOrganization, createUser } from "../helpers/factories"
-import { savedViews, userObjectViewPrefs } from "@/modules/saved-views/schema"
 import { contacts } from "@/modules/contacts/schema"
-import { SAVED_VIEW_PER_USER_LIMIT } from "@/modules/saved-views/types"
-
-describe("saved_views — 8/user/object_type limit invariant", () => {
-  it("user-owned non-deleted contact view count = 8 after 8 inserts", async () => {
-    await withTestDb(async (db) => {
-      const userId = await createUser(db)
-      const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId, "owner", userId)
-
-      for (let i = 0; i < SAVED_VIEW_PER_USER_LIMIT; i++) {
-        await db.insert(savedViews).values({
-          id: createId(),
-          organizationId: orgId,
-          objectType: "contact",
-          name: `View ${String(i)}`,
-          ownerUserId: userId,
-          visibility: "private",
-          createdBy: userId,
-          updatedBy: userId,
-        })
-      }
-
-      const rows = await db
-        .select()
-        .from(savedViews)
-        .where(
-          and(
-            eq(savedViews.organizationId, orgId),
-            eq(savedViews.ownerUserId, userId),
-            eq(savedViews.objectType, "contact"),
-            isNull(savedViews.deletedAt),
-          ),
-        )
-      expect(rows.length).toBe(SAVED_VIEW_PER_USER_LIMIT)
-    })
-  })
-
-  it("system defaults (NULL owner) don't count against the user limit", async () => {
-    await withTestDb(async (db) => {
-      const userId = await createUser(db)
-      const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId, "owner", userId)
-
-      // INSERT a system default — null owner, is_default, visibility=org.
-      // The RLS INSERT policy lets this through regardless of user_id.
-      await db.insert(savedViews).values({
-        id: createId(),
-        organizationId: orgId,
-        objectType: "contact",
-        name: "All Contacts",
-        ownerUserId: null,
-        visibility: "org",
-        isDefault: true,
-      })
-
-      const ownedCount = (
-        await db
-          .select()
-          .from(savedViews)
-          .where(
-            and(
-              eq(savedViews.organizationId, orgId),
-              eq(savedViews.ownerUserId, userId),
-              eq(savedViews.objectType, "contact"),
-              isNull(savedViews.deletedAt),
-            ),
-          )
-      ).length
-      expect(ownedCount).toBe(0)
-    })
-  })
-})
-
-describe("user_object_view_prefs — upsert preserves unchanged fields", () => {
-  it("setting last_viewed alone does not blow away ordered_view_ids", async () => {
-    await withTestDb(async (db) => {
-      const userId = await createUser(db)
-      const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId, "owner", userId)
-
-      // First insert: orderedViewIds populated, lastViewedViewId null.
-      await db.insert(userObjectViewPrefs).values({
-        organizationId: orgId,
-        userId,
-        objectType: "contact",
-        orderedViewIds: ["view-a", "view-b"],
-      })
-
-      // Mimic the action's "update last_viewed only" upsert: set ONLY
-      // the lastViewedViewId field in the patch.
-      await db
-        .insert(userObjectViewPrefs)
-        .values({
-          organizationId: orgId,
-          userId,
-          objectType: "contact",
-          orderedViewIds: [],
-          lastViewedViewId: null,
-        })
-        .onConflictDoUpdate({
-          target: [
-            userObjectViewPrefs.organizationId,
-            userObjectViewPrefs.userId,
-            userObjectViewPrefs.objectType,
-          ],
-          set: { updatedAt: new Date() },
-        })
-
-      const [row] = await db
-        .select()
-        .from(userObjectViewPrefs)
-        .where(eq(userObjectViewPrefs.userId, userId))
-        .limit(1)
-      expect(row?.orderedViewIds).toEqual(["view-a", "view-b"])
-    })
-  })
-})
 
 describe("contacts — Push 2b filter SQL shapes", () => {
   it("hasPhone — IS NOT NULL AND NULLIF != '' returns rows with non-empty phone", async () => {

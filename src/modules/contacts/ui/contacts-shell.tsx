@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useMemo, useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   SavedViewsTabStrip,
@@ -9,11 +9,14 @@ import {
 } from "@/modules/saved-views/ui/saved-views-tab-strip"
 import type { OrgMember } from "@/modules/saved-views/ui/visibility-modal"
 import type { Filter, Sort } from "@/modules/saved-views/types"
+import { BulkActionsMenu } from "./bulk-actions-menu"
 import { ContactsFilterBar } from "./contacts-filter-bar"
+import { ContactsPagination } from "./contacts-pagination"
 import { ContactsTable, type ContactRow } from "./contacts-table"
 import { EditColumnsDrawer } from "./edit-columns-drawer"
 import { MoreFiltersDrawer, type CustomFieldDef } from "./more-filters-drawer"
-import { CONTACT_COLUMN_REGISTRY, resolveContactColumns, type ColumnConfigItem } from "./columns"
+import { CONTACT_COLUMN_REGISTRY, type ColumnConfigItem } from "./columns"
+import type { ContactsPageSize } from "../pagination"
 
 /**
  * Push 2b client shell for /contacts. Wraps the saved-view tab strip,
@@ -46,12 +49,24 @@ import { CONTACT_COLUMN_REGISTRY, resolveContactColumns, type ColumnConfigItem }
 
 interface ContactsShellProps {
   contacts: ContactRow[]
-  /** Hint for "Showing N contacts" footer. Same number as contacts.length, kept explicit. */
+  /** Total matching rows, capped at CONTACTS_LIST_HARD_CAP. */
   totalCount: number
+  /** True when the unfiltered match set crossed 10k — host renders refine-filters banner. */
+  cappedOut: boolean
+  /** Current page (1-indexed). */
+  page: number
+  /** Active page size (25 / 50 / 100). */
+  pageSize: ContactsPageSize
   /** Available saved views the user can see (tab strip + dirty state). */
   views: SavedViewTab[]
-  /** Per-user tab order (saved-view ids, system default is implicit-leftmost). */
-  orderedViewIds: string[]
+  /** Per-user pinned saved-view ids. Renders verbatim in the tab strip. */
+  pinnedViewIds: string[]
+  /** Per-user "set as my default" view id, or null to fall back to All Contacts. */
+  defaultViewId: string | null
+  /** True if a prefs row exists for this user+contact. Drives auto-pin behavior. */
+  hasPrefsRow: boolean
+  /** id → createdAt ISO for the Manage views drawer's Created sort. */
+  createdAtById: Record<string, string>
   /** Resolved active view id (?view= or fallback to system default). */
   activeViewId: string
   /** Session user id — drives owner-only menu items. */
@@ -70,8 +85,14 @@ interface ContactsShellProps {
 export function ContactsShell({
   contacts,
   totalCount,
+  cappedOut,
+  page,
+  pageSize,
   views,
-  orderedViewIds,
+  pinnedViewIds,
+  defaultViewId,
+  hasPrefsRow,
+  createdAtById,
   activeViewId,
   currentUserId,
   members,
@@ -83,6 +104,9 @@ export function ContactsShell({
   customFieldDefs,
 }: ContactsShellProps) {
   const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const [, startTransition] = useTransition()
 
   const activeView = views.find((v) => v.id === activeViewId)
 
@@ -119,6 +143,9 @@ export function ContactsShell({
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
   const [editColumnsOpen, setEditColumnsOpen] = useState(false)
 
+  // ── Selection state for bulk actions (Push 2c Part 2) ───────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
   // ── Snapshot the "current state" passed to Save/Save-as. ──────────────
   const currentState = useMemo(
     () => ({
@@ -144,19 +171,29 @@ export function ContactsShell({
     return n
   }, [params])
 
-  const resolvedCols = resolveContactColumns(columnConfig)
-
   return (
     <div className="space-y-4">
       <SavedViewsTabStrip
         views={views}
         activeViewId={activeViewId}
-        orderedViewIds={orderedViewIds}
+        pinnedViewIds={pinnedViewIds}
+        defaultViewId={defaultViewId}
+        hasPrefsRow={hasPrefsRow}
+        createdAtById={createdAtById}
         currentUserId={currentUserId}
         objectType="contact"
         members={members}
         isDirty={isDirty}
         currentState={currentState}
+        onDiscard={() => {
+          // Discard = revert to the view's saved state: clear all URL
+          // filter overrides (everything except ?view=) AND reset client
+          // column state to the active view's columnConfig.
+          setColumnConfig(activeView?.columnConfig ?? [])
+          startTransition(() => {
+            router.push(activeViewId ? `${pathname}?view=${activeViewId}` : pathname)
+          })
+        }}
       />
 
       <ContactsFilterBar
@@ -179,28 +216,54 @@ export function ContactsShell({
         }
       />
 
-      {contacts.length === 0 ? (
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-[var(--color-muted-foreground)]">
+          {selectedIds.size > 0
+            ? `${String(selectedIds.size)} selected`
+            : `${String(totalCount)} contact${totalCount === 1 ? "" : "s"}`}
+        </p>
+        <BulkActionsMenu
+          selectedIds={[...selectedIds]}
+          ownerOptions={ownerOptions}
+          tagOptions={tagOptions}
+          onOpenEditColumns={() => {
+            setEditColumnsOpen(true)
+          }}
+          onAfterAction={() => {
+            setSelectedIds(new Set())
+          }}
+        />
+      </div>
+
+      {cappedOut ? (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-6 text-sm">
+          <p className="font-medium text-amber-800 dark:text-amber-200">
+            Too many matches to display
+          </p>
+          <p className="mt-1 text-amber-700 dark:text-amber-300">
+            More than 10,000 contacts match the current filters. Refine your filters (or pick a
+            narrower saved view) to bring the list under the cap, or export your full dataset from
+            Settings.
+          </p>
+        </div>
+      ) : contacts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">
           <p className="text-sm text-[var(--color-muted-foreground)]">
             No contacts match the current filters.
           </p>
         </div>
       ) : (
-        <ContactsTable
-          rows={contacts}
-          columnConfig={columnConfig}
-          onColumnConfigChange={setColumnConfig}
-          onOpenEditColumns={() => {
-            setEditColumnsOpen(true)
-          }}
-        />
+        <>
+          <ContactsTable
+            rows={contacts}
+            columnConfig={columnConfig}
+            onColumnConfigChange={setColumnConfig}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
+          />
+          <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
+        </>
       )}
-
-      <p className="text-xs text-[var(--color-muted-foreground)]">
-        Showing {totalCount} contact{totalCount === 1 ? "" : "s"} across{" "}
-        {resolvedCols.visible.length} column{resolvedCols.visible.length === 1 ? "" : "s"}. Capped
-        at 500 in V1 — refine filters to narrow further. Pagination ships in a later push.
-      </p>
 
       <MoreFiltersDrawer
         open={moreFiltersOpen}

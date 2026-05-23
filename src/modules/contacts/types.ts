@@ -136,6 +136,39 @@ export const bulkRestoreContactsInput = z.object({
   ids: z.array(z.string().min(1)).min(1).max(100),
 })
 
+// ─── Bulk actions (P4.2 push 2c) ──────────────────────────────────────
+/**
+ * Hard cap on bulk-action payload size. 200 is plenty for "select the
+ * current page and apply an action" — page size cap is 100 — and bounds
+ * the per-row audit-write loop. Above that, force users to refine the
+ * filter or work in batches.
+ */
+export const BULK_ACTION_MAX_IDS = 200
+
+const bulkIdsSchema = z.array(z.string().min(1)).min(1).max(BULK_ACTION_MAX_IDS)
+
+export const bulkDeleteContactsInput = z.object({ ids: bulkIdsSchema })
+
+export const bulkChangeOwnerInput = z.object({
+  ids: bulkIdsSchema,
+  ownerUserId: z.string().min(1).nullable(),
+})
+
+export const bulkChangeStatusInput = z.object({
+  ids: bulkIdsSchema,
+  lifecycleStatus: lifecycleStatusSchema,
+})
+
+export const bulkAddTagInput = z.object({
+  ids: bulkIdsSchema,
+  tag: z.string().min(1).max(80),
+})
+
+export const bulkRemoveTagInput = z.object({
+  ids: bulkIdsSchema,
+  tag: z.string().min(1).max(80),
+})
+
 // ─── Contact notes (P4.2) ─────────────────────────────────────────────
 export const createContactNoteInput = z.object({
   contactId: z.string().min(1),
@@ -179,3 +212,8 @@ export type AddContactCompanyAssociationInput = z.infer<typeof addContactCompany
 export type UpdateContactCompanyAssociationInput = z.infer<
   typeof updateContactCompanyAssociationInput
 >
+export type BulkDeleteContactsInput = z.infer<typeof bulkDeleteContactsInput>
+export type BulkChangeOwnerInput = z.infer<typeof bulkChangeOwnerInput>
+export type BulkChangeStatusInput = z.infer<typeof bulkChangeStatusInput>
+export type BulkAddTagInput = z.infer<typeof bulkAddTagInput>
+export type BulkRemoveTagInput = z.infer<typeof bulkRemoveTagInput>

@@ -10,10 +10,13 @@ import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queri
 import { getUserViewPrefs, listSavedViewsForObject } from "@/modules/saved-views/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import {
+  CONTACTS_DEFAULT_PAGE_SIZE,
+  CONTACTS_VALID_PAGE_SIZES,
   listContactsForView,
   listDistinctContactLeadSources,
   listDistinctContactTags,
   type ContactFilterOverrides,
+  type ContactsPageSize,
   type CustomFieldFilter,
 } from "@/modules/contacts/filter-spec"
 import { Button } from "@/components/ui/button"
@@ -173,12 +176,13 @@ export default async function ContactsPage({
           ])
 
         // Resolve active view: explicit ?view= wins, else user's
-        // last-viewed pref, else the system default. The system default
-        // is guaranteed to exist for any org seeded after the saved-view
-        // seed shipped; older orgs may need a backfill.
+        // set-as-default pref, else last-viewed pref, else the system
+        // default. Push 2c — defaultViewId pref takes precedence over
+        // last-viewed because the user explicitly elected it.
         const requestedViewId = typeof params.view === "string" ? params.view : undefined
         const defaultView = savedViewRows.find((v) => v.isDefault) ?? null
-        const fallbackId = prefs?.lastViewedViewId ?? defaultView?.id ?? null
+        const fallbackId =
+          prefs?.defaultViewId ?? prefs?.lastViewedViewId ?? defaultView?.id ?? null
         const activeViewId = requestedViewId ?? fallbackId
         const activeView = savedViewRows.find((v) => v.id === activeViewId) ?? defaultView
 
@@ -187,10 +191,29 @@ export default async function ContactsPage({
           urlOverrides,
           (activeView?.filters as unknown[] | null) ?? null,
         )
-        const contactRows = await listContactsForView(appliedFilters)
+
+        // Pagination — page + pageSize resolved from URL with prefs fallback.
+        const requestedPage =
+          typeof params.page === "string" ? Math.max(1, parseInt(params.page, 10) || 1) : 1
+        const requestedPageSize: ContactsPageSize = (() => {
+          const raw = typeof params.pageSize === "string" ? parseInt(params.pageSize, 10) : NaN
+          if (CONTACTS_VALID_PAGE_SIZES.includes(raw as ContactsPageSize)) {
+            return raw as ContactsPageSize
+          }
+          const stored = prefs?.contactPageSize
+          if (stored && CONTACTS_VALID_PAGE_SIZES.includes(stored as ContactsPageSize)) {
+            return stored as ContactsPageSize
+          }
+          return CONTACTS_DEFAULT_PAGE_SIZE
+        })()
+
+        const contactResult = await listContactsForView(appliedFilters, {
+          page: requestedPage,
+          pageSize: requestedPageSize,
+        })
 
         return {
-          contacts: contactRows.map(({ contact, company }) => ({
+          contacts: contactResult.rows.map(({ contact, company }) => ({
             id: contact.id,
             firstName: contact.firstName,
             lastName: contact.lastName,
@@ -202,6 +225,10 @@ export default async function ContactsPage({
             companyName: company?.name ?? null,
             createdAt: contact.createdAt.toISOString(),
           })),
+          totalCount: contactResult.totalCount,
+          cappedOut: contactResult.cappedOut,
+          page: requestedPage,
+          pageSize: requestedPageSize,
           tags: tagOpts,
           leadSources: leadSourceOpts,
           companies: companyRows.map((c) => ({ id: c.id, name: c.name })),
@@ -218,7 +245,16 @@ export default async function ContactsPage({
               sort: v.sort,
             }),
           ),
-          orderedViewIds: prefs?.orderedViewIds ?? [],
+          // Push 2c — pinned-tab-driven render. If the user has no prefs
+          // row yet and the system default exists, seed the strip with it
+          // so the page is never empty; the tab strip's mount effect
+          // persists this on first visit.
+          pinnedViewIds: prefs?.pinnedViewIds ?? (defaultView ? [defaultView.id] : []),
+          defaultViewId: prefs?.defaultViewId ?? null,
+          hasPrefsRow: prefs !== null,
+          createdAtById: Object.fromEntries(
+            savedViewRows.map((v) => [v.id, v.createdAt.toISOString()]),
+          ),
           activeViewId: activeViewId ?? defaultView?.id ?? "",
           hiddenLeadSources: hiddenSources,
           cfDefs: cfDefs.map((d) => ({
@@ -256,9 +292,15 @@ export default async function ContactsPage({
 
       <ContactsShell
         contacts={data.contacts}
-        totalCount={data.contacts.length}
+        totalCount={data.totalCount}
+        cappedOut={data.cappedOut}
+        page={data.page}
+        pageSize={data.pageSize}
         views={data.savedViews}
-        orderedViewIds={data.orderedViewIds}
+        pinnedViewIds={data.pinnedViewIds}
+        defaultViewId={data.defaultViewId}
+        hasPrefsRow={data.hasPrefsRow}
+        createdAtById={data.createdAtById}
         activeViewId={data.activeViewId}
         currentUserId={session.user.id}
         members={owners}

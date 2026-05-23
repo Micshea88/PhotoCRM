@@ -15,6 +15,11 @@ import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
 import {
   addContactCompanyAssociationInput,
   archiveContactInput,
+  bulkAddTagInput,
+  bulkChangeOwnerInput,
+  bulkChangeStatusInput,
+  bulkDeleteContactsInput,
+  bulkRemoveTagInput,
   bulkRestoreContactsInput,
   createContactInput,
   createContactNoteInput,
@@ -27,6 +32,7 @@ import {
   updateContactInput,
   updateContactNoteInput,
 } from "./types"
+import { sql } from "drizzle-orm"
 
 const CONTACT_RECORD_TYPE = "contact"
 
@@ -590,6 +596,228 @@ export const updateContactCompanyAssociation = orgAction
     )
     if (result[0]) revalidatePath(`/contacts/${result[0].contactId}`)
     return { id: parsedInput.id }
+  })
+
+// ─── Bulk actions (P4.2 push 2c) ──────────────────────────────────────
+
+/**
+ * Bulk soft-delete N contacts. Emits one audit row per contact actually
+ * affected (not per input id — silent on rows that were already deleted
+ * or outside the org/RLS scope, matching the single-row deleteContact's
+ * NOT_FOUND-then-throw shape).
+ *
+ * 200-id input cap (see types.ts BULK_ACTION_MAX_IDS). The per-row audit
+ * loop bounds writes; for very large bulk ops the right tool is a
+ * filter-refine + multiple bulk calls, not a single mega-action.
+ */
+export const bulkDeleteContacts = orgAction
+  .metadata({ actionName: "contacts.bulk_delete" })
+  .inputSchema(bulkDeleteContactsInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({ deletedAt: new Date(), deletedBy: ctx.session.user.id })
+      .where(
+        and(
+          inArray(contacts.id, parsedInput.ids),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+        ),
+      )
+      .returning({ id: contacts.id })
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.deleted",
+        { resourceType: "contact", resourceId: row.id, metadata: { bulk: true } },
+      )
+    }
+    revalidatePath("/contacts")
+    return { deletedIds: result.map((r) => r.id) }
+  })
+
+export const bulkChangeOwner = orgAction
+  .metadata({ actionName: "contacts.bulk_change_owner" })
+  .inputSchema(bulkChangeOwnerInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({
+        ownerUserId: parsedInput.ownerUserId,
+        updatedAt: new Date(),
+        updatedBy: ctx.session.user.id,
+      })
+      .where(
+        and(
+          inArray(contacts.id, parsedInput.ids),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+        ),
+      )
+      .returning({ id: contacts.id })
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.updated",
+        {
+          resourceType: "contact",
+          resourceId: row.id,
+          metadata: { bulk: true, field: "ownerUserId", value: parsedInput.ownerUserId },
+        },
+      )
+    }
+    revalidatePath("/contacts")
+    return { updatedIds: result.map((r) => r.id) }
+  })
+
+export const bulkChangeStatus = orgAction
+  .metadata({ actionName: "contacts.bulk_change_status" })
+  .inputSchema(bulkChangeStatusInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({
+        lifecycleStatus: parsedInput.lifecycleStatus,
+        updatedAt: new Date(),
+        updatedBy: ctx.session.user.id,
+      })
+      .where(
+        and(
+          inArray(contacts.id, parsedInput.ids),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+        ),
+      )
+      .returning({ id: contacts.id })
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.updated",
+        {
+          resourceType: "contact",
+          resourceId: row.id,
+          metadata: {
+            bulk: true,
+            field: "lifecycleStatus",
+            value: parsedInput.lifecycleStatus,
+          },
+        },
+      )
+    }
+    revalidatePath("/contacts")
+    return { updatedIds: result.map((r) => r.id) }
+  })
+
+/**
+ * Bulk-add a tag. Skips rows where the tag is already present (array
+ * containment via the `@>` op) so the per-row audit fires only on rows
+ * that actually changed. Stored as `text[]`; we use `array_append`
+ * on `COALESCE(tags, '{}'::text[])` so contacts with NULL tags pick up
+ * a freshly-typed array.
+ */
+export const bulkAddTag = orgAction
+  .metadata({ actionName: "contacts.bulk_add_tag" })
+  .inputSchema(bulkAddTagInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({
+        tags: sql`COALESCE(${contacts.tags}, '{}'::text[]) || ARRAY[${parsedInput.tag}]::text[]`,
+        updatedAt: new Date(),
+        updatedBy: ctx.session.user.id,
+      })
+      .where(
+        and(
+          inArray(contacts.id, parsedInput.ids),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+          sql`NOT (COALESCE(${contacts.tags}, '{}'::text[]) @> ARRAY[${parsedInput.tag}]::text[])`,
+        ),
+      )
+      .returning({ id: contacts.id })
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.updated",
+        {
+          resourceType: "contact",
+          resourceId: row.id,
+          metadata: { bulk: true, field: "tags", op: "add", value: parsedInput.tag },
+        },
+      )
+    }
+    revalidatePath("/contacts")
+    return { updatedIds: result.map((r) => r.id) }
+  })
+
+/**
+ * Bulk-remove a tag. Symmetric to bulkAddTag — skips rows where the tag
+ * isn't present so audit fires only on real changes. `array_remove`
+ * preserves remaining elements + their order.
+ */
+export const bulkRemoveTag = orgAction
+  .metadata({ actionName: "contacts.bulk_remove_tag" })
+  .inputSchema(bulkRemoveTagInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({
+        tags: sql`array_remove(${contacts.tags}, ${parsedInput.tag})`,
+        updatedAt: new Date(),
+        updatedBy: ctx.session.user.id,
+      })
+      .where(
+        and(
+          inArray(contacts.id, parsedInput.ids),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+          sql`${contacts.tags} @> ARRAY[${parsedInput.tag}]::text[]`,
+        ),
+      )
+      .returning({ id: contacts.id })
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.updated",
+        {
+          resourceType: "contact",
+          resourceId: row.id,
+          metadata: { bulk: true, field: "tags", op: "remove", value: parsedInput.tag },
+        },
+      )
+    }
+    revalidatePath("/contacts")
+    return { updatedIds: result.map((r) => r.id) }
   })
 
 export const removeContactCompanyAssociation = orgAction

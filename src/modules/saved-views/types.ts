@@ -99,11 +99,13 @@ const customFieldsSchema = z.record(z.string(), z.unknown()).optional().nullable
 const sharedWithUserIdsSchema = z.array(z.string().min(1).max(64)).max(64).optional().nullable()
 
 /**
- * 8-view soft limit per user per object type, enforced at the action
- * layer (see actions.ts:createSavedView). System defaults
- * (owner_user_id IS NULL) do not count toward the limit.
+ * Push 2c — pinned-tab soft cap. Total saved views per user is now
+ * unlimited; only the count of views the user has PINNED to the tab
+ * strip is bounded. Enforced at the action layer (see actions.ts:pinView)
+ * so an over-limit pinnedViewIds upsert via updateUserViewPrefs is also
+ * rejected.
  */
-export const SAVED_VIEW_PER_USER_LIMIT = 8
+export const MAX_PINNED_VIEWS = 6
 
 export const createSavedViewInput = z
   .object({

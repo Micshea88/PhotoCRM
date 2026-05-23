@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useMemo } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import {
   DndContext,
@@ -17,7 +17,6 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,12 +24,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
+import { AddViewDropdown } from "./add-view-dropdown"
+import { ManageViewsDrawer } from "./manage-views-drawer"
 import { SaveViewModal } from "./save-view-modal"
+import { SavedViewBanner } from "./saved-view-banner"
 import { VisibilityModal, type OrgMember } from "./visibility-modal"
 import {
   createSavedView,
   deleteSavedView,
   duplicateSavedView,
+  pinView,
+  setDefaultView,
+  unpinView,
   updateSavedView,
   updateUserViewPrefs,
 } from "../actions"
@@ -49,84 +54,109 @@ export interface SavedViewTab {
 }
 
 interface TabStripProps {
-  /** All views the user can see for this object type, in DB order (we re-order per prefs). */
+  /** All views the user can see for this object type. */
   views: SavedViewTab[]
   /** Active view id from ?view=, falls back to the default view if not present. */
   activeViewId: string
-  /** Per-user tab order (id list). Views not in this list render after the ordered ones. */
-  orderedViewIds: string[]
+  /** Per-user pinned-tab order. Renders verbatim in the strip. */
+  pinnedViewIds: string[]
+  /** User's "set as my default" view id, or null to fall back to the system All Contacts. */
+  defaultViewId: string | null
+  /** True if a prefs row exists for (org, user, object_type). Drives auto-pin. */
+  hasPrefsRow: boolean
   /** Current user id — for owner-only menu items. */
   currentUserId: string
   /** Object type — passed into actions / prefs upserts. */
   objectType: "contact" | "task" | "project" | "opportunity" | "company"
   /** Org members for the visibility modal picker. */
   members: OrgMember[]
-  /**
-   * "Is the active view's stored state different from the user's current
-   * state?" — computed by the parent (the parent sees both the URL filters
-   * + the column state in the table). Drives the dirty dot + Save button.
-   */
+  /** id → createdAt ISO. Passed through to ManageViewsDrawer for Created sort. */
+  createdAtById: Record<string, string>
+  /** "Is the active view's stored state different from the user's current state?" */
   isDirty: boolean
-  /**
-   * Snapshot of the CURRENT (potentially dirty) state to persist on Save /
-   * Save-as. Filters are URL-derived; columnConfig is from the table's
-   * client column state; sort is URL-derived.
-   */
+  /** Snapshot of CURRENT (potentially dirty) state to persist on Save / Save-as. */
   currentState: {
     filters: Filter[]
     columnConfig: ColumnConfigItem[]
     sort: Sort | null
   }
+  /** Called when the user clicks Discard on the banner — host resets column state + URL params. */
+  onDiscard: () => void
 }
 
 export function SavedViewsTabStrip({
   views,
   activeViewId,
-  orderedViewIds,
+  pinnedViewIds,
+  defaultViewId,
+  hasPrefsRow,
   currentUserId,
   objectType,
   members,
+  createdAtById,
   isDirty,
   currentState,
+  onDiscard,
 }: TabStripProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [, startTransition] = useTransition()
 
   // ──────────────────────────────────────────────────────────────────
-  // Tab ordering — All contacts first, then user-ordered, then the rest.
+  // Auto-pin on first visit — if no prefs row yet AND the system default
+  // exists (All Contacts), persist a pinned_view_ids row with just that
+  // id. Fires once per user per object_type, then `hasPrefsRow` flips
+  // true and this never runs again.
   // ──────────────────────────────────────────────────────────────────
-  const orderedTabs = useMemo(() => {
-    const defaultView = views.find((v) => v.isDefault)
-    const userOwnedOrShared = views.filter((v) => v.id !== defaultView?.id)
-    const byId = new Map(userOwnedOrShared.map((v) => [v.id, v]))
-    const ordered: SavedViewTab[] = []
-    for (const id of orderedViewIds) {
-      const v = byId.get(id)
-      if (v) {
-        ordered.push(v)
-        byId.delete(id)
-      }
-    }
-    // Remaining (newly-created views not in prefs yet) — append in name order.
-    const rest = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
-    return { defaultView, customViews: [...ordered, ...rest] }
-  }, [views, orderedViewIds])
+  const autoPinFiredRef = useRef(false)
+  useEffect(() => {
+    if (hasPrefsRow) return
+    if (autoPinFiredRef.current) return
+    const systemDefault = views.find((v) => v.isDefault && v.ownerUserId === null)
+    if (!systemDefault) return
+    if (pinnedViewIds.includes(systemDefault.id)) return
+    autoPinFiredRef.current = true
+    void updateUserViewPrefs({
+      objectType,
+      pinnedViewIds: [systemDefault.id, ...pinnedViewIds],
+    })
+  }, [hasPrefsRow, views, pinnedViewIds, objectType])
 
   // ──────────────────────────────────────────────────────────────────
-  // Modal / menu state
+  // Pinned tabs derivation. Drop orphaned ids (deleted views). If the
+  // active view is not pinned, render it at the end as a transient tab
+  // so the user always sees which view is active.
+  // ──────────────────────────────────────────────────────────────────
+  const { pinnedTabs, transientTab } = useMemo(() => {
+    const byId = new Map(views.map((v) => [v.id, v]))
+    const pinned: SavedViewTab[] = []
+    for (const id of pinnedViewIds) {
+      const v = byId.get(id)
+      if (v) pinned.push(v)
+    }
+    const active = byId.get(activeViewId)
+    const isPinned = active && pinnedViewIds.includes(active.id)
+    return {
+      pinnedTabs: pinned,
+      transientTab: active && !isPinned ? active : null,
+    }
+  }, [views, pinnedViewIds, activeViewId])
+
+  // ──────────────────────────────────────────────────────────────────
+  // Modal / drawer state
   // ──────────────────────────────────────────────────────────────────
   const [renameTarget, setRenameTarget] = useState<SavedViewTab | null>(null)
   const [visibilityTarget, setVisibilityTarget] = useState<SavedViewTab | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SavedViewTab | null>(null)
   const [saveAsOpen, setSaveAsOpen] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
   // ──────────────────────────────────────────────────────────────────
   // Active view derivation
   // ──────────────────────────────────────────────────────────────────
-  const activeView = views.find((v) => v.id === activeViewId) ?? orderedTabs.defaultView
-  const activeIsDefault = activeView?.isDefault === true
+  const activeView = views.find((v) => v.id === activeViewId) ?? null
+  const activeIsSystemDefault = activeView?.isDefault === true && activeView.ownerUserId === null
   const activeIsOwned = activeView?.ownerUserId === currentUserId
 
   // ──────────────────────────────────────────────────────────────────
@@ -136,24 +166,23 @@ export function SavedViewsTabStrip({
     startTransition(() => {
       router.push(`${pathname}?view=${viewId}`)
     })
-    // Fire-and-forget last-viewed pref update.
     void updateUserViewPrefs({ objectType, lastViewedViewId: viewId })
   }
 
   // ──────────────────────────────────────────────────────────────────
-  // Drag-reorder (only for customViews — default tab is locked leftmost)
+  // Drag-reorder — pinnedViewIds is the source of truth for the strip
   // ──────────────────────────────────────────────────────────────────
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e
     if (!over || active.id === over.id) return
-    const currentIds = orderedTabs.customViews.map((v) => v.id)
+    const currentIds = pinnedTabs.map((v) => v.id)
     const oldIndex = currentIds.indexOf(String(active.id))
     const newIndex = currentIds.indexOf(String(over.id))
     if (oldIndex < 0 || newIndex < 0) return
     const next = arrayMove(currentIds, oldIndex, newIndex)
-    void updateUserViewPrefs({ objectType, orderedViewIds: next })
+    void updateUserViewPrefs({ objectType, pinnedViewIds: next })
     router.refresh()
   }
 
@@ -161,7 +190,7 @@ export function SavedViewsTabStrip({
   // CRUD action wrappers
   // ──────────────────────────────────────────────────────────────────
   async function doSaveOverwrite() {
-    if (!activeView || activeIsDefault || !activeIsOwned) return
+    if (!activeView || activeIsSystemDefault || !activeIsOwned) return
     setBusy(true)
     const result = await updateSavedView({
       id: activeView.id,
@@ -174,7 +203,6 @@ export function SavedViewsTabStrip({
       alert(result.serverError)
       return
     }
-    // Drop filter params so the URL matches the freshly-saved view.
     startTransition(() => {
       router.push(`${pathname}?view=${activeView.id}`)
     })
@@ -200,6 +228,8 @@ export function SavedViewsTabStrip({
     }
     const newId = result.data?.id
     if (newId) {
+      // Auto-pin the freshly-saved view so the user has a tab for it.
+      void pinView({ objectType, viewId: newId })
       startTransition(() => {
         router.push(`${pathname}?view=${newId}`)
       })
@@ -219,15 +249,17 @@ export function SavedViewsTabStrip({
     router.refresh()
   }
 
-  async function doDuplicate(view: SavedViewTab) {
-    const newName = `${view.name} (copy)`
-    const result = await duplicateSavedView({ id: view.id, newName })
+  async function doDuplicateActive() {
+    if (!activeView) return
+    const newName = `${activeView.name} (copy)`
+    const result = await duplicateSavedView({ id: activeView.id, newName })
     if (result.serverError) {
       alert(result.serverError)
       return
     }
     const newId = result.data?.id
     if (newId) {
+      void pinView({ objectType, viewId: newId })
       startTransition(() => {
         router.push(`${pathname}?view=${newId}`)
       })
@@ -244,15 +276,17 @@ export function SavedViewsTabStrip({
       alert(result.serverError)
       return
     }
-    // Navigate to the default tab if we just nuked the active view.
-    const def = orderedTabs.defaultView
-    if (deleteTarget.id === activeViewId && def) {
-      startTransition(() => {
-        router.push(`${pathname}?view=${def.id}`)
-      })
-    } else {
-      router.refresh()
+    if (deleteTarget.id === activeViewId) {
+      const systemDefault = views.find((v) => v.isDefault && v.ownerUserId === null)
+      const fallback = systemDefault?.id ?? pinnedTabs.find((t) => t.id !== deleteTarget.id)?.id
+      if (fallback) {
+        startTransition(() => {
+          router.push(`${pathname}?view=${fallback}`)
+        })
+        return
+      }
     }
+    router.refresh()
   }
 
   async function doVisibilityUpdate(visibility: Visibility, sharedWith: string[] | null) {
@@ -272,37 +306,53 @@ export function SavedViewsTabStrip({
     router.refresh()
   }
 
+  async function doSetDefaultActive() {
+    if (!activeView) return
+    const isCurrentlyDefault = defaultViewId === activeView.id
+    const result = await setDefaultView({
+      objectType,
+      viewId: isCurrentlyDefault ? null : activeView.id,
+    })
+    if (result.serverError) {
+      alert(result.serverError)
+      return
+    }
+    router.refresh()
+  }
+
+  async function doUnpinActive() {
+    if (!activeView) return
+    const result = await unpinView({ objectType, viewId: activeView.id })
+    if (result.serverError) {
+      alert(result.serverError)
+      return
+    }
+    router.refresh()
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // Render
+  // ──────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-2">
-        <div className="flex flex-1 items-center gap-1 overflow-x-auto">
-          {/* All Contacts (system default) — always leftmost, no menu, no drag */}
-          {orderedTabs.defaultView ? (
-            <TabButton
-              tab={orderedTabs.defaultView}
-              active={orderedTabs.defaultView.id === activeViewId}
-              dirty={isDirty && orderedTabs.defaultView.id === activeViewId}
-              onClick={() => {
-                const def = orderedTabs.defaultView
-                if (def) switchToView(def.id)
-              }}
-            />
-          ) : null}
-
-          {/* User views — drag-reorderable */}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={orderedTabs.customViews.map((v) => v.id)}
-              strategy={horizontalListSortingStrategy}
-            >
-              <div className="flex items-center gap-1">
-                {orderedTabs.customViews.map((tab) => (
+      <div className="flex items-center gap-1 border-b border-[var(--color-border)] pb-2">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext
+            items={pinnedTabs.map((v) => v.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="flex flex-1 items-center gap-1 overflow-x-auto">
+              {pinnedTabs.map((tab) => {
+                const active = tab.id === activeViewId
+                return (
                   <SortableTab
                     key={tab.id}
                     tab={tab}
-                    active={tab.id === activeViewId}
-                    dirty={isDirty && tab.id === activeViewId}
-                    canManage={tab.ownerUserId === currentUserId}
+                    active={active}
+                    isDefault={defaultViewId === tab.id}
+                    isSystemDefault={tab.isDefault && tab.ownerUserId === null}
+                    canMutate={tab.ownerUserId === currentUserId && !tab.isDefault}
+                    isPinned={true}
                     onClick={() => {
                       switchToView(tab.id)
                     }}
@@ -310,7 +360,7 @@ export function SavedViewsTabStrip({
                       setRenameTarget(tab)
                     }}
                     onDuplicate={() => {
-                      void doDuplicate(tab)
+                      void doDuplicateActive()
                     }}
                     onDelete={() => {
                       setDeleteTarget(tab)
@@ -321,63 +371,82 @@ export function SavedViewsTabStrip({
                     onSaveAs={() => {
                       setSaveAsOpen(true)
                     }}
+                    onUnpin={() => {
+                      void doUnpinActive()
+                    }}
+                    onSetDefault={() => {
+                      void doSetDefaultActive()
+                    }}
                   />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-
-          {/* "+" button → Save current view as new view */}
-          <button
-            type="button"
-            onClick={() => {
-              setSaveAsOpen(true)
-            }}
-            aria-label="Save current view as new view"
-            className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-[var(--color-border)] text-base text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]"
-          >
-            +
-          </button>
-        </div>
-
-        {/* Save / Save-as button on the right */}
-        {isDirty && (
-          <div className="flex shrink-0 items-center gap-2">
-            {activeIsDefault || !activeIsOwned ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSaveAsOpen(true)
-                }}
-              >
-                Save as new view
-              </Button>
-            ) : (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
+                )
+              })}
+              {transientTab && (
+                <TabButton
+                  tab={transientTab}
+                  active={true}
+                  isDefault={defaultViewId === transientTab.id}
+                  isSystemDefault={transientTab.isDefault && transientTab.ownerUserId === null}
+                  isPinned={false}
+                  canMutate={transientTab.ownerUserId === currentUserId && !transientTab.isDefault}
                   onClick={() => {
+                    /* already active */
+                  }}
+                  onRename={() => {
+                    setRenameTarget(transientTab)
+                  }}
+                  onDuplicate={() => {
+                    void doDuplicateActive()
+                  }}
+                  onDelete={() => {
+                    setDeleteTarget(transientTab)
+                  }}
+                  onVisibility={() => {
+                    setVisibilityTarget(transientTab)
+                  }}
+                  onSaveAs={() => {
                     setSaveAsOpen(true)
                   }}
-                >
-                  Save as
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    void doSaveOverwrite()
+                  onPin={() => {
+                    void (async () => {
+                      const result = await pinView({ objectType, viewId: transientTab.id })
+                      if (result.serverError) {
+                        alert(result.serverError)
+                        return
+                      }
+                      router.refresh()
+                    })()
                   }}
-                >
-                  {busy ? "Saving…" : "Save"}
-                </Button>
-              </>
-            )}
-          </div>
-        )}
+                  onSetDefault={() => {
+                    void doSetDefaultActive()
+                  }}
+                />
+              )}
+              <AddViewDropdown
+                onCreateNew={() => {
+                  setSaveAsOpen(true)
+                }}
+                onManage={() => {
+                  setManageOpen(true)
+                }}
+              />
+            </div>
+          </SortableContext>
+        </DndContext>
       </div>
+
+      {isDirty && activeView && (
+        <SavedViewBanner
+          canOverwrite={activeIsOwned && !activeIsSystemDefault}
+          busy={busy}
+          onSave={() => {
+            void doSaveOverwrite()
+          }}
+          onSaveAs={() => {
+            setSaveAsOpen(true)
+          }}
+          onDiscard={onDiscard}
+        />
+      )}
 
       {/* Rename modal */}
       <SaveViewModal
@@ -394,7 +463,7 @@ export function SavedViewsTabStrip({
         cta="Rename"
       />
 
-      {/* Save-as modal: collects name THEN visibility (chained via local state) */}
+      {/* Save-as flow (name → visibility) */}
       <SaveAsFlow
         open={saveAsOpen}
         onClose={() => {
@@ -408,7 +477,7 @@ export function SavedViewsTabStrip({
         submitting={busy}
       />
 
-      {/* Visibility modal for the kebab menu */}
+      {/* Visibility modal (per-tab kebab) */}
       {visibilityTarget && (
         <VisibilityModal
           open={!!visibilityTarget}
@@ -435,8 +504,23 @@ export function SavedViewsTabStrip({
         onConfirm={() => {
           void doDeleteConfirm()
         }}
-        body={`This view will be permanently removed from your saved views.`}
+        body="This view will be permanently removed from your saved views."
         submitting={busy}
+      />
+
+      {/* Manage views drawer */}
+      <ManageViewsDrawer
+        open={manageOpen}
+        onClose={() => {
+          if (!busy) setManageOpen(false)
+        }}
+        views={views}
+        pinnedViewIds={pinnedViewIds}
+        defaultViewId={defaultViewId}
+        currentUserId={currentUserId}
+        objectType={objectType}
+        members={members}
+        createdAtById={createdAtById}
       />
     </div>
   )
@@ -444,21 +528,43 @@ export function SavedViewsTabStrip({
 
 // ─── Tab button + sortable wrapper ────────────────────────────────────
 
+interface TabButtonProps {
+  tab: SavedViewTab
+  active: boolean
+  isDefault: boolean
+  isSystemDefault: boolean
+  canMutate: boolean
+  isPinned: boolean
+  onClick: () => void
+  onRename: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+  onVisibility: () => void
+  onSaveAs: () => void
+  onPin?: () => void
+  onUnpin?: () => void
+  onSetDefault: () => void
+  dragHandle?: React.ReactNode
+}
+
 function TabButton({
   tab,
   active,
-  dirty,
+  isDefault,
+  isSystemDefault,
+  canMutate,
+  isPinned,
   onClick,
-  endSlot,
+  onRename,
+  onDuplicate,
+  onDelete,
+  onVisibility,
+  onSaveAs,
+  onPin,
+  onUnpin,
+  onSetDefault,
   dragHandle,
-}: {
-  tab: SavedViewTab
-  active: boolean
-  dirty: boolean
-  onClick: () => void
-  endSlot?: React.ReactNode
-  dragHandle?: React.ReactNode
-}) {
+}: TabButtonProps) {
   return (
     <div
       className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-3 py-1.5 text-sm transition ${
@@ -470,38 +576,58 @@ function TabButton({
       {dragHandle}
       <button type="button" onClick={onClick} className="cursor-pointer">
         {tab.name}
-        {dirty && <span className="ml-1 text-[var(--color-primary)]">•</span>}
+        {isDefault && (
+          <span
+            aria-label="Your default view"
+            title="Your default view"
+            className="ml-1 text-amber-500"
+          >
+            ★
+          </span>
+        )}
       </button>
-      {endSlot}
+      {active && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Actions for ${tab.name}`}
+            className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-[var(--color-accent)]"
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+          >
+            ⋮
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onSetDefault}>
+              {isDefault ? "Clear default" : "Set as my default"}
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canMutate} onSelect={onRename}>
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onDuplicate}>Clone</DropdownMenuItem>
+            <DropdownMenuItem disabled={!canMutate} onSelect={onVisibility}>
+              Share…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onSaveAs}>Save as new view…</DropdownMenuItem>
+            {isPinned && onUnpin && (
+              <DropdownMenuItem onSelect={onUnpin}>Unpin from tabs</DropdownMenuItem>
+            )}
+            {!isPinned && onPin && (
+              <DropdownMenuItem onSelect={onPin}>Pin to tabs</DropdownMenuItem>
+            )}
+            <DropdownMenuItem disabled={!canMutate || isSystemDefault} onSelect={onDelete}>
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   )
 }
 
-function SortableTab({
-  tab,
-  active,
-  dirty,
-  canManage,
-  onClick,
-  onRename,
-  onDuplicate,
-  onDelete,
-  onVisibility,
-  onSaveAs,
-}: {
-  tab: SavedViewTab
-  active: boolean
-  dirty: boolean
-  canManage: boolean
-  onClick: () => void
-  onRename: () => void
-  onDuplicate: () => void
-  onDelete: () => void
-  onVisibility: () => void
-  onSaveAs: () => void
-}) {
+function SortableTab(props: TabButtonProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: tab.id,
+    id: props.tab.id,
   })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -511,10 +637,7 @@ function SortableTab({
   return (
     <div ref={setNodeRef} style={style} className="inline-flex">
       <TabButton
-        tab={tab}
-        active={active}
-        dirty={dirty}
-        onClick={onClick}
+        {...props}
         dragHandle={
           <span
             {...attributes}
@@ -524,32 +647,6 @@ function SortableTab({
           >
             ⋮⋮
           </span>
-        }
-        endSlot={
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={`Actions for ${tab.name}`}
-              className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-[var(--color-accent)]"
-              onClick={(e) => {
-                e.stopPropagation()
-              }}
-            >
-              ⋮
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={!canManage} onSelect={onRename}>
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onDuplicate}>Duplicate</DropdownMenuItem>
-              <DropdownMenuItem disabled={!canManage} onSelect={onDelete}>
-                Delete
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!canManage} onSelect={onVisibility}>
-                Visibility…
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onSaveAs}>Save as new view…</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         }
       />
     </div>

@@ -34,7 +34,9 @@ interface ContactsTableProps {
   rows: ContactRow[]
   columnConfig: ColumnConfigItem[]
   onColumnConfigChange: (next: ColumnConfigItem[]) => void
-  onOpenEditColumns: () => void
+  /** Push 2c — controlled selection state for bulk actions. */
+  selectedIds: Set<string>
+  onSelectedIdsChange: (next: Set<string>) => void
 }
 
 export type { ContactRow }
@@ -61,8 +63,34 @@ export function ContactsTable({
   rows,
   columnConfig,
   onColumnConfigChange,
-  onOpenEditColumns,
+  selectedIds,
+  onSelectedIdsChange,
 }: ContactsTableProps) {
+  // Header checkbox tri-state: all visible selected / partial / none.
+  const allOnPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
+  const someOnPageSelected = rows.some((r) => selectedIds.has(r.id))
+
+  function toggleRow(id: string) {
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onSelectedIdsChange(next)
+  }
+
+  function toggleAll() {
+    if (allOnPageSelected) {
+      // Clear all currently-visible rows but preserve any selections that
+      // weren't in the current page (sticky across pagination).
+      const next = new Set(selectedIds)
+      for (const r of rows) next.delete(r.id)
+      onSelectedIdsChange(next)
+    } else {
+      const next = new Set(selectedIds)
+      for (const r of rows) next.add(r.id)
+      onSelectedIdsChange(next)
+    }
+  }
+
   const router = useRouter()
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [busyDelete, setBusyDelete] = useState(false)
@@ -151,6 +179,17 @@ export function ContactsTable({
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
             <tr>
+              <th className="w-10 border-r border-b border-[var(--color-border)] px-2 py-2">
+                <input
+                  type="checkbox"
+                  aria-label="Select all on this page"
+                  checked={allOnPageSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected
+                  }}
+                  onChange={toggleAll}
+                />
+              </th>
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -173,27 +212,35 @@ export function ContactsTable({
                   })}
                 </SortableContext>
               </DndContext>
-              <th className="w-12 border-b border-[var(--color-border)] px-2 py-2 text-right">
-                <button
-                  type="button"
-                  onClick={onOpenEditColumns}
-                  className="text-[10px] text-[var(--color-muted-foreground)] hover:underline"
-                  aria-label="Edit columns"
-                >
-                  ⚙
-                </button>
-              </th>
+              <th className="w-10 border-b border-[var(--color-border)] px-2 py-2" />
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr
                 key={row.id}
-                className="cursor-pointer hover:bg-[var(--color-accent)]/30"
+                className={`cursor-pointer hover:bg-[var(--color-accent)]/30 ${
+                  selectedIds.has(row.id) ? "bg-[var(--color-primary)]/5" : ""
+                }`}
                 onClick={() => {
                   router.push(`/contacts/${row.id}`)
                 }}
               >
+                <td
+                  className="w-10 border-t border-r border-[var(--color-border)] px-2 py-2"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${row.firstName} ${row.lastName}`}
+                    checked={selectedIds.has(row.id)}
+                    onChange={() => {
+                      toggleRow(row.id)
+                    }}
+                  />
+                </td>
                 {resolved.visible.map((col) => {
                   const cfg = resolved.all.find((c) => c.id === col.id)
                   const width = cfg?.width ?? col.defaultWidth

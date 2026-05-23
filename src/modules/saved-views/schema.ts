@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm"
-import { pgTable, text, boolean, jsonb, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core"
+import {
+  pgTable,
+  text,
+  boolean,
+  integer,
+  jsonb,
+  timestamp,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core"
 import { organization, user } from "@/modules/auth/schema"
 
 /**
@@ -96,18 +105,25 @@ export type NewSavedView = typeof savedViews.$inferInsert
 
 /**
  * Per-user, per-object-type list-view preferences. Records:
- *   - `ordered_view_ids` — drag-reorder tab order for the saved-view
- *     tab strip on /<object>s. Views not present in this array render
- *     after the ordered ones (by createdAt ASC), giving a sensible
- *     default for new views the user hasn't reordered yet.
+ *   - `pinned_view_ids` — saved-view ids the user has PINNED to the
+ *     tab strip on /<object>s, in display order. Drag-reorder updates
+ *     this array. Soft cap: max 6 pinned tabs per object_type, enforced
+ *     in the pinView action.
  *   - `last_viewed_view_id` — the view to land on when the user opens
  *     /<object>s without an explicit ?view= param. ON DELETE SET NULL
- *     against saved_views.id, so a deleted view doesn't wedge the
- *     fallback.
+ *     against saved_views.id.
+ *   - `default_view_id` — user's "Set as my default view" pick. NULL =
+ *     fall back to the system All Contacts default. ON DELETE SET NULL
+ *     so deleting a view that someone has as their default doesn't
+ *     wedge them on a stale id.
+ *   - `contact_page_size` — preferred pagination page size on /contacts
+ *     (one of 25 / 50 / 100). Defaults to 50.
  *
- * "All Contacts" (the system default) is NEVER in ordered_view_ids —
- * it is always rendered leftmost separately. Storing it would just
- * couple user prefs to seed identity.
+ * "All Contacts" (the system default) MAY be in pinned_view_ids — Push
+ * 2c treats it as a regular pinnable tab (auto-pinned on first visit;
+ * unpinning hides it from the strip but it remains recoverable via
+ * Manage views). Pre-2c the schema kept it separate from
+ * `ordered_view_ids`; 2c unifies the model.
  *
  * RLS: each user sees / writes their own row only.
  */
@@ -121,7 +137,7 @@ export const userObjectViewPrefs = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     objectType: text("object_type").notNull(),
-    orderedViewIds: text("ordered_view_ids")
+    pinnedViewIds: text("pinned_view_ids")
       .array()
       .$type<string[]>()
       .notNull()
@@ -129,6 +145,10 @@ export const userObjectViewPrefs = pgTable(
     lastViewedViewId: text("last_viewed_view_id").references(() => savedViews.id, {
       onDelete: "set null",
     }),
+    defaultViewId: text("default_view_id").references(() => savedViews.id, {
+      onDelete: "set null",
+    }),
+    contactPageSize: integer("contact_page_size").notNull().default(50),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

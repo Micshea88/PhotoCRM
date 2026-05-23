@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation"
 import Link from "next/link"
+import { runWithOrgContext } from "@/lib/org-context"
 import { getSession } from "@/modules/auth/session"
+import { getCurrentMember, getOrganizationMembers } from "@/modules/org/queries"
+import { getExtendedMemberRole } from "@/modules/rbac/queries"
+import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { Button } from "@/components/ui/button"
+import { listDistinctContactTags } from "@/modules/contacts/filter-spec"
 import { ContactsImportWizard } from "@/modules/contacts/ui/contacts-import-wizard"
 
 export const dynamic = "force-dynamic"
@@ -11,6 +16,25 @@ export default async function ContactsImportPage() {
   if (!session?.user) redirect("/sign-in")
   const orgId = session.session.activeOrganizationId
   if (!orgId) redirect("/onboarding/create-organization")
+
+  const memberRow = await getCurrentMember(orgId, session.user.id)
+  const baRole = (memberRow?.role ?? "member") as BetterAuthRole
+  const tentativeRole = extendedFromBetterAuth(baRole)
+
+  const data = await runWithOrgContext(
+    { orgId, role: tentativeRole, userId: session.user.id },
+    async () => {
+      const extended = (await getExtendedMemberRole(session.user.id)) ?? tentativeRole
+      return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
+        const tags = await listDistinctContactTags()
+        return { tags }
+      })
+    },
+  )
+
+  const members = (await getOrganizationMembers(orgId))
+    .map((m) => ({ id: m.user.id, name: m.user.name, email: m.user.email }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
     <div className="space-y-6">
@@ -26,7 +50,11 @@ export default async function ContactsImportPage() {
           <Button variant="outline">Cancel</Button>
         </Link>
       </div>
-      <ContactsImportWizard />
+      <ContactsImportWizard
+        currentUserId={session.user.id}
+        orgMembers={members}
+        existingTags={data.tags}
+      />
     </div>
   )
 }

@@ -51,6 +51,22 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
         row.companyName,
       ),
   },
+  // Push 2c.1 — first name and last name as their own togglable columns.
+  // Default-hidden (resolveContactColumns adds missing registry ids as
+  // visible=false at the end), so existing All Contacts views don't
+  // change shape. Users can show one or both via Edit columns.
+  firstName: {
+    id: "firstName",
+    label: "First name",
+    defaultWidth: 140,
+    render: (row) => row.firstName,
+  },
+  lastName: {
+    id: "lastName",
+    label: "Last name",
+    defaultWidth: 140,
+    render: (row) => row.lastName,
+  },
   primaryEmail: {
     id: "primaryEmail",
     label: "Email",

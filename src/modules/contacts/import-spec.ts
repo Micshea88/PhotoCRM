@@ -1,6 +1,6 @@
 /**
- * Push 2c — Contacts CSV import. Pure helpers shared by the wizard
- * (client) and the import server actions (server).
+ * Push 2c / 2c.1 — Contacts CSV import. Pure helpers shared by the
+ * wizard (client) and the import server actions (server).
  *
  * ─── INLINE CSV PARSER ────────────────────────────────────────────────
  *
@@ -110,93 +110,221 @@ export function parseCsv(text: string): ParsedCsv {
 // ─── Field mapping ─────────────────────────────────────────────────────
 
 /**
- * The contact fields the import wizard can populate. The order matters
- * for the UI's field-picker dropdown. `null`-mapping means "ignore this
- * column" — surfaced as "— Don't import —" in the dropdown.
+ * Push 2c.1 — the contact fields the import wizard can populate. Order
+ * matters for the UI's field-picker dropdown.
+ *
+ * `fullName` is a SPECIAL pseudo-field: it has no DB column. Mapping a
+ * column to fullName triggers an auto-split in buildCleanRow that
+ * populates firstName + lastName on the first space. Explicit
+ * firstName / lastName mappings always win over the split.
+ *
+ * `ownerUserId` is also semi-special: the wizard accepts an email here
+ * and resolves it to a user_id at import time (see runContactsImport).
+ *
+ * Mailing fields are persisted into the `mailing_address` jsonb column
+ * (street1 / city / state / zip per types.ts:mailingAddressSchema).
+ * `mailingCountry` and `jobTitle` from the broader CRM-import vocab
+ * are intentionally NOT in this list because the V1 schema is US-only
+ * and has no job_title column — they'd require a schema migration.
+ *
+ * null-mapping means "Don't include in import" — rendered as the
+ * dropdown default for unmatched columns.
  */
 export const IMPORTABLE_FIELDS = [
+  "fullName",
   "firstName",
   "lastName",
   "primaryEmail",
   "primaryPhone",
   "secondaryEmail",
   "secondaryPhone",
+  "companyName",
   "contactType",
   "lifecycleStatus",
   "leadSource",
   "sourceDetail",
   "tags",
+  "ownerUserId",
   "notes",
   "website",
   "instagramHandle",
+  "mailingStreet",
+  "mailingCity",
+  "mailingState",
+  "mailingPostalCode",
 ] as const
 export type ImportableField = (typeof IMPORTABLE_FIELDS)[number]
 
 export const FIELD_LABELS: Record<ImportableField, string> = {
+  fullName: "Full name (auto-split)",
   firstName: "First name",
   lastName: "Last name",
   primaryEmail: "Primary email",
   primaryPhone: "Primary phone",
   secondaryEmail: "Secondary email",
   secondaryPhone: "Secondary phone",
+  companyName: "Company (by name)",
   contactType: "Contact type",
   lifecycleStatus: "Lifecycle status",
   leadSource: "Lead source",
   sourceDetail: "Source detail",
-  tags: "Tags (comma-separated)",
+  tags: "Tags (comma / semicolon-separated)",
+  ownerUserId: "Owner (by email)",
   notes: "Notes",
   website: "Website",
   instagramHandle: "Instagram handle",
+  mailingStreet: "Mailing — street",
+  mailingCity: "Mailing — city",
+  mailingState: "Mailing — state",
+  mailingPostalCode: "Mailing — ZIP",
 }
 
 /**
- * Auto-mapping heuristics: header text → contact field. Run after
- * lower-casing + stripping non-alphanumeric chars. Empty / unmatched
- * headers stay at `null` so the user picks explicitly.
+ * Push 2c.1 — alias-array smart match. Each entry lists the headers
+ * (post-normalization: lowercased, non-alphanumeric stripped) that
+ * should auto-map to the field. autoMapHeaders inverts this into a
+ * lookup. Multiple synonyms per field cover HubSpot / Mailchimp / etc.
+ * export conventions.
  */
-const HEADER_HINTS: Record<string, ImportableField> = {
-  firstname: "firstName",
-  first: "firstName",
-  givenname: "firstName",
-  lastname: "lastName",
-  last: "lastName",
-  surname: "lastName",
-  familyname: "lastName",
-  email: "primaryEmail",
-  emailaddress: "primaryEmail",
-  primaryemail: "primaryEmail",
-  secondaryemail: "secondaryEmail",
-  email2: "secondaryEmail",
-  phone: "primaryPhone",
-  phonenumber: "primaryPhone",
-  primaryphone: "primaryPhone",
-  mobile: "primaryPhone",
-  cell: "primaryPhone",
-  secondaryphone: "secondaryPhone",
-  phone2: "secondaryPhone",
-  contacttype: "contactType",
-  type: "contactType",
-  lifecyclestatus: "lifecycleStatus",
-  lifecycle: "lifecycleStatus",
-  status: "lifecycleStatus",
-  leadsource: "leadSource",
-  source: "leadSource",
-  sourcedetail: "sourceDetail",
-  tags: "tags",
-  notes: "notes",
-  note: "notes",
-  website: "website",
-  url: "website",
-  instagram: "instagramHandle",
-  instagramhandle: "instagramHandle",
-  ig: "instagramHandle",
+const FIELD_ALIASES: Record<ImportableField, string[]> = {
+  fullName: ["fullname", "name", "contactname", "displayname"],
+  firstName: ["firstname", "first", "givenname", "fname", "forename"],
+  lastName: ["lastname", "last", "surname", "familyname", "lname"],
+  primaryEmail: ["email", "emailaddress", "primaryemail", "workemail", "contactemail"],
+  primaryPhone: [
+    "phone",
+    "phonenumber",
+    "telephone",
+    "tel",
+    "mobile",
+    "mobilephone",
+    "cellphone",
+    "cell",
+    "primaryphone",
+    "workphone",
+  ],
+  secondaryEmail: ["secondaryemail", "email2", "alternateemail", "otheremail"],
+  secondaryPhone: ["secondaryphone", "phone2", "alternatephone", "homephone"],
+  companyName: [
+    "company",
+    "companyname",
+    "organization",
+    "organisation",
+    "account",
+    "accountname",
+    "employer",
+  ],
+  contactType: ["contacttype", "type", "category"],
+  lifecycleStatus: ["lifecyclestage", "lifecyclestatus", "stage", "status", "leadstatus"],
+  leadSource: ["leadsource", "source", "originalsource", "leadorigin"],
+  sourceDetail: ["sourcedetail", "sourceinfo", "campaign"],
+  tags: ["tags", "labels", "categories"],
+  ownerUserId: ["owner", "contactowner", "assignedto", "salesrep", "owneremail"],
+  notes: ["notes", "note", "description", "comments"],
+  website: ["website", "url", "homepage", "websiteurl"],
+  instagramHandle: ["instagram", "instagramhandle", "ig", "instagramusername"],
+  mailingStreet: [
+    "street",
+    "address",
+    "address1",
+    "streetaddress",
+    "mailingaddress",
+    "mailingstreet",
+  ],
+  mailingCity: ["city", "mailingcity"],
+  mailingState: ["state", "province", "region", "mailingstate"],
+  mailingPostalCode: ["zip", "zipcode", "postalcode", "postcode", "mailingzip"],
+}
+
+const HEADER_HINTS: Record<string, ImportableField> = (() => {
+  const out: Record<string, ImportableField> = {}
+  for (const field of IMPORTABLE_FIELDS) {
+    for (const alias of FIELD_ALIASES[field]) {
+      out[alias] = field
+    }
+  }
+  return out
+})()
+
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
 export function autoMapHeaders(headers: string[]): (ImportableField | null)[] {
-  return headers.map((h) => {
-    const key = h.toLowerCase().replace(/[^a-z0-9]/g, "")
-    return HEADER_HINTS[key] ?? null
-  })
+  return headers.map((h) => HEADER_HINTS[normalizeHeader(h)] ?? null)
+}
+
+// ─── Field-type sniffing (mapping-step warnings) ───────────────────────
+
+/**
+ * Push 2c.1 — sniff "what does this column LOOK like" from a sample
+ * of values. Used in the mapping step to surface an amber warning when
+ * the user's chosen mapping disagrees with the apparent shape (e.g.
+ * column looks like email addresses but is mapped to First name).
+ */
+export type DetectedType = "email" | "phone" | "date" | "url" | null
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const SLASH_DATE_RE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/
+const URL_RE = /^https?:\/\//i
+
+export function detectFieldType(samples: string[]): DetectedType {
+  const cleaned = samples.map((s) => s.trim()).filter((s) => s.length > 0)
+  if (cleaned.length === 0) return null
+  // Need ≥ 60% of samples to match for confidence — mixed columns
+  // shouldn't get tagged.
+  const threshold = Math.max(1, Math.ceil(cleaned.length * 0.6))
+  let email = 0
+  let phone = 0
+  let date = 0
+  let url = 0
+  for (const v of cleaned) {
+    if (EMAIL_RE.test(v)) email++
+    if (URL_RE.test(v)) url++
+    if (ISO_DATE_RE.test(v) || SLASH_DATE_RE.test(v)) date++
+    const digits = v.replace(/\D/g, "")
+    if (digits.length >= 7) phone++
+  }
+  if (email >= threshold) return "email"
+  if (url >= threshold) return "url"
+  if (date >= threshold) return "date"
+  if (phone >= threshold) return "phone"
+  return null
+}
+
+/**
+ * Which mappings are "compatible" with a sniffed detection. The mapping
+ * step renders an amber warning when the chosen mapping isn't in this
+ * set for the detected type. fullName is OK for any detected type
+ * because it's a permissive catch-all.
+ */
+export function detectionAgreesWithMapping(
+  detected: DetectedType,
+  mapping: ImportableField | null,
+): boolean {
+  if (detected === null) return true
+  if (mapping === null) return true // user said "don't import" — no warning
+  if (mapping === "fullName") return true
+  if (detected === "email")
+    return mapping === "primaryEmail" || mapping === "secondaryEmail" || mapping === "ownerUserId"
+  if (detected === "phone") return mapping === "primaryPhone" || mapping === "secondaryPhone"
+  if (detected === "url") return mapping === "website"
+  // detected === "date" — no date-shaped contact field in V1, always disagree.
+  return false
+}
+
+/**
+ * First non-empty sample from a column index, truncated for display.
+ * Powers the "example: jane@acme.com" hint in the mapping dropdown.
+ */
+export function firstNonEmptySample(rows: string[][], columnIndex: number, max = 40): string {
+  for (const row of rows) {
+    const v = (row[columnIndex] ?? "").trim()
+    if (v.length === 0) continue
+    return v.length <= max ? v : v.slice(0, max - 1) + "…"
+  }
+  return ""
 }
 
 // ─── Row validation ────────────────────────────────────────────────────
@@ -205,15 +333,49 @@ const emailSchema = z.union([z.email(), z.literal("")])
 const urlSchema = z.union([z.url(), z.literal("")])
 
 /**
+ * Push 2c.1 — split a fullName into first + last on the FIRST space.
+ * "Jane Doe" → ["Jane", "Doe"]. "Jane Mary Doe" → ["Jane", "Mary Doe"].
+ * Single word "Jane" → ["Jane", ""] (caller decides if missing last
+ * counts as a row-level error). Trailing whitespace tolerated.
+ */
+export function splitFullName(full: string): { firstName: string; lastName: string } {
+  const trimmed = full.trim()
+  if (trimmed.length === 0) return { firstName: "", lastName: "" }
+  const space = trimmed.indexOf(" ")
+  if (space === -1) return { firstName: trimmed, lastName: "" }
+  return {
+    firstName: trimmed.slice(0, space).trim(),
+    lastName: trimmed.slice(space + 1).trim(),
+  }
+}
+
+/**
+ * Push 2c.1 — parse a tag cell. Accepts both comma AND semicolon
+ * separators (HubSpot exports use ; for multi-value; Mailchimp uses ,).
+ * Empty / oversized tokens dropped. Lowercase normalization NOT applied
+ * here — the create/update layer expects case-as-typed.
+ */
+export function parseTagsCell(raw: string): string[] {
+  return raw
+    .split(/[,;]/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.length <= 80)
+}
+
+/**
  * Turn a raw CSV row + field mapping into a CleanRow keyed by contact
  * field. Validation errors are surfaced inline (one per row) so the
  * preview can show "what would actually import" without dropping the
  * whole row from the dataset.
+ *
+ * Push 2c.1 — fullName auto-splits to first + last; explicit
+ * firstName/lastName mappings win.
  */
 export interface CleanRow {
   rowIndex: number // 1-based for user-facing error reporting
   values: Partial<Record<ImportableField, string>>
   errors: string[]
+  warnings: string[]
 }
 
 export function buildCleanRow(
@@ -223,6 +385,7 @@ export function buildCleanRow(
 ): CleanRow {
   const values: Partial<Record<ImportableField, string>> = {}
   const errors: string[] = []
+  const warnings: string[] = []
   for (let i = 0; i < mapping.length; i++) {
     const field = mapping[i]
     if (!field) continue
@@ -231,32 +394,92 @@ export function buildCleanRow(
     values[field] = raw
   }
 
-  // First + last name are the only hard-required fields. A row without
-  // either is unimportable (Contact requires firstName + lastName per
-  // types.ts).
-  if (!values.firstName) errors.push("firstName is required")
-  if (!values.lastName) errors.push("lastName is required")
+  // fullName auto-split. Explicit first/last mappings win, so we only
+  // fill the absent half.
+  if (values.fullName) {
+    const split = splitFullName(values.fullName)
+    if (!values.firstName && split.firstName) values.firstName = split.firstName
+    if (!values.lastName && split.lastName) values.lastName = split.lastName
+  }
+
+  // lastName is the only HARD-required field (a row identified only by
+  // first name + email is still useful — HubSpot lets you create
+  // "First-name-only" leads). Email-only is also acceptable IF the
+  // wizard chose to map email separately (covers spreadsheets from
+  // form fills with no name parsed yet).
+  const hasIdentifier = !!values.lastName || !!values.primaryEmail || !!values.firstName
+  if (!hasIdentifier) {
+    errors.push("Row has no first name, last name, or email — nothing to identify the contact")
+  }
+  // firstName defaults to "Unknown" at create time when missing but
+  // we have lastName / email. Surface as a warning so the user sees it.
+  if (!values.firstName && hasIdentifier && !values.lastName) {
+    warnings.push("First name missing — will be imported as just the email/last-name")
+  }
 
   if (values.primaryEmail) {
     const r = emailSchema.safeParse(values.primaryEmail)
-    if (!r.success) errors.push("primaryEmail is not a valid email")
+    if (!r.success) {
+      warnings.push("primaryEmail is not a valid email — will be imported without it")
+      delete values.primaryEmail
+    }
   }
   if (values.secondaryEmail) {
     const r = emailSchema.safeParse(values.secondaryEmail)
-    if (!r.success) errors.push("secondaryEmail is not a valid email")
+    if (!r.success) {
+      warnings.push("secondaryEmail is not a valid email — will be imported without it")
+      delete values.secondaryEmail
+    }
   }
   if (values.website) {
     const r = urlSchema.safeParse(values.website)
-    if (!r.success) errors.push("website is not a valid URL")
+    if (!r.success) {
+      warnings.push("website is not a valid URL — will be imported without it")
+      delete values.website
+    }
   }
-  if (values.contactType && !CONTACT_TYPES.includes(values.contactType as never)) {
-    errors.push(`contactType must be one of: ${CONTACT_TYPES.join(", ")}`)
+  if (values.contactType) {
+    const matched = caseInsensitiveEnumMatch(values.contactType, CONTACT_TYPES)
+    if (matched) {
+      values.contactType = matched
+    } else {
+      warnings.push(
+        `contactType "${values.contactType}" is not a valid type — will be imported without it`,
+      )
+      delete values.contactType
+    }
   }
-  if (values.lifecycleStatus && !LIFECYCLE_STATUSES.includes(values.lifecycleStatus as never)) {
-    errors.push(`lifecycleStatus must be one of: ${LIFECYCLE_STATUSES.join(", ")}`)
+  if (values.lifecycleStatus) {
+    const matched = caseInsensitiveEnumMatch(values.lifecycleStatus, LIFECYCLE_STATUSES)
+    if (matched) {
+      values.lifecycleStatus = matched
+    } else {
+      warnings.push(
+        `lifecycleStatus "${values.lifecycleStatus}" is not a valid status — will be imported without it`,
+      )
+      delete values.lifecycleStatus
+    }
   }
 
-  return { rowIndex, values, errors }
+  return { rowIndex, values, errors, warnings }
+}
+
+/**
+ * Case-insensitive enum match — returns the canonical-case enum value
+ * if the input matches any allowed value (case-folded), else null.
+ * Used by contactType + lifecycleStatus normalization so that
+ * "customer", "Customer", "CUSTOMER" all collapse to whatever the
+ * V1 enum spelling is.
+ */
+function caseInsensitiveEnumMatch<T extends readonly string[]>(
+  input: string,
+  allowed: T,
+): T[number] | null {
+  const lower = input.trim().toLowerCase()
+  for (const candidate of allowed) {
+    if (candidate.toLowerCase() === lower) return candidate
+  }
+  return null
 }
 
 // ─── Phone normalization (for dedupe matching) ─────────────────────────
@@ -269,6 +492,31 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null
   const digits = raw.replace(/\D/g, "")
   return digits.length > 0 ? digits : null
+}
+
+// ─── CSV-internal duplicate detection (preview-step warnings) ──────────
+
+/**
+ * Push 2c.1 — scan all clean rows for duplicate primaryEmail values
+ * within the CSV itself. Returns a map of rowIndex → "this is a
+ * duplicate of row X" (first occurrence wins). Rows with no email
+ * are excluded — phone-only collisions are noisier and HubSpot's
+ * pattern is email-centric here.
+ */
+export function findCsvInternalDuplicates(rows: CleanRow[]): Map<number, number> {
+  const firstByEmail = new Map<string, number>()
+  const dupes = new Map<number, number>()
+  for (const r of rows) {
+    const email = (r.values.primaryEmail ?? "").trim().toLowerCase()
+    if (!email) continue
+    const first = firstByEmail.get(email)
+    if (first === undefined) {
+      firstByEmail.set(email, r.rowIndex)
+    } else {
+      dupes.set(r.rowIndex, first)
+    }
+  }
+  return dupes
 }
 
 // ─── Errors-as-CSV helper ──────────────────────────────────────────────

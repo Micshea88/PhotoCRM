@@ -1,44 +1,40 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, eq, ilike, inArray, isNull, sql } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { z } from "zod"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
+import { member, user } from "@/modules/auth/schema"
+import { companies } from "@/modules/companies/schema"
 import { contacts } from "./schema"
 import {
   CSV_MAX_ROWS,
   IMPORTABLE_FIELDS,
   normalizePhone,
+  parseTagsCell,
   type ImportableField,
 } from "./import-spec"
-import { contactTypeSchema, lifecycleStatusSchema } from "./types"
 
 /**
- * Push 2c — CSV import. Two-step server contract:
+ * Push 2c / 2c.1 — CSV import. Two-step server contract:
  *
- *   1. previewContactsImport(rows) → returns dedupe info for each row so
- *      the wizard preview step can show "this looks like the existing
- *      contact X" + propose a default action.
- *   2. runContactsImport(rows + per-row action) → executes. Returns per-
- *      row success / error, capped at CSV_MAX_ROWS rows total.
+ *   1. previewContactsImport(rows) → returns per-row dedupe info +
+ *      surfaces the org-member emails so the wizard's "Use the column
+ *      from the CSV" owner mode can show a quick "X of Y emails will
+ *      resolve" hint at preview time (no per-row roundtrip).
+ *   2. runContactsImport(rows + per-row action + bulk-owner mode +
+ *      bulk-tag list + error-mode toggle) → executes. Returns per-row
+ *      success / error, capped at CSV_MAX_ROWS.
  *
  * Both actions are scoped via orgAction so RLS is enforced + audit-ctx
  * flows automatically.
- *
- * The "rows" payload shape is generic — fields are passed through as
- * keyed by IMPORTABLE_FIELDS. This avoids a wire schema explosion as
- * we add fields.
  */
 
 type ImportRowValues = Partial<Record<ImportableField, string>>
 const importableFieldsSet = new Set<string>(IMPORTABLE_FIELDS)
 
-// Values are a partial map keyed by ImportableField. Zod's record-with-
-// enum-key infers Record<Enum, T> (all keys required), which doesn't
-// match the actual partial shape. We accept loose string→string here +
-// filter unknown keys in pickValues.
 const importRowSchema = z.object({
   rowIndex: z.number().int().min(1),
   values: z.record(z.string(), z.string()),
@@ -47,6 +43,9 @@ const importRowSchema = z.object({
 const previewInput = z.object({
   rows: z.array(importRowSchema).max(CSV_MAX_ROWS),
 })
+
+const ownerModeEnum = z.enum(["self", "specific", "from_csv"])
+const errorModeEnum = z.enum(["skip", "stop"])
 
 const runInput = z.object({
   rows: z
@@ -57,6 +56,10 @@ const runInput = z.object({
       }),
     )
     .max(CSV_MAX_ROWS),
+  ownerMode: ownerModeEnum.default("self"),
+  ownerUserId: z.string().min(1).nullable().optional(),
+  applyTags: z.array(z.string().min(1).max(80)).max(32).optional(),
+  errorMode: errorModeEnum.default("skip"),
 })
 
 export const previewContactsImport = orgAction
@@ -64,7 +67,7 @@ export const previewContactsImport = orgAction
   .inputSchema(previewInput)
   .action(async ({ parsedInput, ctx }) => {
     if (parsedInput.rows.length === 0) {
-      return { rows: [] }
+      return { rows: [], orgMemberEmails: [] }
     }
 
     // Build the sets of (email, phone-digits) we'll need to look up.
@@ -77,7 +80,6 @@ export const previewContactsImport = orgAction
       if (phone) phones.add(phone)
     }
 
-    // Lookup existing contacts that match either side. RLS scopes to org.
     const emailList = [...emails]
     const phoneList = [...phones]
     const matches = await ctx.db
@@ -94,9 +96,6 @@ export const previewContactsImport = orgAction
           eq(contacts.organizationId, ctx.activeOrg.id),
           isNull(contacts.deletedAt),
           isNull(contacts.archivedAt),
-          // Either email match (case-insensitive) OR phone match (digits-only).
-          // Drizzle's array binding doesn't support empty arrays, so we
-          // skip the predicate if a side is empty.
           emailList.length > 0 || phoneList.length > 0
             ? sql`(${
                 emailList.length > 0
@@ -119,13 +118,21 @@ export const previewContactsImport = orgAction
       if (phone) byPhone.set(phone, m)
     }
 
+    // Surface the org-member emails so the wizard can validate the
+    // "Use the column from the CSV" owner mode upfront. We only return
+    // lowercased emails — the wizard uses them as a Set for lookup.
+    const orgMembers = await ctx.db
+      .select({ email: user.email })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(eq(member.organizationId, ctx.activeOrg.id))
+
     return {
       rows: parsedInput.rows.map((r) => {
         const email = (r.values.primaryEmail ?? "").trim().toLowerCase()
         const phone = normalizePhone(r.values.primaryPhone)
         const emailMatch = email ? (byEmail.get(email) ?? null) : null
         const phoneMatch = phone ? (byPhone.get(phone) ?? null) : null
-        // Email match takes precedence over phone.
         const match = emailMatch ?? phoneMatch
         const proposedAction: "create" | "update" | "skip" = match ? "update" : "create"
         return {
@@ -135,6 +142,7 @@ export const previewContactsImport = orgAction
           proposedAction,
         }
       }),
+      orgMemberEmails: orgMembers.map((m) => m.email.toLowerCase()),
     }
   })
 
@@ -145,7 +153,7 @@ interface PerRowResult {
   error?: string
 }
 
-function pickValues(rawValues: Record<string, string>): Partial<typeof contacts.$inferInsert> {
+function pickValuesCore(rawValues: Record<string, string>): ImportRowValues {
   // Drop any keys the import wizard shouldn't have sent. The wizard is
   // the only caller, but defense-in-depth — the action layer is the
   // RLS-trusted boundary.
@@ -155,34 +163,177 @@ function pickValues(rawValues: Record<string, string>): Partial<typeof contacts.
       values[k as ImportableField] = v
     }
   }
-  const out: Partial<typeof contacts.$inferInsert> = {}
-  if (values.firstName) out.firstName = values.firstName
-  if (values.lastName) out.lastName = values.lastName
-  if (values.primaryEmail) out.primaryEmail = values.primaryEmail
-  if (values.primaryPhone) out.primaryPhone = values.primaryPhone
-  if (values.secondaryEmail) out.secondaryEmail = values.secondaryEmail
-  if (values.secondaryPhone) out.secondaryPhone = values.secondaryPhone
-  if (values.leadSource) out.leadSource = values.leadSource
-  if (values.sourceDetail) out.sourceDetail = values.sourceDetail
-  if (values.notes) out.notes = values.notes
-  if (values.website) out.website = values.website
-  if (values.instagramHandle) out.instagramHandle = values.instagramHandle
-  if (values.contactType) {
-    const r = contactTypeSchema.safeParse(values.contactType)
-    if (r.success) out.contactType = r.data
+  return values
+}
+
+interface BulkContext {
+  /** Map of lowercased company name → companyId for the active org. */
+  companiesByName: Map<string, string>
+  /** Map of lowercased member email → userId for the active org. */
+  membersByEmail: Map<string, string>
+  /** Bulk tags applied to every row regardless of per-row tags column. */
+  applyTags: string[]
+}
+
+/**
+ * Build the patch sent to insert / update for one row, merging the
+ * row's values with the bulk-import context (company name resolution,
+ * mailing jsonb assembly, bulk-tag union).
+ *
+ * Per-row owner resolution is NOT done here — runContactsImport handles
+ * the ownerMode branch (self / specific / from-csv) inline so the
+ * "from_csv" miss path can route to a row-level error rather than
+ * silently dropping ownership.
+ */
+function buildPatch(
+  values: ImportRowValues,
+  bulk: BulkContext,
+): { patch: Partial<typeof contacts.$inferInsert>; warnings: string[] } {
+  const patch: Partial<typeof contacts.$inferInsert> = {}
+  const warnings: string[] = []
+
+  if (values.firstName) patch.firstName = values.firstName
+  if (values.lastName) patch.lastName = values.lastName
+  // firstName defaults to "Unknown" when only lastName / email provided
+  // so the NOT NULL constraint on the column doesn't reject the row.
+  // (The wizard already emitted a warning for this case.)
+  if (!patch.firstName && (values.lastName || values.primaryEmail)) {
+    patch.firstName = "Unknown"
   }
-  if (values.lifecycleStatus) {
-    const r = lifecycleStatusSchema.safeParse(values.lifecycleStatus)
-    if (r.success) out.lifecycleStatus = r.data
+  if (!patch.lastName && values.primaryEmail && !values.lastName) {
+    // Same fallback for last name when only email is provided.
+    patch.lastName = "Unknown"
   }
+  if (values.primaryEmail) patch.primaryEmail = values.primaryEmail
+  if (values.primaryPhone) patch.primaryPhone = values.primaryPhone
+  if (values.secondaryEmail) patch.secondaryEmail = values.secondaryEmail
+  if (values.secondaryPhone) patch.secondaryPhone = values.secondaryPhone
+  if (values.leadSource) patch.leadSource = values.leadSource
+  if (values.sourceDetail) patch.sourceDetail = values.sourceDetail
+  if (values.notes) patch.notes = values.notes
+  if (values.website) patch.website = values.website
+  if (values.instagramHandle) patch.instagramHandle = values.instagramHandle
+  if (values.contactType) patch.contactType = values.contactType
+  if (values.lifecycleStatus) patch.lifecycleStatus = values.lifecycleStatus
+
+  // Company by name — soft match (case-insensitive). Unknown company
+  // names surface a warning and the row imports without a companyId
+  // (no auto-create — that would silently inflate the company list).
+  if (values.companyName) {
+    const lookup = bulk.companiesByName.get(values.companyName.toLowerCase())
+    if (lookup) {
+      patch.companyId = lookup
+    } else {
+      warnings.push(`Company "${values.companyName}" not found — imported without company link`)
+    }
+  }
+
+  // Mailing fields → mailing_address jsonb. Only include keys the
+  // user actually mapped.
+  const mailing: Record<string, string> = {}
+  if (values.mailingStreet) mailing.street1 = values.mailingStreet
+  if (values.mailingCity) mailing.city = values.mailingCity
+  if (values.mailingState) mailing.state = values.mailingState.toUpperCase()
+  if (values.mailingPostalCode) mailing.zip = values.mailingPostalCode
+  if (Object.keys(mailing).length > 0) {
+    patch.mailingAddress = mailing
+  }
+
+  // Tags — union of per-row tags + bulk-apply tags. Deduped + cased
+  // as-received.
+  const tagSet = new Set<string>()
   if (values.tags) {
-    const parts = values.tags
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0 && t.length <= 80)
-    if (parts.length > 0) out.tags = parts
+    for (const t of parseTagsCell(values.tags)) tagSet.add(t)
   }
-  return out
+  for (const t of bulk.applyTags) tagSet.add(t)
+  if (tagSet.size > 0) patch.tags = [...tagSet]
+
+  return { patch, warnings }
+}
+
+async function loadBulkContext(
+  ctx: Parameters<Parameters<typeof orgAction.action>[0]>[0]["ctx"],
+  parsed: z.infer<typeof runInput>,
+): Promise<BulkContext> {
+  // Distinct company names from all rows that map one.
+  const companyNames = new Set<string>()
+  for (const r of parsed.rows) {
+    const name = r.values.companyName?.trim().toLowerCase()
+    if (name) companyNames.add(name)
+  }
+  const companiesByName = new Map<string, string>()
+  if (companyNames.size > 0) {
+    const rows = await ctx.db
+      .select({ id: companies.id, name: companies.name })
+      .from(companies)
+      .where(
+        and(
+          eq(companies.organizationId, ctx.activeOrg.id),
+          isNull(companies.deletedAt),
+          ilike(companies.name, sql`ANY(${[...companyNames]}::text[])`),
+        ),
+      )
+    for (const r of rows) companiesByName.set(r.name.toLowerCase(), r.id)
+  }
+
+  // Distinct owner emails from from_csv mode.
+  const membersByEmail = new Map<string, string>()
+  if (parsed.ownerMode === "from_csv") {
+    const ownerEmails = new Set<string>()
+    for (const r of parsed.rows) {
+      const e = r.values.ownerUserId?.trim().toLowerCase()
+      if (e) ownerEmails.add(e)
+    }
+    if (ownerEmails.size > 0) {
+      const rows = await ctx.db
+        .select({ userId: member.userId, email: user.email })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(
+          and(
+            eq(member.organizationId, ctx.activeOrg.id),
+            inArray(sql`LOWER(${user.email})`, [...ownerEmails]),
+          ),
+        )
+      for (const r of rows) membersByEmail.set(r.email.toLowerCase(), r.userId)
+    }
+  }
+
+  return {
+    companiesByName,
+    membersByEmail,
+    applyTags: parsed.applyTags ?? [],
+  }
+}
+
+function resolveRowOwner(
+  values: ImportRowValues,
+  parsed: z.infer<typeof runInput>,
+  bulk: BulkContext,
+  fallbackUserId: string,
+): { ownerUserId: string | null; error: string | null } {
+  if (parsed.ownerMode === "specific") {
+    return { ownerUserId: parsed.ownerUserId ?? fallbackUserId, error: null }
+  }
+  if (parsed.ownerMode === "from_csv") {
+    const email = values.ownerUserId?.trim().toLowerCase()
+    if (!email) {
+      return {
+        ownerUserId: null,
+        error: "Owner email column is empty for this row",
+      }
+    }
+    const resolved = bulk.membersByEmail.get(email)
+    if (!resolved) {
+      return {
+        ownerUserId: null,
+        error: `Owner email "${email}" is not a member of this organization`,
+      }
+    }
+    return { ownerUserId: resolved, error: null }
+  }
+  // "self"
+  return { ownerUserId: fallbackUserId, error: null }
 }
 
 export const runContactsImport = orgAction
@@ -190,12 +341,27 @@ export const runContactsImport = orgAction
   .inputSchema(runInput)
   .action(async ({ parsedInput, ctx }) => {
     if (parsedInput.rows.length === 0) {
-      return { results: [], successCount: 0, errorCount: 0 }
+      return { results: [], successCount: 0, errorCount: 0, stopped: false }
     }
 
-    // Pre-resolve the set of matchedContactIds we need for "update" so a
-    // bogus client-side id can't trick us into updating a contact in
-    // another org (RLS is the real gate; this is a friendlier error).
+    // Validate "specific" owner is actually an org member upfront.
+    if (parsedInput.ownerMode === "specific") {
+      const targetUserId = parsedInput.ownerUserId ?? ctx.session.user.id
+      const [row] = await ctx.db
+        .select({ userId: member.userId })
+        .from(member)
+        .where(and(eq(member.organizationId, ctx.activeOrg.id), eq(member.userId, targetUserId)))
+        .limit(1)
+      if (!row) {
+        throw new ActionError("VALIDATION", "Selected owner is not a member of this organization.")
+      }
+    }
+
+    const bulk = await loadBulkContext(ctx, parsedInput)
+
+    // Pre-resolve update target ids so a stale client id can't update
+    // a row in another org. RLS would catch it but error messages are
+    // better when we fail-fast.
     const matchedIds = [
       ...new Set(
         parsedInput.rows
@@ -222,20 +388,30 @@ export const runContactsImport = orgAction
     const results: PerRowResult[] = []
     let successCount = 0
     let errorCount = 0
+    let stopped = false
 
     for (const r of parsedInput.rows) {
       if (r.action === "skip") {
         results.push({ rowIndex: r.rowIndex, ok: true })
         continue
       }
-      const patch = pickValues(r.values)
+      const values = pickValuesCore(r.values)
+      const ownerResolution = resolveRowOwner(values, parsedInput, bulk, ctx.session.user.id)
+      if (ownerResolution.error) {
+        results.push({ rowIndex: r.rowIndex, ok: false, error: ownerResolution.error })
+        errorCount++
+        if (parsedInput.errorMode === "stop") {
+          stopped = true
+          break
+        }
+        continue
+      }
+      const ownerUserId = ownerResolution.ownerUserId ?? ctx.session.user.id
+      const { patch } = buildPatch(values, bulk)
       try {
         if (r.action === "create") {
           if (!patch.firstName || !patch.lastName) {
-            throw new ActionError(
-              "VALIDATION",
-              "firstName and lastName are required to create a contact",
-            )
+            throw new ActionError("VALIDATION", "Cannot create a contact without a name or email")
           }
           const id = createId()
           await ctx.db.insert(contacts).values({
@@ -243,10 +419,12 @@ export const runContactsImport = orgAction
             organizationId: ctx.activeOrg.id,
             firstName: patch.firstName,
             lastName: patch.lastName,
+            companyId: patch.companyId ?? null,
             primaryEmail: patch.primaryEmail ?? null,
             primaryPhone: patch.primaryPhone ?? null,
             secondaryEmail: patch.secondaryEmail ?? null,
             secondaryPhone: patch.secondaryPhone ?? null,
+            mailingAddress: patch.mailingAddress ?? null,
             leadSource: patch.leadSource ?? null,
             sourceDetail: patch.sourceDetail ?? null,
             notes: patch.notes ?? null,
@@ -255,7 +433,7 @@ export const runContactsImport = orgAction
             contactType: patch.contactType ?? null,
             lifecycleStatus: patch.lifecycleStatus ?? null,
             tags: patch.tags ?? null,
-            ownerUserId: ctx.session.user.id,
+            ownerUserId,
             createdBy: ctx.session.user.id,
             updatedBy: ctx.session.user.id,
           })
@@ -285,6 +463,11 @@ export const runContactsImport = orgAction
             .update(contacts)
             .set({
               ...patch,
+              // Owner is updated on bulk-update only when the import
+              // ownerMode is "from_csv" (per-row) or "specific" (bulk).
+              // "self" mode leaves existing contact owners alone on
+              // update to avoid silently reassigning others' contacts.
+              ...(parsedInput.ownerMode === "self" ? {} : { ownerUserId }),
               updatedAt: new Date(),
               updatedBy: ctx.session.user.id,
             })
@@ -322,9 +505,13 @@ export const runContactsImport = orgAction
               : "Unknown error"
         results.push({ rowIndex: r.rowIndex, ok: false, error: message })
         errorCount++
+        if (parsedInput.errorMode === "stop") {
+          stopped = true
+          break
+        }
       }
     }
 
     revalidatePath("/contacts")
-    return { results, successCount, errorCount }
+    return { results, successCount, errorCount, stopped }
   })

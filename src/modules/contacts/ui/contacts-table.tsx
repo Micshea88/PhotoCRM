@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
 import { archiveContact, deleteContact } from "../actions"
+import { fontFromElement, getMeasurementContext, measureColumnAutoFit } from "./column-auto-fit"
 import { resolveContactColumns, type ColumnConfigItem, type ContactRow } from "./columns"
 
 const DELETE_BODY =
@@ -173,6 +174,28 @@ export function ContactsTable({
     document.addEventListener("mouseup", onUp)
   }
 
+  // ── Auto-fit on dblclick (Push 2c.1) ────────────────────────────────
+  // Measure the widest content via canvas measureText so CSS truncation
+  // doesn't fool the width. Clamped to [60, 400] inside the helper.
+  function autoFitColumn(columnId: string, hostEl: Element) {
+    const ctx = getMeasurementContext()
+    if (!ctx) return
+    const def = resolved.all.find((c) => c.id === columnId)?.def
+    if (!def) return
+    const cellValues = rows.map((r) => def.render(r))
+    const next = measureColumnAutoFit({
+      ctx,
+      font: fontFromElement(hostEl),
+      headerLabel: def.label,
+      cellValues,
+    })
+    onColumnConfigChange(
+      resolved.all.map((c) =>
+        c.id === columnId ? { id: c.id, visible: c.visible, order: c.order, width: next } : c,
+      ),
+    )
+  }
+
   return (
     <>
       <div className="overflow-auto rounded-lg border border-[var(--color-border)]">
@@ -206,6 +229,9 @@ export function ContactsTable({
                         width={cfg?.width ?? col.defaultWidth}
                         onResizeStart={(startX, startWidth) => {
                           startResize(col.id, startX, startWidth)
+                        }}
+                        onAutoFit={(hostEl) => {
+                          autoFitColumn(col.id, hostEl)
                         }}
                       />
                     )
@@ -318,11 +344,14 @@ function SortableHeaderCell({
   label,
   width,
   onResizeStart,
+  onAutoFit,
 }: {
   id: string
   label: string
   width: number | null
   onResizeStart: (startX: number, startWidth: number) => void
+  /** Push 2c.1 — receives the header <th> so autofit can read its font. */
+  onAutoFit: (hostEl: Element) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -348,12 +377,21 @@ function SortableHeaderCell({
       <span
         role="separator"
         aria-orientation="vertical"
+        title="Drag to resize · Double-click to auto-fit"
         onMouseDown={(e) => {
+          // Push 2c.1 — guard against the dblclick path. detail === 2
+          // means this is the second click of a double-click — don't
+          // start a drag; the dblclick handler runs separately.
+          if (e.detail >= 2) return
           // Capture starting width from the DOM rect — header may have
           // been laid out by flex with no fixed width yet.
           const th = e.currentTarget.parentElement
           const startWidth = th ? th.getBoundingClientRect().width : (width ?? 120)
           onResizeStart(e.clientX, startWidth)
+        }}
+        onDoubleClick={(e) => {
+          const th = e.currentTarget.parentElement
+          if (th) onAutoFit(th)
         }}
         className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-primary)]/40"
       />

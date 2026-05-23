@@ -54,3 +54,33 @@
     --color-ring: oklch(0.439 0 0);
   }
 }
+
+/*
+ * Push 2c.2.1 — always-visible horizontal scrollbar on the contacts
+ * table wrapper. macOS hides scrollbars by default until the user
+ * scrolls, which left users with no visual hint that more columns
+ * existed off-screen when the table overflowed the viewport.
+ *
+ * Firefox / standard: `scrollbar-width: thin` keeps the bar slim;
+ *   `scrollbar-color` sets thumb + track colors.
+ * WebKit (Safari + Chrome): explicit pseudo-element styles force the
+ *   bar to render with a non-zero height even when the OS would
+ *   normally hide it.
+ */
+.contacts-table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.contacts-table-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+.contacts-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.contacts-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 5px;
+}
+.contacts-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}

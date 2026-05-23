@@ -200,8 +200,27 @@ export function ContactsTable({
 
   return (
     <>
-      <div className="overflow-auto rounded-lg border border-[var(--color-border)]">
-        <table className="w-full border-separate border-spacing-0 text-sm">
+      {/*
+       * Push 2c.2.1 — horizontal scrollbar handling.
+       *
+       * `overflow-x-auto` + `overflow-y-visible` makes this the
+       * dedicated horizontal scroller; the page itself handles
+       * vertical. Without `overflow-y-visible` the wrapper would
+       * become a vertical scroller too and clip Radix dropdown
+       * portals that escape the cell box.
+       *
+       * `contacts-table-scroll` class forces the scrollbar to ALWAYS
+       * be visible (see app/globals.css). macOS hides scrollbars by
+       * default until the user scrolls — that left users with no
+       * affordance that more columns existed off-screen.
+       *
+       * `table-layout: fixed` on the inner <table> below makes the
+       * browser respect explicit column widths instead of squishing
+       * everything to fit the container width — the trigger for the
+       * "no scrollbar appears" symptom even when overflow exists.
+       */}
+      <div className="contacts-table-scroll overflow-x-auto overflow-y-visible rounded-lg border border-[var(--color-border)]">
+        <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
           <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
             <tr>
               <th className="w-10 border-r border-b border-[var(--color-border)] px-2 py-2">

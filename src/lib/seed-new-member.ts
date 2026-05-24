@@ -1,6 +1,8 @@
 import "server-only"
 import { and, eq, sql } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import * as Sentry from "@sentry/nextjs"
+import type * as schema from "@/db/schema"
 import { db } from "@/lib/db"
 import { log } from "@/lib/log"
 import { invitationExtendedRole } from "@/modules/rbac/schema"
@@ -11,6 +13,8 @@ import {
   type ExtendedRole,
   type BetterAuthRole,
 } from "@/modules/rbac/types"
+
+type DbHandle = NodePgDatabase<typeof schema>
 
 /**
  * Runs from Better Auth's `organizationHooks.afterAcceptInvitation`.
@@ -54,34 +58,19 @@ export async function seedNewMember(
     await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)
       await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
-
-      // Resolve the extended role: metadata row wins, else BA fallback.
-      let extendedRole: ExtendedRole = extendedFromBetterAuth(baRole)
-      let resolvedFromMetadata = false
-      if (invitationId) {
-        const [metadataRow] = await tx
-          .select({ extendedRole: invitationExtendedRole.extendedRole })
-          .from(invitationExtendedRole)
-          .where(
-            and(
-              eq(invitationExtendedRole.invitationId, invitationId),
-              eq(invitationExtendedRole.organizationId, orgId),
-            ),
-          )
-          .limit(1)
-        if (metadataRow && isExtendedRole(metadataRow.extendedRole)) {
-          extendedRole = metadataRow.extendedRole
-          resolvedFromMetadata = true
-        }
-      }
-
-      await seedExtendedMemberRole(tx, orgId, userId, extendedRole)
-
+      const result = await resolveAndSeedExtendedMemberRole(tx, orgId, userId, baRole, invitationId)
       // Metadata row is cleaned up by the invitation row's CASCADE
       // delete (BA marks the invitation as accepted then removes
       // it; the FK fires). No explicit delete needed.
       log.info(
-        { orgId, userId, baRole, extendedRole, resolvedFromMetadata, invitationId },
+        {
+          orgId,
+          userId,
+          baRole,
+          invitationId,
+          extendedRole: result.extendedRole,
+          resolvedFromMetadata: result.resolvedFromMetadata,
+        },
         "seedNewMember: complete",
       )
     })
@@ -98,6 +87,56 @@ export async function seedNewMember(
       "seedNewMember: failed (invitee will see hasPermission()===false until rescued)",
     )
   }
+}
+
+/**
+ * Push 2c.6.5 — core resolution + seed step, extracted from
+ * seedNewMember so integration tests can target it inside the
+ * withTestDb savepoint wrapper.
+ *
+ * Caller's responsibility:
+ *   - Provide a tx-bound DbHandle (either the production
+ *     `db.transaction` callback's tx, or a withTestDb-wrapped
+ *     client).
+ *   - Set app.current_org and app.current_role on the tx BEFORE
+ *     calling — the rbac member_role write-gate (RLS policy from
+ *     migration 0006) requires app.current_role IN ('owner',
+ *     'admin'), and the invitation_extended_role SELECT requires
+ *     app.current_org. Tests use setOrgContext from
+ *     tests/helpers/db.ts; production seedNewMember sets both
+ *     via tx.execute(set_config(...)).
+ *
+ * Returns the chosen extended role + whether it was resolved from
+ * the metadata table (true) or fell back to extendedFromBetterAuth
+ * (false). The caller logs/audits with this context.
+ */
+export async function resolveAndSeedExtendedMemberRole(
+  tx: DbHandle,
+  orgId: string,
+  userId: string,
+  baRole: BetterAuthRole,
+  invitationId: string | undefined,
+): Promise<{ extendedRole: ExtendedRole; resolvedFromMetadata: boolean }> {
+  let extendedRole: ExtendedRole = extendedFromBetterAuth(baRole)
+  let resolvedFromMetadata = false
+  if (invitationId) {
+    const [metadataRow] = await tx
+      .select({ extendedRole: invitationExtendedRole.extendedRole })
+      .from(invitationExtendedRole)
+      .where(
+        and(
+          eq(invitationExtendedRole.invitationId, invitationId),
+          eq(invitationExtendedRole.organizationId, orgId),
+        ),
+      )
+      .limit(1)
+    if (metadataRow && isExtendedRole(metadataRow.extendedRole)) {
+      extendedRole = metadataRow.extendedRole
+      resolvedFromMetadata = true
+    }
+  }
+  await seedExtendedMemberRole(tx, orgId, userId, extendedRole)
+  return { extendedRole, resolvedFromMetadata }
 }
 
 function isExtendedRole(v: string): v is ExtendedRole {

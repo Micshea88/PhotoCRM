@@ -79,6 +79,11 @@ export default async function OrgMembersPage() {
                 id: i.id,
                 email: i.email,
                 role: i.role ?? "member",
+                // Push 2c.6.5 — null for legacy invitations created
+                // before the invitation_extended_role table existed;
+                // the UI falls back to extendedFromBetterAuth(i.role)
+                // so they still render with a sensible value.
+                extendedRole: i.extendedRole,
               }))}
             />
           </section>

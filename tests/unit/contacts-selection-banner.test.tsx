@@ -32,6 +32,7 @@ vi.mock("next/navigation", () => ({
 // resolves; individual tests don't invoke the bulk buttons.
 vi.mock("@/modules/contacts/actions", () => ({
   bulkAddTag: vi.fn(),
+  bulkChangeContactType: vi.fn(),
   bulkChangeOwner: vi.fn(),
   bulkChangeStatus: vi.fn(),
   bulkDeleteContacts: vi.fn(),
@@ -95,8 +96,25 @@ describe("SelectionBanner", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Change owner" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Change status" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Change type" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Add tag" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Remove tag" })).toBeInTheDocument()
+  })
+
+  it("Change type button opens a modal with contactType options", async () => {
+    const user = userEvent.setup()
+    render(
+      <SelectionBanner
+        selectedIds={["c-1"]}
+        ownerOptions={owners}
+        tagOptions={tags}
+        onClear={() => undefined}
+      />,
+    )
+    await user.click(screen.getByRole("button", { name: "Change type" }))
+    // The modal lists every contact type from CONTACT_TYPES.
+    expect(screen.getByRole("option", { name: "Lead" })).toBeInTheDocument()
+    expect(screen.getByRole("option", { name: "Active Client" })).toBeInTheDocument()
   })
 
   it("Clear button invokes onClear", async () => {

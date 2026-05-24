@@ -8,12 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
 import {
   bulkAddTag,
+  bulkChangeContactType,
   bulkChangeOwner,
   bulkChangeStatus,
   bulkDeleteContacts,
   bulkRemoveTag,
 } from "../actions"
-import { LIFECYCLE_STATUSES, type LifecycleStatus } from "../types"
+import { CONTACT_TYPES, LIFECYCLE_STATUSES, type ContactType, type LifecycleStatus } from "../types"
 
 /**
  * Push 2c.2 — selection banner.
@@ -49,6 +50,7 @@ export function SelectionBanner({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [ownerOpen, setOwnerOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [typeOpen, setTypeOpen] = useState(false)
   const [addTagOpen, setAddTagOpen] = useState(false)
   const [removeTagOpen, setRemoveTagOpen] = useState(false)
 
@@ -60,7 +62,7 @@ export function SelectionBanner({
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return
       // Don't steal Esc when a modal is open — let the modal close first.
-      if (deleteOpen || ownerOpen || statusOpen || addTagOpen || removeTagOpen) return
+      if (deleteOpen || ownerOpen || statusOpen || typeOpen || addTagOpen || removeTagOpen) return
       if (count === 0) return
       onClear()
     }
@@ -68,7 +70,7 @@ export function SelectionBanner({
     return () => {
       window.removeEventListener("keydown", onKey)
     }
-  }, [count, onClear, deleteOpen, ownerOpen, statusOpen, addTagOpen, removeTagOpen])
+  }, [count, onClear, deleteOpen, ownerOpen, statusOpen, typeOpen, addTagOpen, removeTagOpen])
 
   if (count === 0) return null
 
@@ -124,6 +126,16 @@ export function SelectionBanner({
             }}
           >
             Change status
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setTypeOpen(true)
+            }}
+          >
+            Change type
           </Button>
           <Button
             size="sm"
@@ -202,6 +214,22 @@ export function SelectionBanner({
           void runAndFinish(async () => {
             const r = await bulkChangeStatus({ ids: selectedIds, lifecycleStatus })
             setStatusOpen(false)
+            return r
+          })
+        }}
+      />
+
+      {/* Push 2c.4 — Change type modal */}
+      <ChangeTypeModal
+        open={typeOpen}
+        onClose={() => {
+          if (!busy) setTypeOpen(false)
+        }}
+        busy={busy}
+        onSubmit={(contactType) => {
+          void runAndFinish(async () => {
+            const r = await bulkChangeContactType({ ids: selectedIds, contactType })
+            setTypeOpen(false)
             return r
           })
         }}
@@ -349,6 +377,59 @@ function ChangeStatusModal({
             }}
           >
             {busy ? "Updating…" : "Update status"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// Push 2c.4 — Change type. Mirrors ChangeStatusModal's UX so the
+// two modals feel identical to users.
+function ChangeTypeModal({
+  open,
+  onClose,
+  busy,
+  onSubmit,
+}: {
+  open: boolean
+  onClose: () => void
+  busy: boolean
+  onSubmit: (contactType: ContactType) => void
+}) {
+  const [value, setValue] = useState<ContactType | "">("")
+  if (!open) return null
+  return (
+    <Modal open={open} onClose={onClose} title="Change contact type">
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Set the contact type for the selected contacts.
+        </p>
+        <select
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value as ContactType | "")
+          }}
+          className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
+        >
+          <option value="">— Select type —</option>
+          {CONTACT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!value || busy}
+            onClick={() => {
+              if (value) onSubmit(value)
+            }}
+          >
+            {busy ? "Updating…" : "Update type"}
           </Button>
         </div>
       </div>

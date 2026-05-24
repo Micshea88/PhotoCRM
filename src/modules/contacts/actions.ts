@@ -16,6 +16,7 @@ import {
   addContactCompanyAssociationInput,
   archiveContactInput,
   bulkAddTagInput,
+  bulkChangeContactTypeInput,
   bulkChangeOwnerInput,
   bulkChangeStatusInput,
   bulkDeleteContactsInput,
@@ -675,6 +676,50 @@ export const bulkChangeOwner = orgAction
           resourceType: "contact",
           resourceId: row.id,
           metadata: { bulk: true, field: "ownerUserId", value: parsedInput.ownerUserId },
+        },
+      )
+    }
+    revalidatePath("/contacts")
+    return { updatedIds: result.map((r) => r.id) }
+  })
+
+// Push 2c.4 — Change type (contactType) bulk action. Mirrors
+// bulkChangeStatus exactly except for the column + audit metadata
+// field. Capped at BULK_ACTION_MAX_IDS=200 via the shared input
+// schema in types.ts.
+export const bulkChangeContactType = orgAction
+  .metadata({ actionName: "contacts.bulk_change_type" })
+  .inputSchema(bulkChangeContactTypeInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(contacts)
+      .set({
+        contactType: parsedInput.contactType,
+        updatedAt: new Date(),
+        updatedBy: ctx.session.user.id,
+      })
+      .where(
+        and(
+          inArray(contacts.id, parsedInput.ids),
+          eq(contacts.organizationId, ctx.activeOrg.id),
+          isNull(contacts.deletedAt),
+        ),
+      )
+      .returning({ id: contacts.id })
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.updated",
+        {
+          resourceType: "contact",
+          resourceId: row.id,
+          metadata: { bulk: true, field: "contactType", value: parsedInput.contactType },
         },
       )
     }

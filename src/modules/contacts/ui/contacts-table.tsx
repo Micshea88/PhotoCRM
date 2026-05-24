@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   DndContext,
@@ -28,6 +28,7 @@ import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
 import { archiveContact, deleteContact } from "../actions"
 import { fontFromElement, getMeasurementContext, measureColumnAutoFit } from "./column-auto-fit"
 import { resolveContactColumns, type ColumnConfigItem, type ContactRow } from "./columns"
+import { HorizontalScrollIndicator } from "./horizontal-scroll-indicator"
 
 const DELETE_BODY =
   "This contact will be moved to Deleted and automatically purged after 90 days. You can restore it before then on the Deleted page."
@@ -96,6 +97,10 @@ export function ContactsTable({
   const router = useRouter()
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [busyDelete, setBusyDelete] = useState(false)
+  // Push 2c.4 — ref to the scrolling wrapper so the
+  // HorizontalScrollIndicator below the table can subscribe to its
+  // scroll / resize events and paint an always-visible thumb.
+  const scrollWrapperRef = useRef<HTMLDivElement | null>(null)
 
   const resolved = resolveContactColumns(columnConfig)
   const visibleIds = resolved.visible.map((c) => c.id)
@@ -219,7 +224,10 @@ export function ContactsTable({
        * everything to fit the container width — the trigger for the
        * "no scrollbar appears" symptom even when overflow exists.
        */}
-      <div className="contacts-table-scroll overflow-x-auto overflow-y-visible rounded-lg border border-[var(--color-border)]">
+      <div
+        ref={scrollWrapperRef}
+        className="contacts-table-scroll overflow-x-auto overflow-y-visible rounded-lg border border-[var(--color-border)]"
+      >
         {/*
          * Push 2c.2.2 — proper horizontal overflow.
          *
@@ -398,6 +406,7 @@ export function ContactsTable({
           </tbody>
         </table>
       </div>
+      <HorizontalScrollIndicator targetRef={scrollWrapperRef} />
 
       <DeleteConfirmModal
         open={!!deleteTargetId}

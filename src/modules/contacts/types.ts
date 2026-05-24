@@ -159,6 +159,11 @@ export const bulkChangeStatusInput = z.object({
   lifecycleStatus: lifecycleStatusSchema,
 })
 
+export const bulkChangeContactTypeInput = z.object({
+  ids: bulkIdsSchema,
+  contactType: contactTypeSchema,
+})
+
 export const bulkAddTagInput = z.object({
   ids: bulkIdsSchema,
   tag: z.string().min(1).max(80),
@@ -215,5 +220,6 @@ export type UpdateContactCompanyAssociationInput = z.infer<
 export type BulkDeleteContactsInput = z.infer<typeof bulkDeleteContactsInput>
 export type BulkChangeOwnerInput = z.infer<typeof bulkChangeOwnerInput>
 export type BulkChangeStatusInput = z.infer<typeof bulkChangeStatusInput>
+export type BulkChangeContactTypeInput = z.infer<typeof bulkChangeContactTypeInput>
 export type BulkAddTagInput = z.infer<typeof bulkAddTagInput>
 export type BulkRemoveTagInput = z.infer<typeof bulkRemoveTagInput>

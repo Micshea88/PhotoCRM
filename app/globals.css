@@ -56,31 +56,53 @@
 }
 
 /*
- * Push 2c.2.1 — always-visible horizontal scrollbar on the contacts
- * table wrapper. macOS hides scrollbars by default until the user
- * scrolls, which left users with no visual hint that more columns
- * existed off-screen when the table overflowed the viewport.
+ * Push 2c.4 — always-visible horizontal scrollbar on the contacts
+ * table wrapper, attempt three.
  *
- * Firefox / standard: `scrollbar-width: thin` keeps the bar slim;
- *   `scrollbar-color` sets thumb + track colors.
- * WebKit (Safari + Chrome): explicit pseudo-element styles force the
- *   bar to render with a non-zero height even when the OS would
- *   normally hide it.
+ * Prior attempts (2c.2.1 / 2c.2.2) shipped the basic ::-webkit-scrollbar
+ * styling. That worked on Chrome + Firefox but macOS Sonoma+ still
+ * auto-hides styled scrollbars on inner overflow containers when the
+ * system preference is "Show scroll bars: Automatically".
+ *
+ * Defenses added here:
+ *   - Wrapped in @layer components so the rules apply AFTER Tailwind
+ *     preflight resets.
+ *   - `scrollbar-gutter: stable` reserves gutter space regardless of
+ *     OS-level scrollbar visibility.
+ *   - `-webkit-appearance: none` on ::-webkit-scrollbar disables the
+ *     OS-managed bar styling so macOS uses our explicit thumb +
+ *     track styles instead of its hide-on-idle bar.
+ *   - Height bumped 10px → 14px (more visible on Retina).
+ *
+ * Even with all this, macOS Sonoma's auto-hide can still suppress
+ * the bar on some configurations. The JS-driven
+ * HorizontalScrollIndicator (see horizontal-scroll-indicator.tsx)
+ * renders an always-visible thumb as the guaranteed visual cue.
  */
-.contacts-table-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
-}
-.contacts-table-scroll::-webkit-scrollbar {
-  height: 10px;
-}
-.contacts-table-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.contacts-table-scroll::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 5px;
-}
-.contacts-table-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--color-muted-foreground);
+@layer components {
+  .contacts-table-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+    scrollbar-gutter: stable;
+  }
+  .contacts-table-scroll::-webkit-scrollbar {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 14px;
+    min-height: 14px;
+  }
+  .contacts-table-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .contacts-table-scroll::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 7px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    min-width: 40px;
+  }
+  .contacts-table-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+    background-clip: padding-box;
+  }
 }

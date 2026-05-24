@@ -52,6 +52,12 @@ const VARS: Var[] = [
     defaultValue: "noreply@example.com",
   },
   {
+    name: "RESEND_FROM_NAME",
+    description:
+      "Optional display name composed into the From: header (e.g. 'K&K Photo CRM'). Leave blank to send from the bare email.",
+    defaultValue: "",
+  },
+  {
     name: "BLOB_READ_WRITE_TOKEN",
     description: "Vercel Blob token. Use any non-empty string for local-only flows.",
     defaultValue: "vercel_blob_dev_token_dummy",

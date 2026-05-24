@@ -54,6 +54,13 @@ export const env = createEnv({
     BETTER_AUTH_URL: z.url(),
     RESEND_API_KEY: z.string().min(1),
     RESEND_FROM_EMAIL: z.email(),
+    // Push 2c.6.7 — optional display name composed into the From:
+    // header at send time, e.g. RESEND_FROM_NAME="K&K Photo CRM"
+    // produces `K&K Photo CRM <invitations@mail.kandkphotography.com>`.
+    // Kept separate from RESEND_FROM_EMAIL so the email field stays
+    // strictly z.email()-validatable (RFC 5322 mailbox format with a
+    // display name is NOT a plain email and would fail the schema).
+    RESEND_FROM_NAME: z.string().min(1).optional(),
     BLOB_READ_WRITE_TOKEN: z.string().min(1),
     CRON_SECRET: productionGradeSecret("CRON_SECRET"),
     QUEUE_SECRET: productionGradeSecret("QUEUE_SECRET"),
@@ -94,6 +101,7 @@ export const env = createEnv({
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+    RESEND_FROM_NAME: process.env.RESEND_FROM_NAME,
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
     CRON_SECRET: process.env.CRON_SECRET,
     QUEUE_SECRET: process.env.QUEUE_SECRET,

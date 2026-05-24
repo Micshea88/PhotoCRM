@@ -107,6 +107,7 @@ Tags: `[sec]` security · `[db]` database/migrations · `[ci]` CI/verification �
 - [x] **M14** `[dx]` `next.config.ts` has `experimental.optimizePackageImports: ['lucide-react']`.
 - [ ] **M15** `[ci]` Pre-commit `git add {staged_files}` after auto-fix breaks partial commits. **Open.**
 - [x] **M16** `[prod]` `vercel-build` migration step gated to `VERCEL_ENV === "production"`. (`db:check` preflight not yet — open.)
+- [ ] **M17** `[prod]` `DATABASE_URL` uses `sslmode=require` (or `prefer`/`verify-ca`) — currently aliased to `verify-full` by pg-connection-string@2 but reverts to weaker libpq semantics in pg@9 / pg-connection-string@3. **Open.** Change all Vercel env tiers to explicit `sslmode=verify-full` before bumping pg.
 
 ---
 

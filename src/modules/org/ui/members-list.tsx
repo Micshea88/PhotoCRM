@@ -64,7 +64,7 @@ export function MembersList({
             <p className="text-sm font-medium">{m.user.name}</p>
             <p className="text-xs text-[var(--color-muted-foreground)]">{m.user.email}</p>
           </div>
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
             <span className="text-[var(--color-muted-foreground)]">{m.extendedRole}</span>
             {canManage && m.user.id !== currentUserId && m.extendedRole !== "owner" && (
               <>

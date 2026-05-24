@@ -87,13 +87,13 @@ export function InviteMemberForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <div className="space-y-2">
+      <div className="grid grid-cols-[1fr_auto] gap-3">
+        <div className="space-y-3">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" {...register("email")} />
           {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label htmlFor="role">Role</Label>
           <select
             id="role"

@@ -51,10 +51,47 @@ import type { ColumnConfigItem, Filter, Sort, Visibility } from "../types"
  * but this helper is the belt to that suspenders so future Zod
  * additions are surfaced too.
  */
-function describeActionError(result: {
-  serverError?: string
-  validationErrors?: unknown
-}): string | null {
+/**
+ * Push 2c.6 — diagnostic logger. The Push 2c.5 fix (Math.round +
+ * describeActionError) was speculative; if the save-view error
+ * persists, this dumps the full result object to the browser
+ * console so the next user repro surfaces real diagnostic data
+ * the developer can paste into the next push. Server-side
+ * counterpart lives in safe-action.ts handleServerError.
+ */
+function logSavedViewActionResult(
+  actionName: string,
+  result: {
+    serverError?: string
+    validationErrors?: unknown
+    data?: unknown
+    fetchError?: unknown
+  },
+): void {
+  // eslint-disable-next-line no-console
+  console.error(`[saved-views action] ${actionName} returned`, {
+    serverError: result.serverError,
+    validationErrors: result.validationErrors,
+    fetchError: result.fetchError,
+    data: result.data,
+  })
+}
+
+function describeActionError(
+  result: {
+    serverError?: string
+    validationErrors?: unknown
+    data?: unknown
+    fetchError?: unknown
+  },
+  actionName = "saved_views.unknown",
+): string | null {
+  // Always log the full result on any non-success outcome — gives the
+  // next repro full visibility in browser devtools without making the
+  // user re-trigger by chance.
+  if (result.serverError || result.validationErrors || result.fetchError) {
+    logSavedViewActionResult(actionName, result)
+  }
   if (result.serverError) return result.serverError
   if (!result.validationErrors) return null
   // validationErrors shape is { fieldName: { _errors: [...] }, ... }
@@ -239,7 +276,7 @@ export function SavedViewsTabStrip({
       sort: currentState.sort,
     })
     setBusy(false)
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.update_overwrite")
     if (errMsg) {
       alert(errMsg)
       return
@@ -263,7 +300,7 @@ export function SavedViewsTabStrip({
     })
     setBusy(false)
     setSaveAsOpen(false)
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.create")
     if (errMsg) {
       alert(errMsg)
       return
@@ -284,7 +321,7 @@ export function SavedViewsTabStrip({
     const result = await updateSavedView({ id: renameTarget.id, name })
     setBusy(false)
     setRenameTarget(null)
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.rename")
     if (errMsg) {
       alert(errMsg)
       return
@@ -296,7 +333,7 @@ export function SavedViewsTabStrip({
     if (!activeView) return
     const newName = `${activeView.name} (copy)`
     const result = await duplicateSavedView({ id: activeView.id, newName })
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.duplicate")
     if (errMsg) {
       alert(errMsg)
       return
@@ -316,7 +353,7 @@ export function SavedViewsTabStrip({
     const result = await deleteSavedView({ id: deleteTarget.id })
     setBusy(false)
     setDeleteTarget(null)
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.delete")
     if (errMsg) {
       alert(errMsg)
       return
@@ -344,7 +381,7 @@ export function SavedViewsTabStrip({
     })
     setBusy(false)
     setVisibilityTarget(null)
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.set_visibility")
     if (errMsg) {
       alert(errMsg)
       return
@@ -359,7 +396,7 @@ export function SavedViewsTabStrip({
       objectType,
       viewId: isCurrentlyDefault ? null : activeView.id,
     })
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.set_default")
     if (errMsg) {
       alert(errMsg)
       return
@@ -370,7 +407,7 @@ export function SavedViewsTabStrip({
   async function doUnpinActive() {
     if (!activeView) return
     const result = await unpinView({ objectType, viewId: activeView.id })
-    const errMsg = describeActionError(result)
+    const errMsg = describeActionError(result, "saved_views.unpin")
     if (errMsg) {
       alert(errMsg)
       return
@@ -457,7 +494,7 @@ export function SavedViewsTabStrip({
                   onPin={() => {
                     void (async () => {
                       const result = await pinView({ objectType, viewId: transientTab.id })
-                      const errMsg = describeActionError(result)
+                      const errMsg = describeActionError(result, "saved_views.pin")
                       if (errMsg) {
                         alert(errMsg)
                         return

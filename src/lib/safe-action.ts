@@ -31,26 +31,90 @@ export class ActionError extends Error {
   }
 }
 
+/**
+ * Push 2c.6 — server-side PII redaction. Server-action error messages
+ * occasionally contain raw user data ("duplicate name 'Jane Doe'",
+ * "email jane@example.com already exists", etc). Vercel function
+ * logs are not a privacy-safe destination for that data — redact
+ * before logging.
+ *
+ * Conservative redaction: any token shaped like an email gets masked
+ * a***@b.com; anything with 7+ consecutive digits becomes [PHONE].
+ * Names are harder to detect generically (a name without surrounding
+ * context could just be a column id) — we don't try to mask them
+ * automatically. Action handlers that surface name-bearing errors
+ * should redact at the source.
+ */
+function redactPii(input: string): string {
+  let out = input
+  out = out.replace(/([A-Za-z0-9])[A-Za-z0-9._+-]*@([A-Za-z0-9-]+\.[A-Za-z0-9.-]+)/g, "$1***@$2")
+  out = out.replace(/(?:\+?\d[\s().-]?){7,}\d/g, "[PHONE]")
+  return out
+}
+
 const baseClient = createSafeActionClient({
   defineMetadataSchema() {
     return z.object({
       actionName: z.string(),
     })
   },
-  handleServerError(e) {
+  /**
+   * Push 2c.6 — surface the real error to the client instead of the
+   * generic DEFAULT_SERVER_ERROR_MESSAGE. The previous behavior
+   * swallowed the actual cause and made every server-side failure
+   * look identical to the user ("Something went wrong while
+   * executing the operation."), which made the save-view bug
+   * impossible to diagnose from the wire.
+   *
+   * Contract:
+   *   - ActionError instances are app-defined and safe to surface
+   *     verbatim — they're already user-friendly.
+   *   - Unexpected errors: log the full stack server-side (PII
+   *     redacted, see redactPii). In dev, surface the real message
+   *     to the client so the developer can see it. In prod,
+   *     truncate to 200 chars + "Server error: " prefix so we
+   *     don't leak unbounded internals but the user gets enough
+   *     to file a useful bug report.
+   */
+  handleServerError(e, utils) {
     if (e instanceof ActionError) {
       return e.message
     }
-    // Unexpected errors: capture to Sentry AND log structured. The user gets
-    // the generic DEFAULT_SERVER_ERROR_MESSAGE so internals don't leak.
+    // Unexpected errors — capture + log with redaction.
     Sentry.captureException(e)
+    const raw = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack : undefined
     log.error(
-      { err: e instanceof Error ? { message: e.message, stack: e.stack } : e },
-      "safe-action error",
+      {
+        actionName: utils.metadata.actionName,
+        err: {
+          name: e instanceof Error ? e.name : "Unknown",
+          message: redactPii(raw),
+          stack: stack ? redactPii(stack) : undefined,
+        },
+      },
+      "safe-action unexpected error",
     )
-    return DEFAULT_SERVER_ERROR_MESSAGE
+    // Also console.error for Vercel default log capture (some hosts
+    // surface console.* with finer detail than pino in failure mode).
+    // eslint-disable-next-line no-console
+    console.error(
+      `[safe-action ${utils.metadata.actionName}]`,
+      redactPii(raw),
+      stack ? redactPii(stack) : "",
+    )
+    if (process.env.NODE_ENV !== "production") {
+      return redactPii(raw)
+    }
+    const truncated = raw.length > 200 ? raw.slice(0, 200) + "…" : raw
+    return `Server error: ${redactPii(truncated)}`
   },
 })
+
+// The DEFAULT_SERVER_ERROR_MESSAGE constant is intentionally retained
+// as an import in case future code needs to identify a fallback case;
+// pinning it here so eslint doesn't flag the import as unused.
+void DEFAULT_SERVER_ERROR_MESSAGE
 
 /**
  * IMPORTANT — every action chain MUST include `.inputSchema(zodSchema)`.

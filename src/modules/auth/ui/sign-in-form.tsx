@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -22,6 +23,12 @@ export function SignInForm() {
   const router = useRouter()
   const params = useSearchParams()
   const redirectTo = params.get("redirect") ?? "/dashboard"
+  // Push 2c.6.8 — when the user arrived from /accept-invite/[token]
+  // the page propagates the invited email through `?email=`. Pre-fill
+  // and lock the email field so the user signs in with the correct
+  // address. Server-side enforcement (acceptOrgInvitation + BA's
+  // built-in check) is still load-bearing; this is the UX nudge.
+  const lockedEmail = params.get("email")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,7 +36,10 @@ export function SignInForm() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<Values>({ resolver: zodResolver(schema) })
+  } = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: lockedEmail ? { email: lockedEmail } : undefined,
+  })
 
   async function onSubmit(values: Values) {
     setSubmitting(true)
@@ -63,7 +73,19 @@ export function SignInForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" autoComplete="email" {...register("email")} />
+        <Input
+          id="email"
+          type="email"
+          autoComplete="email"
+          readOnly={!!lockedEmail}
+          {...register("email")}
+        />
+        {lockedEmail && (
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            This invitation was sent to {lockedEmail}. To use a different email, ask the inviter to
+            send a new invitation.
+          </p>
+        )}
         {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
       </div>
       <div className="space-y-2">
@@ -84,6 +106,22 @@ export function SignInForm() {
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? "Signing in…" : "Sign in"}
       </Button>
+      {lockedEmail && (
+        <p className="text-center text-sm text-[var(--color-muted-foreground)]">
+          New here?{" "}
+          <Link
+            href={`/sign-up?${(() => {
+              const r = params.get("redirect")
+              const qp = new URLSearchParams({ email: lockedEmail })
+              if (r) qp.set("redirect", r)
+              return qp.toString()
+            })()}`}
+            className="font-medium underline"
+          >
+            Create an account with {lockedEmail}
+          </Link>
+        </p>
+      )}
     </form>
   )
 }

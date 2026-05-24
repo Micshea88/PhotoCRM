@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -21,6 +22,12 @@ type Values = z.infer<typeof schema>
 
 export function SignUpForm() {
   const router = useRouter()
+  const params = useSearchParams()
+  // Push 2c.6.8 — when arriving via /accept-invite/[token] → /sign-in
+  // → "Create an account" the invited email is propagated as a URL
+  // param so the account-creation form pre-fills + locks the email.
+  // Defense-in-depth with acceptOrgInvitation's server-side check.
+  const lockedEmail = params.get("email")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [verificationSent, setVerificationSent] = useState(false)
@@ -29,7 +36,10 @@ export function SignUpForm() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<Values>({ resolver: zodResolver(schema) })
+  } = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: lockedEmail ? { email: lockedEmail } : undefined,
+  })
 
   async function onSubmit(values: Values) {
     setSubmitting(true)
@@ -44,12 +54,15 @@ export function SignUpForm() {
       setError(result.error.message ?? "Sign-up failed")
       return
     }
-    // If a session/token came back, the user is signed in — proceed to onboarding.
+    // If a session/token came back, the user is signed in — proceed
+    // to the redirect param (e.g. back to /accept-invite/[token] for
+    // invite-flow signups) or fall through to onboarding.
     // Otherwise email verification is required; surface the inbox prompt.
     const session = await authClient.getSession()
     setSubmitting(false)
     if (session.data?.session) {
-      router.push("/onboarding/create-organization")
+      const redirectTo = params.get("redirect") ?? "/onboarding/create-organization"
+      router.push(redirectTo)
       router.refresh()
       return
     }
@@ -75,7 +88,19 @@ export function SignUpForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" autoComplete="email" {...register("email")} />
+        <Input
+          id="email"
+          type="email"
+          autoComplete="email"
+          readOnly={!!lockedEmail}
+          {...register("email")}
+        />
+        {lockedEmail && (
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            This invitation was sent to {lockedEmail}. To use a different email, ask the inviter to
+            send a new invitation.
+          </p>
+        )}
         {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
       </div>
       <div className="space-y-2">
@@ -96,6 +121,22 @@ export function SignUpForm() {
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? "Creating account…" : "Create account"}
       </Button>
+      {lockedEmail && (
+        <p className="text-center text-sm text-[var(--color-muted-foreground)]">
+          Already have an account?{" "}
+          <Link
+            href={`/sign-in?${(() => {
+              const r = params.get("redirect")
+              const qp = new URLSearchParams({ email: lockedEmail })
+              if (r) qp.set("redirect", r)
+              return qp.toString()
+            })()}`}
+            className="font-medium underline"
+          >
+            Sign in with {lockedEmail}
+          </Link>
+        </p>
+      )}
     </form>
   )
 }

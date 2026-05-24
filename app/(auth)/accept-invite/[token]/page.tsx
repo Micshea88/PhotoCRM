@@ -23,7 +23,15 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
 
   const session = await getSession()
   if (!session?.user) {
-    redirect(`/sign-in?redirect=/accept-invite/${token}`)
+    // Push 2c.6.8 — propagate the invited email through to sign-in
+    // so the form can pre-fill + lock it. This is the steering wheel:
+    // the user lands on sign-in with the right email pre-selected,
+    // less chance of creating an account with the wrong address.
+    const params = new URLSearchParams({
+      redirect: `/accept-invite/${token}`,
+      email: invitation.email,
+    })
+    redirect(`/sign-in?${params.toString()}`)
   }
 
   return (
@@ -32,10 +40,14 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
         <h1 className="text-2xl font-semibold">Join {invitation.organizationName}</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           You&apos;ve been invited to join <strong>{invitation.organizationName}</strong> on
-          Pathway.
+          Pathway. This invitation was sent to <strong>{invitation.email}</strong>.
         </p>
       </div>
-      <AcceptInviteRunner invitationId={token} />
+      <AcceptInviteRunner
+        invitationId={token}
+        invitedEmail={invitation.email}
+        currentUserEmail={session.user.email}
+      />
     </div>
   )
 }

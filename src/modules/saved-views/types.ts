@@ -99,6 +99,40 @@ const customFieldsSchema = z.record(z.string(), z.unknown()).optional().nullable
 const sharedWithUserIdsSchema = z.array(z.string().min(1).max(64)).max(64).optional().nullable()
 
 /**
+ * Push 2c.6.1 — explicit-default variants of the optional+nullable
+ * schemas above, used by createSavedView only. The bare optional()+
+ * nullable() variants produce `parsedInput.field === undefined` when
+ * the UI omits the key (which the wizard's doSaveAs call does for
+ * grouping/customFields, and for sharedWithUserIds when visibility is
+ * private). With Part 1 instrumentation in place we surfaced the
+ * production failure: those undefined values flowed into the
+ * Drizzle .insert(savedViews).values({...}) call and pg rejected
+ * the INSERT (param values arrived as empty in the wire format).
+ *
+ * Coercing absent → null at the Zod boundary is belt-and-suspenders
+ * with the action body's `?? null` / `?? []` ternaries, and makes
+ * the contract on parsedInput easier to reason about.
+ *
+ * Reserved for create only — updateSavedView relies on the
+ * partial-update semantics where `parsedInput.field === undefined`
+ * MEANS "don't touch this column" and must NOT be silently coerced
+ * to null (that would clobber existing values on every update).
+ */
+const filtersJsonSchemaForCreate = z.array(filterSchema).max(64).nullable().default(null)
+const sortJsonSchemaForCreate = z
+  .union([sortSchema, z.array(sortSchema).max(8)])
+  .nullable()
+  .default(null)
+const columnConfigJsonSchemaForCreate = columnConfigSchema.nullable().default(null)
+const groupingSchemaForCreate = z.string().max(120).nullable().default(null)
+const customFieldsSchemaForCreate = z.record(z.string(), z.unknown()).nullable().default(null)
+const sharedWithUserIdsSchemaForCreate = z
+  .array(z.string().min(1).max(64))
+  .max(64)
+  .nullable()
+  .default(null)
+
+/**
  * Push 2c — pinned-tab soft cap. Total saved views per user is now
  * unlimited; only the count of views the user has PINNED to the tab
  * strip is bounded. Enforced at the action layer (see actions.ts:pinView)
@@ -112,12 +146,15 @@ export const createSavedViewInput = z
     objectType: savedViewObjectTypeSchema,
     name: z.string().min(1).max(120),
     visibility: visibilitySchema.default("private"),
-    sharedWithUserIds: sharedWithUserIdsSchema,
-    filters: filtersJsonSchema,
-    sort: sortJsonSchema,
-    columnConfig: columnConfigJsonSchema,
-    grouping: groupingSchema,
-    customFields: customFieldsSchema,
+    // Push 2c.6.1 — explicit nullable+default so parsedInput never
+    // carries `undefined` into Drizzle. See the comment block on
+    // *ForCreate schemas above for the production failure context.
+    sharedWithUserIds: sharedWithUserIdsSchemaForCreate,
+    filters: filtersJsonSchemaForCreate,
+    sort: sortJsonSchemaForCreate,
+    columnConfig: columnConfigJsonSchemaForCreate,
+    grouping: groupingSchemaForCreate,
+    customFields: customFieldsSchemaForCreate,
   })
   .superRefine((data, ctx) => {
     if (

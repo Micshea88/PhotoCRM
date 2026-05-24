@@ -24,6 +24,21 @@ export const extendedRoleSchema = z.enum(EXTENDED_ROLES)
 export type ExtendedRole = z.infer<typeof extendedRoleSchema>
 
 /**
+ * Push 2c.6.4 — roles surfaced in the invite form.
+ *
+ * Excludes "owner" (you can't invite an owner; the org creator is
+ * automatically the owner) and "client" (Push 2c.5.1 + V1_ROADMAP V2:
+ * clients are external users invited via a future client-portal flow
+ * keyed on the contact record, NOT via /settings/organization/members).
+ *
+ * Keep this in sync with members-list.tsx's role-picker filter — both
+ * surfaces hide the same two values for the same reason.
+ */
+export const INVITABLE_EXTENDED_ROLES = ["admin", "manager", "user", "accountant"] as const
+export const invitableExtendedRoleSchema = z.enum(INVITABLE_EXTENDED_ROLES)
+export type InvitableExtendedRole = z.infer<typeof invitableExtendedRoleSchema>
+
+/**
  * Better Auth's organization plugin only knows three roles. The product
  * needs eight. Per the Q5 decision: owner→owner, admin→admin, everything
  * else→member. The Phase 4 admin UI must call this mapping when writing

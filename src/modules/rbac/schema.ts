@@ -1,5 +1,5 @@
 import { pgTable, text, boolean, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core"
-import { organization, user } from "@/modules/auth/schema"
+import { invitation, organization, user } from "@/modules/auth/schema"
 
 /**
  * Extended role for a user in an organization. Better Auth's
@@ -84,3 +84,46 @@ export type MemberRoleRow = typeof memberRole.$inferSelect
 export type NewMemberRoleRow = typeof memberRole.$inferInsert
 export type MemberPermissionOverrideRow = typeof memberPermissionOverride.$inferSelect
 export type NewMemberPermissionOverrideRow = typeof memberPermissionOverride.$inferInsert
+
+/**
+ * Push 2c.6.4 — extended-role metadata for pending invitations.
+ *
+ * Better Auth's `invitation` table only knows three roles
+ * (owner / admin / member). The product needs to invite users at the
+ * 4 internal sub-roles (admin / manager / user / accountant). When the
+ * inviter picks "Manager", we send a BA invitation with role="member"
+ * (so BA's own permission checks keep working), and ALSO insert a row
+ * here to remember the user's actual intent: extended_role="manager".
+ *
+ * On accept-invitation, `seedNewMember` looks up the metadata row by
+ * invitation_id and seeds member_role with the stored extended role.
+ * Falls back to the BA→extended default (extendedFromBetterAuth) when
+ * the metadata row is missing — which happens for invitations created
+ * before this table existed, or in the rare case where the
+ * `inviteMemberWithExtendedRole` compensation cleanup ran cleanly.
+ *
+ * FK CASCADE: when BA deletes/expires the invitation (success path:
+ * after accept; failure path: cancel/expire), our metadata row goes
+ * with it. No background sweeper needed.
+ *
+ * Primary key = invitation_id (one row per invitation). No soft-delete
+ * — these rows live for the lifetime of a pending invitation only.
+ */
+export const invitationExtendedRole = pgTable(
+  "invitation_extended_role",
+  {
+    invitationId: text("invitation_id")
+      .primaryKey()
+      .references(() => invitation.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    extendedRole: text("extended_role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+  },
+  (t) => [index("invitation_extended_role_org_idx").on(t.organizationId)],
+)
+
+export type InvitationExtendedRoleRow = typeof invitationExtendedRole.$inferSelect
+export type NewInvitationExtendedRoleRow = typeof invitationExtendedRole.$inferInsert

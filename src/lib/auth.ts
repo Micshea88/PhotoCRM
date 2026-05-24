@@ -95,8 +95,17 @@ export const auth = betterAuth({
         afterCreateOrganization: async ({ organization: org, user: usr }) => {
           await seedNewOrganization(org.id, usr.id)
         },
-        afterAcceptInvitation: async ({ organization: org, user: usr, member: mem }) => {
-          await seedNewMember(org.id, usr.id, mem.role as BetterAuthRole)
+        afterAcceptInvitation: async ({
+          organization: org,
+          user: usr,
+          member: mem,
+          invitation: inv,
+        }) => {
+          // Push 2c.6.4 — pass invitation.id so seedNewMember can look
+          // up the invitation_extended_role metadata row and use the
+          // inviter's intended extended role instead of the BA-mapped
+          // default.
+          await seedNewMember(org.id, usr.id, mem.role as BetterAuthRole, inv.id)
         },
       },
     }),

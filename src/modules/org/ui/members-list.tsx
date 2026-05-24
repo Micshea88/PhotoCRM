@@ -77,7 +77,17 @@ export function MembersList({
                   disabled={busyId === m.id}
                   className="h-8 rounded-md border border-[var(--color-input)] bg-transparent px-2 text-xs"
                 >
-                  {EXTENDED_ROLES.map((r) => (
+                  {/*
+                   * Push 2c.5.1 — "client" is reserved for the future
+                   * client-portal V2 work (external users invited
+                   * against a contact record, not org members). Keep
+                   * it in EXTENDED_ROLES (existing member_role rows
+                   * with role="client" stay valid for forward compat)
+                   * but hide it from this internal-team picker. The
+                   * 5 internal roles are Owner / Admin / Manager /
+                   * User / Accountant.
+                   */}
+                  {EXTENDED_ROLES.filter((r) => r !== "client").map((r) => (
                     <option key={r} value={r}>
                       {r.charAt(0).toUpperCase() + r.slice(1)}
                     </option>

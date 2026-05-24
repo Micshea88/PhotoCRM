@@ -84,6 +84,7 @@ Goals shipped after V1 validates with real users:
 - Tickets (customer support)
 - Community space
 - **Restore CRM changes** — full per-record version history with restore. Each field update captures the previous value so users can undo any change after the fact. Requires versioning schema (a `record_changes` table keyed by `(record_type, record_id)` with `field_path`, `old_value`, `new_value`, `actor_user_id`, `changed_at`), a restore action that re-applies a captured snapshot, and a conflict-resolution UI for the case where the field has changed since the snapshot was taken. The Push 2c.2 "Restore records" affordance restores soft-deleted _rows_ — this V2 feature would restore individual _field changes_. Deferred because the storage + UI cost is substantial and V1 users can manually retype.
+- **Client portal** — Clients receive read-only access to a dedicated portal showing their bookings, contracts, deliverables, and invoices. Invited via a separate flow keyed on the contact record (NOT via `/settings/organization/members`). Client accounts have no access to the CRM itself. Separate from the internal 5-role RBAC (Owner / Admin / Manager / User / Accountant). The `client` value in `EXTENDED_ROLES` is reserved for this future feature — it's still a valid stored role in `member_role` for forward compatibility, but is no longer surfaced in the org members picker (Push 2c.5.1).
 
 ---
 

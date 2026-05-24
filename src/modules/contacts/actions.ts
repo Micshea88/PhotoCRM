@@ -22,6 +22,7 @@ import {
   bulkDeleteContactsInput,
   bulkRemoveTagInput,
   bulkRestoreContactsInput,
+  bulkUpdateContactFieldsInput,
   createContactInput,
   createContactNoteInput,
   deleteContactInput,
@@ -676,6 +677,185 @@ export const bulkChangeOwner = orgAction
           resourceType: "contact",
           resourceId: row.id,
           metadata: { bulk: true, field: "ownerUserId", value: parsedInput.ownerUserId },
+        },
+      )
+    }
+    revalidatePath("/contacts")
+    return { updatedIds: result.map((r) => r.id) }
+  })
+
+// Push 2c.4 part 2 — single-dispatch Bulk edit action. The wizard
+// drawer collects one field + value at a time; the server switches
+// on update.kind and applies the right SQL mutation. Per-row audit
+// entries record the affected field + value. BULK_ACTION_MAX_IDS=200
+// cap enforced via the shared bulkIdsSchema in types.ts.
+//
+// Owner / company FKs are validated upfront (against member /
+// companies tables in the active org) so a stale client id can't
+// stamp a bad reference on every row in the batch.
+export const bulkUpdateContactFields = orgAction
+  .metadata({ actionName: "contacts.bulk_update_fields" })
+  .inputSchema(bulkUpdateContactFieldsInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const { ids, update } = parsedInput
+
+    // FK pre-validation
+    if (update.kind === "companyId" && update.value !== null) {
+      await assertCompanyInOrg(ctx.db, update.value, ctx.activeOrg.id)
+    }
+
+    const baseWhere = and(
+      inArray(contacts.id, ids),
+      eq(contacts.organizationId, ctx.activeOrg.id),
+      isNull(contacts.deletedAt),
+    )
+
+    // Build a Drizzle patch from the discriminated update. We branch
+    // explicitly per kind because some kinds need SQL expressions
+    // (tag union / remove) rather than scalar set values.
+    let result: { id: string }[]
+    switch (update.kind) {
+      case "firstName":
+      case "lastName":
+      case "primaryEmail":
+      case "secondaryEmail":
+      case "primaryPhone":
+      case "secondaryPhone":
+      case "leadSource":
+      case "contactType":
+      case "lifecycleStatus": {
+        const patch: Partial<typeof contacts.$inferInsert> = {
+          updatedAt: new Date(),
+          updatedBy: ctx.session.user.id,
+        }
+        // Coerce "" → null for nullable text fields so the row clears
+        // the column on empty input.
+        const v =
+          update.kind === "primaryEmail" ||
+          update.kind === "secondaryEmail" ||
+          update.kind === "primaryPhone" ||
+          update.kind === "secondaryPhone" ||
+          update.kind === "leadSource"
+            ? update.value === ""
+              ? null
+              : update.value
+            : update.value
+        ;(patch as Record<string, unknown>)[update.kind] = v
+        result = await ctx.db.update(contacts).set(patch).where(baseWhere).returning({
+          id: contacts.id,
+        })
+        break
+      }
+      case "companyId":
+      case "ownerUserId": {
+        const patch: Partial<typeof contacts.$inferInsert> = {
+          updatedAt: new Date(),
+          updatedBy: ctx.session.user.id,
+        }
+        ;(patch as Record<string, unknown>)[update.kind] = update.value
+        result = await ctx.db.update(contacts).set(patch).where(baseWhere).returning({
+          id: contacts.id,
+        })
+        break
+      }
+      case "mailingStreet":
+      case "mailingCity":
+      case "mailingState":
+      case "mailingPostalCode": {
+        // mailing_address is jsonb. Use jsonb_set so other address
+        // sub-fields aren't blown away. The COALESCE handles the
+        // case where mailing_address is currently NULL.
+        const jsonKey =
+          update.kind === "mailingStreet"
+            ? "street1"
+            : update.kind === "mailingCity"
+              ? "city"
+              : update.kind === "mailingState"
+                ? "state"
+                : "zip"
+        result = await ctx.db
+          .update(contacts)
+          .set({
+            mailingAddress: sql`jsonb_set(COALESCE(${contacts.mailingAddress}, '{}'::jsonb), ARRAY[${jsonKey}], to_jsonb(${update.value}::text), true)`,
+            updatedAt: new Date(),
+            updatedBy: ctx.session.user.id,
+          })
+          .where(baseWhere)
+          .returning({ id: contacts.id })
+        break
+      }
+      case "tagsAdd": {
+        // Append distinct tags. ARRAY[$1,$2,...] explicit construction
+        // (not `${arr}::text[]`) — same `cannot cast record to text[]`
+        // trap that bit us in Push 2c.1.1's previewContactsImport.
+        // sql.join binds each tag as its own parameter inside the
+        // ARRAY[] constructor.
+        const tagLiterals = sql.join(
+          update.value.map((t) => sql`${t}`),
+          sql`, `,
+        )
+        result = await ctx.db
+          .update(contacts)
+          .set({
+            tags: sql`(
+              SELECT ARRAY(SELECT DISTINCT t FROM unnest(
+                COALESCE(${contacts.tags}, '{}'::text[]) || ARRAY[${tagLiterals}]::text[]
+              ) AS t)
+            )`,
+            updatedAt: new Date(),
+            updatedBy: ctx.session.user.id,
+          })
+          .where(baseWhere)
+          .returning({ id: contacts.id })
+        break
+      }
+      case "tagsRemove": {
+        const tagLiterals = sql.join(
+          update.value.map((t) => sql`${t}`),
+          sql`, `,
+        )
+        result = await ctx.db
+          .update(contacts)
+          .set({
+            tags: sql`(
+              SELECT ARRAY(SELECT t FROM unnest(COALESCE(${contacts.tags}, '{}'::text[])) AS t
+              WHERE NOT (t = ANY(ARRAY[${tagLiterals}]::text[])))
+            )`,
+            updatedAt: new Date(),
+            updatedBy: ctx.session.user.id,
+          })
+          .where(baseWhere)
+          .returning({ id: contacts.id })
+        break
+      }
+      case "tagsReplace": {
+        result = await ctx.db
+          .update(contacts)
+          .set({
+            tags: update.value,
+            updatedAt: new Date(),
+            updatedBy: ctx.session.user.id,
+          })
+          .where(baseWhere)
+          .returning({ id: contacts.id })
+        break
+      }
+    }
+
+    for (const row of result) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+        },
+        "contacts.updated",
+        {
+          resourceType: "contact",
+          resourceId: row.id,
+          metadata: { bulk: true, field: update.kind, value: update.value },
         },
       )
     }

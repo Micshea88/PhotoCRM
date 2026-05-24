@@ -164,6 +164,56 @@ export const bulkChangeContactTypeInput = z.object({
   contactType: contactTypeSchema,
 })
 
+// Push 2c.4 part 2 — Bulk edit drawer's single-dispatch input. The
+// drawer collects ONE field + value at a time (Apply commits, drawer
+// clears). The server switches on update.kind to apply the right
+// column / mutation. Multi-field edits are intentionally NOT supported
+// in V1 — keep the contract simple, easy to audit, easy to test.
+const bulkFieldUpdateSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("firstName"), value: z.string().min(1).max(120) }),
+  z.object({ kind: z.literal("lastName"), value: z.string().min(1).max(120) }),
+  z.object({
+    kind: z.literal("primaryEmail"),
+    value: z.union([z.email(), z.literal("")]),
+  }),
+  z.object({
+    kind: z.literal("secondaryEmail"),
+    value: z.union([z.email(), z.literal("")]),
+  }),
+  z.object({ kind: z.literal("primaryPhone"), value: z.string().max(80) }),
+  z.object({ kind: z.literal("secondaryPhone"), value: z.string().max(80) }),
+  z.object({ kind: z.literal("companyId"), value: z.string().nullable() }),
+  z.object({ kind: z.literal("contactType"), value: contactTypeSchema }),
+  z.object({ kind: z.literal("lifecycleStatus"), value: lifecycleStatusSchema }),
+  z.object({ kind: z.literal("leadSource"), value: z.string().max(120).nullable() }),
+  z.object({ kind: z.literal("ownerUserId"), value: z.string().min(1).nullable() }),
+  z.object({
+    kind: z.literal("tagsAdd"),
+    value: z.array(z.string().min(1).max(80)).min(1).max(32),
+  }),
+  z.object({
+    kind: z.literal("tagsRemove"),
+    value: z.array(z.string().min(1).max(80)).min(1).max(32),
+  }),
+  z.object({
+    kind: z.literal("tagsReplace"),
+    value: z.array(z.string().min(1).max(80)).max(64),
+  }),
+  z.object({ kind: z.literal("mailingStreet"), value: z.string().max(200) }),
+  z.object({ kind: z.literal("mailingCity"), value: z.string().max(120) }),
+  z.object({ kind: z.literal("mailingState"), value: z.string().length(2) }),
+  z.object({
+    kind: z.literal("mailingPostalCode"),
+    value: z.string().regex(/^\d{5}(-\d{4})?$/),
+  }),
+])
+export type BulkFieldUpdate = z.infer<typeof bulkFieldUpdateSchema>
+
+export const bulkUpdateContactFieldsInput = z.object({
+  ids: bulkIdsSchema,
+  update: bulkFieldUpdateSchema,
+})
+
 export const bulkAddTagInput = z.object({
   ids: bulkIdsSchema,
   tag: z.string().min(1).max(80),
@@ -221,5 +271,6 @@ export type BulkDeleteContactsInput = z.infer<typeof bulkDeleteContactsInput>
 export type BulkChangeOwnerInput = z.infer<typeof bulkChangeOwnerInput>
 export type BulkChangeStatusInput = z.infer<typeof bulkChangeStatusInput>
 export type BulkChangeContactTypeInput = z.infer<typeof bulkChangeContactTypeInput>
+export type BulkUpdateContactFieldsInput = z.infer<typeof bulkUpdateContactFieldsInput>
 export type BulkAddTagInput = z.infer<typeof bulkAddTagInput>
 export type BulkRemoveTagInput = z.infer<typeof bulkRemoveTagInput>

@@ -15,6 +15,7 @@ import {
   bulkRemoveTag,
 } from "../actions"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES, type ContactType, type LifecycleStatus } from "../types"
+import { BulkEditDrawer } from "./bulk-edit-drawer"
 
 /**
  * Push 2c.2 — selection banner.
@@ -37,11 +38,17 @@ export function SelectionBanner({
   selectedIds,
   ownerOptions,
   tagOptions,
+  companyOptions = [],
+  leadSourceOptions = [],
   onClear,
 }: {
   selectedIds: string[]
   ownerOptions: { id: string; name: string | null; email: string }[]
   tagOptions: string[]
+  /** Push 2c.4 part 2 — option lists for the Bulk edit drawer. Default
+   *  to empty arrays so older callers (or tests) don't need to pass them. */
+  companyOptions?: { id: string; name: string }[]
+  leadSourceOptions?: string[]
   /** Called after a successful bulk action OR when the user clicks Clear / hits Esc. */
   onClear: () => void
 }) {
@@ -53,6 +60,7 @@ export function SelectionBanner({
   const [typeOpen, setTypeOpen] = useState(false)
   const [addTagOpen, setAddTagOpen] = useState(false)
   const [removeTagOpen, setRemoveTagOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   const count = selectedIds.length
 
@@ -62,7 +70,16 @@ export function SelectionBanner({
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return
       // Don't steal Esc when a modal is open — let the modal close first.
-      if (deleteOpen || ownerOpen || statusOpen || typeOpen || addTagOpen || removeTagOpen) return
+      if (
+        deleteOpen ||
+        ownerOpen ||
+        statusOpen ||
+        typeOpen ||
+        addTagOpen ||
+        removeTagOpen ||
+        bulkEditOpen
+      )
+        return
       if (count === 0) return
       onClear()
     }
@@ -70,7 +87,17 @@ export function SelectionBanner({
     return () => {
       window.removeEventListener("keydown", onKey)
     }
-  }, [count, onClear, deleteOpen, ownerOpen, statusOpen, typeOpen, addTagOpen, removeTagOpen])
+  }, [
+    count,
+    onClear,
+    deleteOpen,
+    ownerOpen,
+    statusOpen,
+    typeOpen,
+    addTagOpen,
+    removeTagOpen,
+    bulkEditOpen,
+  ])
 
   if (count === 0) return null
 
@@ -156,6 +183,20 @@ export function SelectionBanner({
             }}
           >
             Remove tag
+          </Button>
+          {/* Push 2c.4 part 2 — Bulk edit drawer: master list of every
+              editable field. Sits between the shortcut bulk actions
+              and Delete so it reads as "more options" rather than a
+              destructive op. */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setBulkEditOpen(true)
+            }}
+          >
+            Bulk edit
           </Button>
           <Button
             size="sm"
@@ -269,6 +310,19 @@ export function SelectionBanner({
             return r
           })
         }}
+      />
+
+      <BulkEditDrawer
+        open={bulkEditOpen}
+        onClose={() => {
+          if (!busy) setBulkEditOpen(false)
+        }}
+        selectedIds={selectedIds}
+        companyOptions={companyOptions}
+        ownerOptions={ownerOptions}
+        leadSourceOptions={leadSourceOptions}
+        tagOptions={tagOptions}
+        onAfterApply={onClear}
       />
     </>
   )

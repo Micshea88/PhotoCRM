@@ -256,6 +256,8 @@ export function ContactsShell({
         selectedIds={[...selectedIds]}
         ownerOptions={ownerOptions}
         tagOptions={tagOptions}
+        companyOptions={companyOptions}
+        leadSourceOptions={leadSourceOptions}
         onClear={() => {
           setSelectedIds(new Set())
         }}

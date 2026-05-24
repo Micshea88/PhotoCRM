@@ -87,13 +87,22 @@ export function InviteMemberForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-[1fr_auto] gap-3">
-        <div className="space-y-3">
+      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" {...register("email")} />
           {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
         </div>
-        <div className="space-y-3">
+        {/*
+         * Push 2c.6.5 — explicit flex-row with gap. The prior layout
+         * used `space-y-N` on the column, but `<Label>` is an inline
+         * `<label>` and `<select>` is inline-block — margin-top from
+         * space-y-N has no effect on inline siblings, which is why
+         * the Role text was visually jammed up against the dropdown.
+         * Switching to inline-flex with gap-2 puts a real 8px gap
+         * between the label and the dropdown.
+         */}
+        <div className="flex items-center gap-2">
           <Label htmlFor="role">Role</Label>
           <select
             id="role"

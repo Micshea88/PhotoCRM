@@ -3,15 +3,100 @@
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 import { and, eq } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { z } from "zod"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { auth } from "@/lib/auth"
+import type * as schema from "@/db/schema"
 import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
 import { member } from "@/modules/auth/schema"
 import { invitationExtendedRole, memberRole } from "./schema"
-import { extendedRoleSchema, extendedToBetterAuth, invitableExtendedRoleSchema } from "./types"
+import {
+  extendedRoleSchema,
+  extendedToBetterAuth,
+  invitableExtendedRoleSchema,
+  type InvitableExtendedRole,
+} from "./types"
+
+type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Push 2c.6.10 — core invite-create logic extracted from
+ * inviteMemberWithExtendedRole so the new resetInvitation action
+ * (which re-issues a fresh invitation after canceling an old one)
+ * can re-use the exact same BA-call + metadata-insert + compensation
+ * flow without duplicating ~40 lines.
+ *
+ * Caller is responsible for the RBAC gate (admin/owner check) before
+ * invoking. orgAction's tx is passed as `tx`; both `auth.api`
+ * round-trips run OUTSIDE that tx (BA owns its own connection) and
+ * are compensated by cancelInvitation if the metadata insert fails.
+ */
+export async function createInviteWithExtendedRoleCore(
+  tx: DbHandle,
+  reqHeaders: Headers,
+  args: {
+    organizationId: string
+    createdBy: string
+    email: string
+    extendedRole: InvitableExtendedRole
+  },
+): Promise<{ invitationId: string }> {
+  const baRole = extendedToBetterAuth(args.extendedRole)
+  let invitationId: string
+  try {
+    const inv = (await auth.api.createInvitation({
+      body: {
+        email: args.email,
+        role: baRole,
+        organizationId: args.organizationId,
+        resend: true,
+      },
+      headers: reqHeaders,
+    })) as { id: string }
+    invitationId = inv.id
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Could not send invitation"
+    throw new ActionError("VALIDATION", msg)
+  }
+  try {
+    await tx
+      .insert(invitationExtendedRole)
+      .values({
+        invitationId,
+        organizationId: args.organizationId,
+        extendedRole: args.extendedRole,
+        createdBy: args.createdBy,
+      })
+      .onConflictDoUpdate({
+        target: invitationExtendedRole.invitationId,
+        set: {
+          extendedRole: args.extendedRole,
+          createdBy: args.createdBy,
+        },
+      })
+  } catch (insertErr) {
+    try {
+      await auth.api.cancelInvitation({
+        body: { invitationId },
+        headers: reqHeaders,
+      })
+    } catch (cancelErr) {
+      log.error(
+        {
+          invitationId,
+          insertErr: insertErr instanceof Error ? { message: insertErr.message } : insertErr,
+          cancelErr: cancelErr instanceof Error ? { message: cancelErr.message } : cancelErr,
+        },
+        "createInviteWithExtendedRoleCore: compensation cancelInvitation failed",
+      )
+    }
+    throw insertErr
+  }
+  return { invitationId }
+}
 
 /**
  * Push 2c.5 — set a member's extended role. Writes to the dedicated
@@ -111,75 +196,16 @@ export const inviteMemberWithExtendedRole = orgAction
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
-    // Only owner/admin can invite. orgAction already loads the
-    // member row + extended role; gate on the extended role since
-    // that's what the rest of the app reads.
     if (ctx.activeOrg.role !== "owner" && ctx.activeOrg.role !== "admin") {
       throw new ActionError("FORBIDDEN", "Only owners and admins can invite members.")
     }
-
-    const baRole = extendedToBetterAuth(parsedInput.extendedRole)
     const reqHeaders = await headers()
-
-    // Step 1 — BA invitation (outside our tx; BA owns its own
-    // connection). On failure, BA's APIError message bubbles up.
-    let invitationId: string
-    try {
-      const inv = (await auth.api.createInvitation({
-        body: {
-          email: parsedInput.email,
-          role: baRole,
-          organizationId: ctx.activeOrg.id,
-          resend: true,
-        },
-        headers: reqHeaders,
-      })) as { id: string }
-      invitationId = inv.id
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Could not send invitation"
-      throw new ActionError("VALIDATION", msg)
-    }
-
-    // Step 2 — metadata insert inside our tx. UPSERT so re-invites
-    // (BA's `resend: true` reuses the row) coalesce cleanly.
-    try {
-      await ctx.db
-        .insert(invitationExtendedRole)
-        .values({
-          invitationId,
-          organizationId: ctx.activeOrg.id,
-          extendedRole: parsedInput.extendedRole,
-          createdBy: ctx.session.user.id,
-        })
-        .onConflictDoUpdate({
-          target: invitationExtendedRole.invitationId,
-          set: {
-            extendedRole: parsedInput.extendedRole,
-            createdBy: ctx.session.user.id,
-          },
-        })
-    } catch (insertErr) {
-      // Compensate: cancel the BA invitation so we don't orphan it.
-      // Cancel best-effort — if it fails we accept the orphan and
-      // rely on the seedNewMember fallback.
-      try {
-        await auth.api.cancelInvitation({
-          body: { invitationId },
-          headers: reqHeaders,
-        })
-      } catch (cancelErr) {
-        log.error(
-          {
-            invitationId,
-            insertErr: insertErr instanceof Error ? { message: insertErr.message } : insertErr,
-            cancelErr: cancelErr instanceof Error ? { message: cancelErr.message } : cancelErr,
-          },
-          "inviteMemberWithExtendedRole: compensation cancelInvitation failed (BA invite orphaned, seedNewMember will use BA-role fallback on accept)",
-        )
-      }
-      throw insertErr
-    }
-
+    const { invitationId } = await createInviteWithExtendedRoleCore(ctx.db, reqHeaders, {
+      organizationId: ctx.activeOrg.id,
+      createdBy: ctx.session.user.id,
+      email: parsedInput.email,
+      extendedRole: parsedInput.extendedRole,
+    })
     await audit(
       {
         db: ctx.db,
@@ -195,7 +221,7 @@ export const inviteMemberWithExtendedRole = orgAction
         metadata: {
           email: parsedInput.email,
           extendedRole: parsedInput.extendedRole,
-          baRole,
+          baRole: extendedToBetterAuth(parsedInput.extendedRole),
         },
       },
     )

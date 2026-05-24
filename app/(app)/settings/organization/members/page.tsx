@@ -5,10 +5,12 @@ import {
   getCurrentMember,
   getOrganizationMembers,
   getPendingInvitations,
+  listIncompleteSignups,
 } from "@/modules/org/queries"
 import { listExtendedRolesByUserId } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { InviteMemberForm } from "@/modules/org/ui/invite-member-form"
+import { IncompleteSignups } from "@/modules/org/ui/incomplete-signups"
 import { MembersList } from "@/modules/org/ui/members-list"
 import { PendingInvitations } from "@/modules/org/ui/pending-invitations"
 import { Separator } from "@/components/ui/separator"
@@ -22,14 +24,19 @@ export default async function OrgMembersPage() {
   const currentMember = await getCurrentMember(orgId, session.user.id)
   if (!currentMember) redirect("/dashboard")
   const currentBaRole = currentMember.role as BetterAuthRole
+  const canManage = currentMember.role === "owner" || currentMember.role === "admin"
 
-  const [members, pending, extendedRoles] = await Promise.all([
+  const [members, pending, extendedRoles, incompleteSignups] = await Promise.all([
     getOrganizationMembers(orgId),
     getPendingInvitations(orgId),
     runWithOrgContext(
       { orgId, role: extendedFromBetterAuth(currentBaRole), userId: session.user.id },
       () => listExtendedRolesByUserId(),
     ),
+    // Push 2c.6.10 — incomplete-signups visible to admin/owner only.
+    // The query enforces age + no-membership constraints; the UI
+    // hides the section entirely for non-admins via the canManage flag.
+    canManage ? listIncompleteSignups(session.user.id) : Promise.resolve([]),
   ])
 
   return (
@@ -39,7 +46,7 @@ export default async function OrgMembersPage() {
         Invite, manage, and remove members of your organization.
       </p>
 
-      {(currentMember.role === "owner" || currentMember.role === "admin") && (
+      {canManage && (
         <section className="mt-6 space-y-3">
           <h2 className="text-base font-medium">Invite a member</h2>
           <InviteMemberForm />
@@ -54,8 +61,6 @@ export default async function OrgMembersPage() {
           members={members.map((m) => ({
             id: m.id,
             role: m.role,
-            // Push 2c.5 — extended role from memberRole, falling back
-            // to the BA-mapped default for members without a row.
             extendedRole:
               extendedRoles.get(m.user.id) ?? extendedFromBetterAuth(m.role as BetterAuthRole),
             user: {
@@ -79,12 +84,25 @@ export default async function OrgMembersPage() {
                 id: i.id,
                 email: i.email,
                 role: i.role ?? "member",
-                // Push 2c.6.5 — null for legacy invitations created
-                // before the invitation_extended_role table existed;
-                // the UI falls back to extendedFromBetterAuth(i.role)
-                // so they still render with a sensible value.
                 extendedRole: i.extendedRole,
               }))}
+              canManage={canManage}
+            />
+          </section>
+        </>
+      )}
+
+      {canManage && (
+        <>
+          <Separator className="my-8" />
+          <section className="space-y-3">
+            <IncompleteSignups
+              signups={incompleteSignups.map((s) => ({
+                id: s.id,
+                email: s.email,
+                createdAt: s.createdAt.toISOString(),
+              }))}
+              canManage={canManage}
             />
           </section>
         </>

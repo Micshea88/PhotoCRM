@@ -209,19 +209,61 @@ export default async function ContactsPage({
           pageSize: requestedPageSize,
         })
 
+        // Push 2c.6 — resolve owner_user_id → display name for the Owner
+        // column. Returns null when the FK is null or the linked user has
+        // been deleted (set null cascade on the FK). The same member
+        // listing also feeds the outer `owners` prop computation — kept
+        // inside the runWithOrgContext block so we don't issue the same
+        // query twice.
+        const orgMembers = await getOrganizationMembers(orgId)
+        const ownerNameById = new Map<string, string>(
+          orgMembers.map((m) => [m.user.id, m.user.name]),
+        )
+
         return {
-          contacts: contactResult.rows.map(({ contact, company }) => ({
-            id: contact.id,
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            primaryEmail: contact.primaryEmail,
-            primaryPhone: contact.primaryPhone,
-            contactType: contact.contactType,
-            lifecycleStatus: contact.lifecycleStatus,
-            tags: contact.tags,
-            companyName: company?.name ?? null,
-            createdAt: contact.createdAt.toISOString(),
-          })),
+          contacts: contactResult.rows.map(({ contact, company }) => {
+            // Push 2c.6 — extract mailingAddress jsonb sub-fields into
+            // flat row props for the Mailing city / state / zip
+            // columns. Schema is parsed as Record<string, unknown>; the
+            // strict shape lives in mailingAddressSchema.
+            const addr = (contact.mailingAddress ?? {}) as {
+              city?: unknown
+              state?: unknown
+              zip?: unknown
+            }
+            const mailingCity = typeof addr.city === "string" ? addr.city : null
+            const mailingState = typeof addr.state === "string" ? addr.state : null
+            const mailingZip = typeof addr.zip === "string" ? addr.zip : null
+            return {
+              id: contact.id,
+              firstName: contact.firstName,
+              lastName: contact.lastName,
+              primaryEmail: contact.primaryEmail,
+              primaryPhone: contact.primaryPhone,
+              contactType: contact.contactType,
+              lifecycleStatus: contact.lifecycleStatus,
+              tags: contact.tags,
+              companyName: company?.name ?? null,
+              createdAt: contact.createdAt.toISOString(),
+              secondaryEmail: contact.secondaryEmail,
+              secondaryPhone: contact.secondaryPhone,
+              mailingCity,
+              mailingState,
+              mailingZip,
+              dob: contact.dob,
+              anniversaryDate: contact.anniversaryDate,
+              instagramHandle: contact.instagramHandle,
+              facebookUrl: contact.facebookUrl,
+              website: contact.website,
+              leadSource: contact.leadSource,
+              sourceDetail: contact.sourceDetail,
+              ownerName: contact.ownerUserId
+                ? (ownerNameById.get(contact.ownerUserId) ?? null)
+                : null,
+              updatedAt: contact.updatedAt.toISOString(),
+              notes: contact.notes,
+            }
+          }),
           totalCount: contactResult.totalCount,
           cappedOut: contactResult.cappedOut,
           page: requestedPage,
@@ -260,12 +302,13 @@ export default async function ContactsPage({
             fieldType: d.fieldType,
             options: (d.options as { choices?: { value: string; label: string }[] } | null) ?? null,
           })),
+          orgMembers,
         }
       })
     },
   )
 
-  const owners = (await getOrganizationMembers(orgId))
+  const owners = data.orgMembers
     .map((m) => ({ id: m.user.id, name: m.user.name, email: m.user.email }))
     .sort((a, b) => a.name.localeCompare(b.name))
 

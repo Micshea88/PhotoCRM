@@ -26,6 +26,25 @@ export interface ContactRow {
   tags: string[] | null
   companyName: string | null
   createdAt: string
+  // Push 2c.6 — additional DB-backed fields surfaced through Edit
+  // columns. All default visible: false (resolveContactColumns appends
+  // hidden-by-default at the end), so existing All Contacts views
+  // keep their shape until a user opts these on.
+  secondaryEmail: string | null
+  secondaryPhone: string | null
+  mailingCity: string | null
+  mailingState: string | null
+  mailingZip: string | null
+  dob: string | null
+  anniversaryDate: string | null
+  instagramHandle: string | null
+  facebookUrl: string | null
+  website: string | null
+  leadSource: string | null
+  sourceDetail: string | null
+  ownerName: string | null
+  updatedAt: string | null
+  notes: string | null
 }
 
 export interface ContactColumnDef {
@@ -135,6 +154,127 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => row.createdAt.slice(0, 10),
     measureText: (row) => row.createdAt.slice(0, 10),
+  },
+  // ── Push 2c.6 expansion ────────────────────────────────────────
+  // Each new column id is stable + immutable once shipped. Defaults
+  // to visible: false via the resolveContactColumns padding step.
+  // Renders are null-safe — every contact field below is nullable
+  // in the DB schema.
+  secondaryEmail: {
+    id: "secondaryEmail",
+    label: "Secondary email",
+    defaultWidth: 240,
+    render: (row) => row.secondaryEmail ?? "",
+    measureText: (row) => row.secondaryEmail ?? "",
+  },
+  secondaryPhone: {
+    id: "secondaryPhone",
+    label: "Secondary phone",
+    defaultWidth: 160,
+    render: (row) => formatPhoneDisplay(row.secondaryPhone),
+    measureText: (row) => formatPhoneDisplay(row.secondaryPhone),
+  },
+  mailingCity: {
+    id: "mailingCity",
+    label: "Mailing city",
+    defaultWidth: 160,
+    render: (row) => row.mailingCity ?? "",
+    measureText: (row) => row.mailingCity ?? "",
+  },
+  mailingState: {
+    id: "mailingState",
+    label: "Mailing state",
+    defaultWidth: 120,
+    render: (row) => row.mailingState ?? "",
+    measureText: (row) => row.mailingState ?? "",
+  },
+  mailingZip: {
+    id: "mailingZip",
+    label: "Mailing zip",
+    defaultWidth: 120,
+    render: (row) => row.mailingZip ?? "",
+    measureText: (row) => row.mailingZip ?? "",
+  },
+  dob: {
+    id: "dob",
+    label: "Birthday",
+    defaultWidth: 140,
+    // dob is a Drizzle `date` column → string in YYYY-MM-DD form
+    // (or null). Show as-is for consistency with createdAt's
+    // ISO-slice rendering.
+    render: (row) => row.dob ?? "",
+    measureText: (row) => row.dob ?? "",
+  },
+  anniversaryDate: {
+    id: "anniversaryDate",
+    label: "Anniversary",
+    defaultWidth: 140,
+    render: (row) => row.anniversaryDate ?? "",
+    measureText: (row) => row.anniversaryDate ?? "",
+  },
+  instagramHandle: {
+    id: "instagramHandle",
+    label: "Instagram",
+    defaultWidth: 160,
+    render: (row) => row.instagramHandle ?? "",
+    measureText: (row) => row.instagramHandle ?? "",
+  },
+  facebookUrl: {
+    id: "facebookUrl",
+    label: "Facebook",
+    defaultWidth: 220,
+    render: (row) => row.facebookUrl ?? "",
+    measureText: (row) => row.facebookUrl ?? "",
+  },
+  website: {
+    id: "website",
+    label: "Website",
+    defaultWidth: 220,
+    render: (row) => row.website ?? "",
+    measureText: (row) => row.website ?? "",
+  },
+  leadSource: {
+    id: "leadSource",
+    label: "Lead source",
+    defaultWidth: 160,
+    render: (row) => row.leadSource ?? "",
+    measureText: (row) => row.leadSource ?? "",
+  },
+  sourceDetail: {
+    id: "sourceDetail",
+    label: "Source detail",
+    defaultWidth: 180,
+    render: (row) => row.sourceDetail ?? "",
+    measureText: (row) => row.sourceDetail ?? "",
+  },
+  ownerName: {
+    id: "ownerName",
+    label: "Owner",
+    defaultWidth: 180,
+    // The owner_user_id FK is resolved server-side into a display
+    // name (via the orgMembers lookup) — see contacts/page.tsx
+    // row mapping. Falls back to "" when the contact has no owner
+    // or the linked user has been deleted.
+    render: (row) => row.ownerName ?? "",
+    measureText: (row) => row.ownerName ?? "",
+  },
+  updatedAt: {
+    id: "updatedAt",
+    label: "Date updated",
+    defaultWidth: 140,
+    render: (row) => (row.updatedAt ? row.updatedAt.slice(0, 10) : ""),
+    measureText: (row) => (row.updatedAt ? row.updatedAt.slice(0, 10) : ""),
+  },
+  notes: {
+    id: "notes",
+    label: "Notes",
+    defaultWidth: 280,
+    // Notes can be long + multiline; the table cell already clips
+    // overflow with CSS truncation. Collapse newlines so the
+    // measureText canvas + visible cell agree on what they're
+    // seeing.
+    render: (row) => (row.notes ? row.notes.replace(/\s+/g, " ").trim() : ""),
+    measureText: (row) => (row.notes ? row.notes.replace(/\s+/g, " ").trim() : ""),
   },
 }
 

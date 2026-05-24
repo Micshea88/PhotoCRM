@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
+import { getRoleDisplay } from "@/modules/rbac/display"
 import {
   EXTENDED_ROLES,
   extendedFromBetterAuth,
@@ -12,16 +13,16 @@ import {
 } from "@/modules/rbac/types"
 
 /**
- * Push 2c.6.5 — pending-invitations list now renders the inviter's
+ * Push 2c.6.5 — pending-invitations list renders the inviter's
  * intended extended role instead of the BA-mapped 3-role collapse.
+ * Push 2c.6.6 — display labels now come from the central
+ * ROLE_DISPLAY map (src/modules/rbac/display.ts) instead of a
+ * local copy, so every role-rendering surface stays in lockstep.
  *
  *   - extendedRole present (post-2c.6.4 invites) → render that
- *     value (capitalized; "user" → "Team member" per LOC1).
+ *     value via getRoleDisplay (which maps "user" → "Team member").
  *   - extendedRole null (legacy invites; no metadata row) →
- *     fall back to extendedFromBetterAuth(role).
- *
- * Kept in lockstep with members-list.tsx's display rules so the
- * two surfaces use the same role naming.
+ *     fall back to extendedFromBetterAuth(role), then display.
  */
 export interface PendingInvitationRow {
   id: string
@@ -29,20 +30,11 @@ export interface PendingInvitationRow {
   /** Better Auth role on the invitation row — always one of owner/admin/member. */
   role: string
   /**
-   * Push 2c.6.4 extended-role metadata (Admin/Manager/User/
-   * Accountant). Null for legacy invitations created before the
+   * Push 2c.6.4 extended-role metadata (admin/manager/user/
+   * accountant). Null for legacy invitations created before the
    * invitation_extended_role table existed.
    */
   extendedRole: string | null
-}
-
-const ROLE_DISPLAY: Record<ExtendedRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  manager: "Manager",
-  user: "Team member",
-  accountant: "Accountant",
-  client: "Client",
 }
 
 function isExtendedRole(v: string): v is ExtendedRole {
@@ -50,17 +42,18 @@ function isExtendedRole(v: string): v is ExtendedRole {
 }
 
 /**
- * Single source of truth for what label appears next to the email.
- * Centralised so the metadata-vs-legacy branching is in one place
- * — future surfaces (audit log entries, email subject lines, etc.)
- * can call this directly instead of re-deriving the rule.
+ * Centralised metadata-vs-legacy branching for the pending-list
+ * label. Future surfaces (audit log entries, email subject lines)
+ * can call this if they need the SAME fallback logic; for
+ * already-resolved ExtendedRole values use getRoleDisplay() from
+ * @/modules/rbac/display directly.
  */
 export function getDisplayRole(inv: PendingInvitationRow): string {
   if (inv.extendedRole && isExtendedRole(inv.extendedRole)) {
-    return ROLE_DISPLAY[inv.extendedRole]
+    return getRoleDisplay(inv.extendedRole)
   }
   const fallback = extendedFromBetterAuth((inv.role || "member") as BetterAuthRole)
-  return ROLE_DISPLAY[fallback]
+  return getRoleDisplay(fallback)
 }
 
 export function PendingInvitations({ invitations }: { invitations: PendingInvitationRow[] }) {

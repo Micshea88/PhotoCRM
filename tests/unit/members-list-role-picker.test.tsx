@@ -1,11 +1,14 @@
 /**
  * Push 2c.5.1 — MembersList role-picker contract.
+ * Push 2c.6.6 — display labels now flow through ROLE_DISPLAY in
+ * src/modules/rbac/display.ts. The "user" key renders as "Team
+ * member" (LOC1).
  *
  * The dropdown surfaces the 5 INTERNAL roles only: Owner, Admin,
- * Manager, User, Accountant. "Client" stays in the EXTENDED_ROLES
- * union (forward-compat for the V2 client-portal work) but is
- * filtered out of the picker — clients are external users invited
- * via a future contact-portal flow, not org members.
+ * Manager, Team member, Accountant. "Client" stays in the
+ * EXTENDED_ROLES union (forward-compat for the V2 client-portal
+ * work) but is filtered out of the picker — clients are external
+ * users invited via a future contact-portal flow, not org members.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
@@ -58,8 +61,9 @@ describe("MembersList role picker (Push 2c.5.1)", () => {
     )
     const select = screen.getByRole("combobox", { name: /Role for Target User/i })
     const optionTexts = Array.from(select.querySelectorAll("option")).map((o) => o.textContent)
-    expect(optionTexts).toEqual(["Owner", "Admin", "Manager", "User", "Accountant"])
+    expect(optionTexts).toEqual(["Owner", "Admin", "Manager", "Team member", "Accountant"])
     expect(optionTexts).not.toContain("Client")
+    expect(optionTexts).not.toContain("User")
   })
 
   it("does not render the picker when the current user lacks manage permission", () => {

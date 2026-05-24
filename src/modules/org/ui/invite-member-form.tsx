@@ -10,11 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { inviteMemberWithExtendedRole } from "@/modules/rbac/actions"
-import {
-  INVITABLE_EXTENDED_ROLES,
-  invitableExtendedRoleSchema,
-  type InvitableExtendedRole,
-} from "@/modules/rbac/types"
+import { getRoleDisplay } from "@/modules/rbac/display"
+import { INVITABLE_EXTENDED_ROLES, invitableExtendedRoleSchema } from "@/modules/rbac/types"
 
 /**
  * Push 2c.6.4 — invite form exposes the 4 invitable internal roles
@@ -39,13 +36,6 @@ const schema = z.object({
 })
 
 type Values = z.infer<typeof schema>
-
-const ROLE_LABELS: Record<InvitableExtendedRole, string> = {
-  admin: "Admin",
-  manager: "Manager",
-  user: "Team member",
-  accountant: "Accountant",
-}
 
 export function InviteMemberForm() {
   const router = useRouter()
@@ -111,7 +101,10 @@ export function InviteMemberForm() {
           >
             {INVITABLE_EXTENDED_ROLES.map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABELS[r]}
+                {/* Push 2c.6.6 — display labels centralised in
+                 * src/modules/rbac/display.ts. "user" renders as
+                 * "Team member" (LOC1). */}
+                {getRoleDisplay(r)}
               </option>
             ))}
           </select>

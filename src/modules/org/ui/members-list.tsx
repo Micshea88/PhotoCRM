@@ -5,6 +5,7 @@ import { useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { setMemberExtendedRole } from "@/modules/rbac/actions"
+import { getRoleDisplay } from "@/modules/rbac/display"
 import { EXTENDED_ROLES, type ExtendedRole } from "@/modules/rbac/types"
 
 interface Member {
@@ -65,7 +66,9 @@ export function MembersList({
             <p className="text-xs text-[var(--color-muted-foreground)]">{m.user.email}</p>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-[var(--color-muted-foreground)]">{m.extendedRole}</span>
+            <span className="text-[var(--color-muted-foreground)]">
+              {getRoleDisplay(m.extendedRole)}
+            </span>
             {canManage && m.user.id !== currentUserId && m.extendedRole !== "owner" && (
               <>
                 <select
@@ -89,7 +92,12 @@ export function MembersList({
                    */}
                   {EXTENDED_ROLES.filter((r) => r !== "client").map((r) => (
                     <option key={r} value={r}>
-                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                      {/*
+                       * Push 2c.6.6 — display labels centralised in
+                       * src/modules/rbac/display.ts. "user" renders
+                       * as "Team member" (LOC1).
+                       */}
+                      {getRoleDisplay(r)}
                     </option>
                   ))}
                 </select>

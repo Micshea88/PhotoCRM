@@ -44,7 +44,10 @@ function parseStepParam(raw: string | null): 1 | 2 | 3 | 4 {
   return 1
 }
 type OwnerMode = "self" | "specific" | "from_csv"
-type ErrorMode = "skip" | "stop"
+// Push 2c.3 — removed the "If a row errors" radio. Behavior is now
+// always skip-and-keep-going. The "Stop on first error" option was
+// unnecessary friction (HubSpot doesn't expose it either) and made
+// the error UX harder to reason about.
 
 function stripUndefined(values: Partial<Record<ImportableField, string>>): Record<string, string> {
   const out: Record<string, string> = {}
@@ -60,7 +63,9 @@ interface OrgMember {
   email: string
 }
 
-interface PreviewRow {
+// Push 2c.3 — exported so the wizard's PreviewStep can be unit-tested
+// against fixture data. Internal to the import flow otherwise.
+export interface PreviewRow {
   rowIndex: number
   matchedContactId: string | null
   matchedContactName: string | null
@@ -72,7 +77,6 @@ interface ImportResult {
   successCount: number
   errorCount: number
   errorRows: { rowIndex: number; error: string; raw: string[] }[]
-  stopped: boolean
 }
 
 /**
@@ -135,7 +139,6 @@ export function ContactsImportWizard({
   const [ownerMode, setOwnerMode] = useState<OwnerMode>("self")
   const [specificOwnerId, setSpecificOwnerId] = useState<string>(currentUserId)
   const [bulkTags, setBulkTags] = useState<string[]>([])
-  const [errorMode, setErrorMode] = useState<ErrorMode>("skip")
 
   // Push 2c.2.2 — guard against ?step=2|3|4 landings (refresh, direct
   // URL share) where per-step React data is missing. Redirect to
@@ -282,7 +285,6 @@ export function ContactsImportWizard({
       ownerUserId:
         ownerMode === "specific" ? specificOwnerId : ownerMode === "self" ? currentUserId : null,
       applyTags: bulkTags.length > 0 ? bulkTags : undefined,
-      errorMode,
     })
     setBusy(false)
     if (result.serverError) {
@@ -308,7 +310,6 @@ export function ContactsImportWizard({
       successCount: result.data?.successCount ?? 0,
       errorCount: (result.data?.errorCount ?? 0) + preflightErrors.length,
       errorRows: [...preflightErrors, ...serverErrors],
-      stopped: result.data?.stopped ?? false,
     })
     goToStep("done")
   }
@@ -384,8 +385,6 @@ export function ContactsImportWizard({
           onSpecificOwnerIdChange={setSpecificOwnerId}
           bulkTags={bulkTags}
           onBulkTagsChange={setBulkTags}
-          errorMode={errorMode}
-          onErrorModeChange={setErrorMode}
           ownerEmailColumnMapped={mapping.includes("ownerUserId")}
           onSetAction={setRowAction}
           busy={busy}
@@ -608,7 +607,7 @@ function humanizeType(t: DetectedType): string {
   }
 }
 
-function PreviewStep({
+export function PreviewStep({
   cleanRows,
   previewRows,
   orgMembers,
@@ -620,8 +619,6 @@ function PreviewStep({
   onSpecificOwnerIdChange,
   bulkTags,
   onBulkTagsChange,
-  errorMode,
-  onErrorModeChange,
   ownerEmailColumnMapped,
   onSetAction,
   busy,
@@ -640,8 +637,6 @@ function PreviewStep({
   onSpecificOwnerIdChange: (id: string) => void
   bulkTags: string[]
   onBulkTagsChange: (tags: string[]) => void
-  errorMode: ErrorMode
-  onErrorModeChange: (m: ErrorMode) => void
   ownerEmailColumnMapped: boolean
   onSetAction: (rowIndex: number, action: "create" | "update" | "skip") => void
   busy: boolean
@@ -657,9 +652,13 @@ function PreviewStep({
 
   const createCount = previewRows.filter((p) => p.action === "create").length
   const updateCount = previewRows.filter((p) => p.action === "update").length
-  const skipCount = previewRows.filter((p) => p.action === "skip").length + erroredRows.length
+  // Push 2c.3 — separated previewSkipCount (user-elected skips + CSV
+  // duplicates) from erroredRows.length so the summary banner can
+  // surface "skipped due to errors" as its own red-text line.
+  const previewSkipCount = previewRows.filter((p) => p.action === "skip").length
   const warningCount = importableRows.filter((c) => c.warnings.length > 0).length
   const duplicateCount = previewRows.filter((p) => p.duplicateOfRow !== null).length
+  const willImportCount = createCount + updateCount
 
   // Owner-from-csv preview: how many rows have an ownerUserId column
   // value that resolves to an org member? Computed inline (not via
@@ -687,13 +686,18 @@ function PreviewStep({
         <h2 className="text-base font-medium">Preview &amp; dedupe</h2>
       </div>
 
-      {/* Validation summary */}
+      {/* Push 2c.3 — validation summary. The skip-due-to-errors line
+          stands out in destructive red so users can't miss that some
+          rows won't import. Warning / duplicate lines keep amber
+          (will import; just heads-up). */}
       <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 text-xs">
         <p className="font-medium">Before import:</p>
         <ul className="mt-1 list-disc space-y-0.5 pl-5">
           <li>{String(createCount)} rows will create new contacts</li>
           <li>{String(updateCount)} rows will update existing contacts</li>
-          <li>{String(skipCount)} rows will be skipped</li>
+          {/* Skip count here excludes error rows — they get their own
+              red line below for visibility. */}
+          {previewSkipCount > 0 && <li>{String(previewSkipCount)} rows will be skipped</li>}
           {warningCount > 0 && (
             <li className="text-amber-700 dark:text-amber-300">
               {String(warningCount)} rows have warnings (will import without the problem field)
@@ -703,6 +707,12 @@ function PreviewStep({
             <li className="text-amber-700 dark:text-amber-300">
               {String(duplicateCount)} rows look like duplicates of earlier rows in this CSV
               (defaulted to Skip)
+            </li>
+          )}
+          {erroredRows.length > 0 && (
+            <li className="font-medium text-red-700 dark:text-red-400">
+              {String(erroredRows.length)} rows will be SKIPPED due to errors — fix these in your
+              CSV and re-upload to include them.
             </li>
           )}
         </ul>
@@ -777,30 +787,6 @@ function PreviewStep({
           <legend className="font-medium">Tag every imported contact</legend>
           <BulkTagPicker tags={bulkTags} onChange={onBulkTagsChange} existingTags={existingTags} />
         </fieldset>
-
-        <fieldset className="space-y-1.5 text-sm md:col-span-2">
-          <legend className="font-medium">If a row errors</legend>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="radio"
-              checked={errorMode === "skip"}
-              onChange={() => {
-                onErrorModeChange("skip")
-              }}
-            />
-            <span>Skip the row and import the rest</span>
-          </label>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="radio"
-              checked={errorMode === "stop"}
-              onChange={() => {
-                onErrorModeChange("stop")
-              }}
-            />
-            <span>Stop the import on the first error</span>
-          </label>
-        </fieldset>
       </div>
 
       {/* Row preview table */}
@@ -816,19 +802,26 @@ function PreviewStep({
               <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
+          {/* Push 2c.3 — error rows now interleave with normal rows in
+              CSV row order, each with a destructive-tinted background
+              and a disabled "Skip — has errors" action so the user
+              sees exactly where the bad rows are in their original
+              CSV (rather than the bad rows being clumped at the end
+              of the preview list as the old layout did). */}
           <tbody>
-            {importableRows.map((c) => {
+            {cleanRows.map((c) => {
+              const hasError = c.errors.length > 0
               const preview = byPreview.get(c.rowIndex)
               const hasWarning = c.warnings.length > 0
               const dupOf = preview?.duplicateOfRow ?? null
               const isDup = dupOf !== null
+              const bgClass = hasError
+                ? "bg-[var(--color-destructive)]/5"
+                : isDup || hasWarning
+                  ? "bg-amber-500/5"
+                  : ""
               return (
-                <tr
-                  key={c.rowIndex}
-                  className={`border-t border-[var(--color-border)] ${
-                    isDup || hasWarning ? "bg-amber-500/5" : ""
-                  }`}
-                >
+                <tr key={c.rowIndex} className={`border-t border-[var(--color-border)] ${bgClass}`}>
                   <td className="px-3 py-2 align-top text-xs text-[var(--color-muted-foreground)]">
                     {c.rowIndex}
                   </td>
@@ -836,7 +829,12 @@ function PreviewStep({
                     {[c.values.firstName, c.values.lastName].filter(Boolean).join(" ") || (
                       <em className="text-[var(--color-muted-foreground)]">—</em>
                     )}
-                    {hasWarning && (
+                    {hasError && (
+                      <p className="mt-1 text-[11px] font-medium text-red-700 dark:text-red-400">
+                        {c.errors.join("; ")}
+                      </p>
+                    )}
+                    {!hasError && hasWarning && (
                       <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
                         {c.warnings.join("; ")}
                       </p>
@@ -845,7 +843,9 @@ function PreviewStep({
                   <td className="px-3 py-2 align-top text-xs">{c.values.primaryEmail ?? "—"}</td>
                   <td className="px-3 py-2 align-top text-xs">{c.values.primaryPhone ?? "—"}</td>
                   <td className="px-3 py-2 align-top text-xs">
-                    {isDup ? (
+                    {hasError ? (
+                      <span className="text-red-700 dark:text-red-400">—</span>
+                    ) : isDup ? (
                       <span className="text-amber-700 dark:text-amber-300">
                         Duplicate of row {String(dupOf)}
                       </span>
@@ -854,31 +854,34 @@ function PreviewStep({
                     )}
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <select
-                      value={preview?.action ?? "create"}
-                      onChange={(e) => {
-                        onSetAction(c.rowIndex, e.target.value as "create" | "update" | "skip")
-                      }}
-                      className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
-                    >
-                      <option value="create">Create new</option>
-                      <option value="update" disabled={!preview?.matchedContactId}>
-                        Update existing
-                      </option>
-                      <option value="skip">Skip</option>
-                    </select>
+                    {hasError ? (
+                      <select
+                        disabled
+                        value="skip-error"
+                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs text-red-700 disabled:opacity-70 dark:text-red-400"
+                        aria-label={`Action for row ${String(c.rowIndex)} — disabled because the row has errors`}
+                      >
+                        <option value="skip-error">Skip — has errors</option>
+                      </select>
+                    ) : (
+                      <select
+                        value={preview?.action ?? "create"}
+                        onChange={(e) => {
+                          onSetAction(c.rowIndex, e.target.value as "create" | "update" | "skip")
+                        }}
+                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
+                      >
+                        <option value="create">Create new</option>
+                        <option value="update" disabled={!preview?.matchedContactId}>
+                          Update existing
+                        </option>
+                        <option value="skip">Skip</option>
+                      </select>
+                    )}
                   </td>
                 </tr>
               )
             })}
-            {erroredRows.map((c) => (
-              <tr key={c.rowIndex} className="border-t border-[var(--color-border)] bg-red-500/5">
-                <td className="px-3 py-2 text-xs text-red-700 dark:text-red-300">{c.rowIndex}</td>
-                <td colSpan={5} className="px-3 py-2 text-xs text-red-700 dark:text-red-300">
-                  Skipped: {c.errors.join("; ")}
-                </td>
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>
@@ -894,8 +897,12 @@ function PreviewStep({
         <Button variant="outline" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
-        <Button onClick={onNext} disabled={busy || importableRows.length === 0}>
-          {busy ? "Importing…" : `Import ${String(createCount + updateCount)} rows`}
+        <Button onClick={onNext} disabled={busy || willImportCount === 0}>
+          {busy
+            ? "Importing…"
+            : erroredRows.length > 0
+              ? `Import ${String(willImportCount)} rows (${String(erroredRows.length)} skipped due to errors)`
+              : `Import ${String(willImportCount)} rows`}
         </Button>
       </div>
     </div>
@@ -1001,21 +1008,20 @@ function DoneStep({
           {String(result.successCount)} imported · {String(result.errorCount)} skipped or errored.
         </p>
       </div>
-      {result.stopped && (
-        <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-          Import stopped early because &ldquo;Stop on first error&rdquo; was selected. Earlier rows
-          were imported; later rows were not attempted.
-        </div>
-      )}
+      {/* Push 2c.3 — hoist the errors-CSV download ABOVE the closing
+          action row so users with failed rows see the recovery
+          affordance immediately. Border + bg color now red (was
+          amber) to match the Preview-step error treatment. */}
       {result.errorCount > 0 && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
-          <p className="mb-2 text-amber-700 dark:text-amber-300">
+        <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-3 text-sm">
+          <p className="mb-2 font-medium text-red-700 dark:text-red-400">
             {String(result.errorCount)} row{result.errorCount === 1 ? "" : "s"} couldn&apos;t be
-            imported. Download the error CSV, fix the issues, and re-import.
+            imported.
           </p>
-          <Button variant="outline" size="sm" onClick={onDownloadErrors}>
-            Download errors as CSV
-          </Button>
+          <p className="mb-3 text-xs text-red-700/80 dark:text-red-400/80">
+            Fix the errors in this CSV and re-upload to import the remaining rows.
+          </p>
+          <Button onClick={onDownloadErrors}>Download errors as CSV</Button>
         </div>
       )}
       <div className="flex justify-end gap-2">

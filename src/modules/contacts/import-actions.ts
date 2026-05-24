@@ -45,8 +45,13 @@ const previewInput = z.object({
 })
 
 const ownerModeEnum = z.enum(["self", "specific", "from_csv"])
-const errorModeEnum = z.enum(["skip", "stop"])
 
+// Push 2c.3 — `errorMode` (skip vs stop) removed from the input
+// schema. The wizard always skips error rows now; HubSpot doesn't
+// expose this choice and it bloated the Preview-step UX without
+// real user value. Any old callers still sending the field hit
+// Zod's "unknown key" strip (z.object is strict-stripping by
+// default).
 const runInput = z.object({
   rows: z
     .array(
@@ -59,7 +64,6 @@ const runInput = z.object({
   ownerMode: ownerModeEnum.default("self"),
   ownerUserId: z.string().min(1).nullable().optional(),
   applyTags: z.array(z.string().min(1).max(80)).max(32).optional(),
-  errorMode: errorModeEnum.default("skip"),
 })
 
 export const previewContactsImport = orgAction
@@ -357,7 +361,7 @@ export const runContactsImport = orgAction
   .inputSchema(runInput)
   .action(async ({ parsedInput, ctx }) => {
     if (parsedInput.rows.length === 0) {
-      return { results: [], successCount: 0, errorCount: 0, stopped: false }
+      return { results: [], successCount: 0, errorCount: 0 }
     }
 
     // Validate "specific" owner is actually an org member upfront.
@@ -404,7 +408,6 @@ export const runContactsImport = orgAction
     const results: PerRowResult[] = []
     let successCount = 0
     let errorCount = 0
-    let stopped = false
 
     for (const r of parsedInput.rows) {
       if (r.action === "skip") {
@@ -416,10 +419,6 @@ export const runContactsImport = orgAction
       if (ownerResolution.error) {
         results.push({ rowIndex: r.rowIndex, ok: false, error: ownerResolution.error })
         errorCount++
-        if (parsedInput.errorMode === "stop") {
-          stopped = true
-          break
-        }
         continue
       }
       const ownerUserId = ownerResolution.ownerUserId ?? ctx.session.user.id
@@ -521,13 +520,9 @@ export const runContactsImport = orgAction
               : "Unknown error"
         results.push({ rowIndex: r.rowIndex, ok: false, error: message })
         errorCount++
-        if (parsedInput.errorMode === "stop") {
-          stopped = true
-          break
-        }
       }
     }
 
     revalidatePath("/contacts")
-    return { results, successCount, errorCount, stopped }
+    return { results, successCount, errorCount }
   })

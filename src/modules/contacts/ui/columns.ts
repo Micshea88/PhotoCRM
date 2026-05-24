@@ -60,7 +60,12 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   displayLabel: {
     id: "displayLabel",
     label: "Name",
-    defaultWidth: null,
+    // Push 2c.2.2 — explicit defaults on every column so table-layout:
+    // fixed has a width to honor in the header row. Columns with null
+    // defaults inside table-fixed get equal shares of remaining table
+    // width, which prevented the table from ever overflowing the
+    // viewport and made the horizontal scrollbar dormant.
+    defaultWidth: 280,
     render: displayLabelText,
     measureText: displayLabelText,
   },
@@ -85,7 +90,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   primaryEmail: {
     id: "primaryEmail",
     label: "Email",
-    defaultWidth: null,
+    defaultWidth: 240,
     render: (row) => row.primaryEmail ?? "",
     measureText: (row) => row.primaryEmail ?? "",
   },
@@ -113,14 +118,14 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   tags: {
     id: "tags",
     label: "Tags",
-    defaultWidth: null,
+    defaultWidth: 200,
     render: (row) => (row.tags ?? []).join(", "),
     measureText: (row) => (row.tags ?? []).join(", "),
   },
   companyName: {
     id: "companyName",
     label: "Company",
-    defaultWidth: null,
+    defaultWidth: 220,
     render: (row) => row.companyName ?? "",
     measureText: (row) => row.companyName ?? "",
   },

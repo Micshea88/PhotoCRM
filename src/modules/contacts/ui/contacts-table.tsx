@@ -220,7 +220,29 @@ export function ContactsTable({
        * "no scrollbar appears" symptom even when overflow exists.
        */}
       <div className="contacts-table-scroll overflow-x-auto overflow-y-visible rounded-lg border border-[var(--color-border)]">
-        <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
+        {/*
+         * Push 2c.2.2 — proper horizontal overflow.
+         *
+         * `min-w-full` makes the table fill the wrapper when columns
+         * sum to LESS than container width (table looks full-width
+         * with few columns visible). `style={{ width: "max-content" }}`
+         * sizes the table to the sum of its column widths when that
+         * sum EXCEEDS the wrapper — which the .contacts-table-scroll
+         * wrapper then handles via overflow-x-auto.
+         *
+         * Push 2c.2.1 used `w-full` which clamped the table to 100% of
+         * the container and made table-fixed scale columns DOWN
+         * proportionally to fit — no overflow ever happened.
+         *
+         * `table-fixed` reads column widths from the header row, so
+         * every column in CONTACT_COLUMN_REGISTRY now ships a
+         * non-null defaultWidth (columns.ts) — auto-sized columns
+         * inside table-fixed would silently re-introduce the squish.
+         */}
+        <table
+          className="min-w-full table-fixed border-separate border-spacing-0 text-sm"
+          style={{ width: "max-content" }}
+        >
           <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
             <tr>
               <th className="w-10 border-r border-b border-[var(--color-border)] px-2 py-2">

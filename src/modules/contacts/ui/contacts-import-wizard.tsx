@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { previewContactsImport, runContactsImport } from "../import-actions"
@@ -24,7 +24,25 @@ import {
   type ParsedCsv,
 } from "../import-spec"
 
-type Step = "upload" | "map" | "preview" | "importing" | "done"
+type Step = "upload" | "map" | "preview" | "done"
+const STEP_BY_NUM: Record<1 | 2 | 3 | 4, Step> = {
+  1: "upload",
+  2: "map",
+  3: "preview",
+  4: "done",
+}
+const NUM_BY_STEP: Record<Step, 1 | 2 | 3 | 4> = {
+  upload: 1,
+  map: 2,
+  preview: 3,
+  done: 4,
+}
+
+function parseStepParam(raw: string | null): 1 | 2 | 3 | 4 {
+  const n = raw ? parseInt(raw, 10) : 1
+  if (n === 2 || n === 3 || n === 4) return n
+  return 1
+}
 type OwnerMode = "self" | "specific" | "from_csv"
 type ErrorMode = "skip" | "stop"
 
@@ -87,9 +105,23 @@ export function ContactsImportWizard({
   existingTags: string[]
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const [step, setStep] = useState<Step>("upload")
+  // Push 2c.2.2 — wizard step lives in ?step=1..4 so browser Back walks
+  // backwards through the wizard instead of exiting it. React state
+  // still owns the per-step DATA (uploaded CSV rows, mappings, preview
+  // rows) — that state is lost on full-page refresh, in which case
+  // an effect below redirects forward steps back to step=1.
+  const stepNum = parseStepParam(searchParams.get("step"))
+  const step: Step = STEP_BY_NUM[stepNum]
+  function goToStep(target: Step) {
+    const next = NUM_BY_STEP[target]
+    if (next === stepNum) return
+    router.push(`${pathname}?step=${String(next)}`)
+  }
+
   const [parsed, setParsed] = useState<ParsedCsv | null>(null)
   const [mapping, setMapping] = useState<(ImportableField | null)[]>([])
   const [cleanRows, setCleanRows] = useState<CleanRow[]>([])
@@ -104,6 +136,28 @@ export function ContactsImportWizard({
   const [specificOwnerId, setSpecificOwnerId] = useState<string>(currentUserId)
   const [bulkTags, setBulkTags] = useState<string[]>([])
   const [errorMode, setErrorMode] = useState<ErrorMode>("skip")
+
+  // Push 2c.2.2 — guard against ?step=2|3|4 landings (refresh, direct
+  // URL share) where per-step React data is missing. Redirect to
+  // step=1 with reason=state_lost so the user sees a notice
+  // explaining why they bounced back to Upload. The notice is
+  // surfaced via URL (not React state) so the effect can stay
+  // setState-free per the strict lint config.
+  useEffect(() => {
+    if (step === "upload") return
+    if (step === "map" && !parsed) {
+      router.replace(`${pathname}?step=1&reason=state_lost`)
+      return
+    }
+    if (step === "preview" && previewRows.length === 0) {
+      router.replace(`${pathname}?step=${parsed ? "2" : "1"}&reason=state_lost`)
+      return
+    }
+    if (step === "done" && !importResult) {
+      router.replace(`${pathname}?step=1&reason=state_lost`)
+    }
+  }, [step, parsed, previewRows.length, importResult, pathname, router])
+  const stateLost = searchParams.get("reason") === "state_lost"
 
   // Per-column detected types — memoized off parsed rows for the
   // mapping step warnings + auto-suggestion checkmarks.
@@ -143,7 +197,7 @@ export function ContactsImportWizard({
       }
       setParsed(next)
       setMapping(autoMapHeaders(next.headers))
-      setStep("map")
+      goToStep("map")
     } catch {
       setError(
         "Couldn't parse this CSV — re-export from your editor as standard UTF-8 CSV and try again.",
@@ -194,7 +248,7 @@ export function ContactsImportWizard({
     })
     setPreviewRows(previews)
     setOrgMemberEmails(result.data?.orgMemberEmails ?? [])
-    setStep("preview")
+    goToStep("preview")
   }
 
   function setRowAction(rowIndex: number, action: "create" | "update" | "skip") {
@@ -202,9 +256,13 @@ export function ContactsImportWizard({
   }
 
   // ─── Step 4: run ─────────────────────────────────────────────────────
+  // Push 2c.2.2 — `busy` shows the "Importing…" inline on the preview
+  // step. The transient "importing" step that used to live in the
+  // state machine was elided when steps moved to ?step=1..4 URL
+  // params — keeping a transient state outside the URL would confuse
+  // the back-button navigation contract.
   async function runImport() {
     setError(null)
-    setStep("importing")
     setBusy(true)
     const byIndex = new Map(previewRows.map((r) => [r.rowIndex, r]))
     const payload = cleanRows
@@ -229,7 +287,7 @@ export function ContactsImportWizard({
     setBusy(false)
     if (result.serverError) {
       setError(result.serverError)
-      setStep("preview")
+      // We're still on step=preview — no URL transition needed.
       return
     }
     const serverErrors = (result.data?.results ?? [])
@@ -252,7 +310,7 @@ export function ContactsImportWizard({
       errorRows: [...preflightErrors, ...serverErrors],
       stopped: result.data?.stopped ?? false,
     })
-    setStep("done")
+    goToStep("done")
   }
 
   function downloadErrorsCsv() {
@@ -280,6 +338,12 @@ export function ContactsImportWizard({
         </div>
       )}
 
+      {stateLost && step === "upload" && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+          Wizard state was lost (refresh or direct link). Re-upload the CSV to continue.
+        </div>
+      )}
+
       {step === "upload" && (
         <UploadStep
           busy={busy}
@@ -299,7 +363,7 @@ export function ContactsImportWizard({
           detectedTypes={detectedTypes}
           busy={busy}
           onBack={() => {
-            setStep("upload")
+            goToStep("upload")
           }}
           onNext={() => {
             void continueToPreview()
@@ -326,7 +390,12 @@ export function ContactsImportWizard({
           onSetAction={setRowAction}
           busy={busy}
           onBack={() => {
-            setStep("map")
+            goToStep("map")
+          }}
+          onCancel={() => {
+            startTransition(() => {
+              router.push("/contacts")
+            })
           }}
           onNext={() => {
             void runImport()
@@ -334,11 +403,9 @@ export function ContactsImportWizard({
         />
       )}
 
-      {step === "importing" && (
-        <div className="rounded-md border border-[var(--color-border)] p-6 text-center">
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            Importing… don&apos;t close this tab.
-          </p>
+      {step === "preview" && busy && (
+        <div className="rounded-md border border-[var(--color-border)] p-3 text-center text-sm text-[var(--color-muted-foreground)]">
+          Importing… don&apos;t close this tab.
         </div>
       )}
 
@@ -364,9 +431,7 @@ function Stepper({ current }: { current: Step }) {
     { step: "preview", label: "3. Preview & dedupe" },
     { step: "done", label: "4. Import" },
   ]
-  const currentIndex = labels.findIndex(
-    (l) => l.step === (current === "importing" ? "done" : current),
-  )
+  const currentIndex = labels.findIndex((l) => l.step === current)
   return (
     <ol className="flex items-center gap-3 text-sm">
       {labels.map((l, i) => {
@@ -561,6 +626,7 @@ function PreviewStep({
   onSetAction,
   busy,
   onBack,
+  onCancel,
   onNext,
 }: {
   cleanRows: CleanRow[]
@@ -580,6 +646,9 @@ function PreviewStep({
   onSetAction: (rowIndex: number, action: "create" | "update" | "skip") => void
   busy: boolean
   onBack: () => void
+  /** Push 2c.2.2 — exits the wizard entirely (to /contacts). Co-located
+   * with Import for users expecting Cancel next to the commit button. */
+  onCancel: () => void
   onNext: () => void
 }) {
   const importableRows = cleanRows.filter((c) => c.errors.length === 0)
@@ -814,9 +883,16 @@ function PreviewStep({
         </table>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex items-center justify-end gap-2">
         <Button variant="outline" onClick={onBack} disabled={busy}>
           Back
+        </Button>
+        {/* Push 2c.2.2 — co-locate Cancel with the commit button.
+            Users about to confirm a destructive-feeling import expect
+            a Cancel option right there, not just at the top of the
+            wizard. */}
+        <Button variant="outline" onClick={onCancel} disabled={busy}>
+          Cancel
         </Button>
         <Button onClick={onNext} disabled={busy || importableRows.length === 0}>
           {busy ? "Importing…" : `Import ${String(createCount + updateCount)} rows`}

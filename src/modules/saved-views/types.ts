@@ -99,38 +99,36 @@ const customFieldsSchema = z.record(z.string(), z.unknown()).optional().nullable
 const sharedWithUserIdsSchema = z.array(z.string().min(1).max(64)).max(64).optional().nullable()
 
 /**
- * Push 2c.6.1 — explicit-default variants of the optional+nullable
- * schemas above, used by createSavedView only. The bare optional()+
- * nullable() variants produce `parsedInput.field === undefined` when
- * the UI omits the key (which the wizard's doSaveAs call does for
- * grouping/customFields, and for sharedWithUserIds when visibility is
- * private). With Part 1 instrumentation in place we surfaced the
- * production failure: those undefined values flowed into the
- * Drizzle .insert(savedViews).values({...}) call and pg rejected
- * the INSERT (param values arrived as empty in the wire format).
+ * Push 2c.6.1 → 2c.6.2 — separate-but-equivalent variants of the
+ * optional+nullable schemas above, used by createSavedView only.
  *
- * Coercing absent → null at the Zod boundary is belt-and-suspenders
- * with the action body's `?? null` / `?? []` ternaries, and makes
- * the contract on parsedInput easier to reason about.
+ * 2c.6.1 attempted `.nullable().default(null)` here as a Zod-level
+ * coercion. Production logs from deployment EBcSo7Aic showed the
+ * fix did NOT land: the rendered Drizzle params for shared_with_
+ * user_ids, sort, grouping, custom_fields were still empty (not
+ * SQL NULL) and the INSERT continued to fail. Either Zod's default
+ * isn't reaching the action body via next-safe-action's parsing
+ * pipeline, or Drizzle's value serializer is dropping the
+ * already-null value to an empty parameter slot.
  *
- * Reserved for create only — updateSavedView relies on the
- * partial-update semantics where `parsedInput.field === undefined`
- * MEANS "don't touch this column" and must NOT be silently coerced
- * to null (that would clobber existing values on every update).
+ * 2c.6.2 moves the defaulting back to the action body via explicit
+ * object construction (see actions.ts:createSavedView). These
+ * schemas remain separate from the update variants so future
+ * divergence (e.g., adding a stricter create-only rule) is a
+ * one-line edit, but they no longer carry `.default()` — the
+ * action handler is the single source of truth for the absent
+ * → null/[] mapping.
+ *
+ * updateSavedView still uses the bare optional+nullable variants
+ * — its partial-update semantics depend on `parsedInput.field ===
+ * undefined` meaning "don't touch this column".
  */
-const filtersJsonSchemaForCreate = z.array(filterSchema).max(64).nullable().default(null)
-const sortJsonSchemaForCreate = z
-  .union([sortSchema, z.array(sortSchema).max(8)])
-  .nullable()
-  .default(null)
-const columnConfigJsonSchemaForCreate = columnConfigSchema.nullable().default(null)
-const groupingSchemaForCreate = z.string().max(120).nullable().default(null)
-const customFieldsSchemaForCreate = z.record(z.string(), z.unknown()).nullable().default(null)
-const sharedWithUserIdsSchemaForCreate = z
-  .array(z.string().min(1).max(64))
-  .max(64)
-  .nullable()
-  .default(null)
+const filtersJsonSchemaForCreate = filtersJsonSchema
+const sortJsonSchemaForCreate = sortJsonSchema
+const columnConfigJsonSchemaForCreate = columnConfigJsonSchema
+const groupingSchemaForCreate = groupingSchema
+const customFieldsSchemaForCreate = customFieldsSchema
+const sharedWithUserIdsSchemaForCreate = sharedWithUserIdsSchema
 
 /**
  * Push 2c — pinned-tab soft cap. Total saved views per user is now

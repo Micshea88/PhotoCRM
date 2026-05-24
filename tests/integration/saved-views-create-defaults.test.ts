@@ -1,22 +1,29 @@
 /**
- * Push 2c.6.1 — regression coverage for the createSavedView NULL-
- * default propagation bug surfaced by Push 2c.6 Part 1's
- * instrumentation.
+ * Push 2c.6.1 → 2c.6.2 — regression coverage for the createSavedView
+ * NULL-default propagation bug.
  *
- * Failure mode in production: the wizard's doSaveAs handler calls
- * createSavedView with only the required fields plus filters/sort/
- * columnConfig — it omits `grouping`, `customFields`, and (for
- * private/org views) `sharedWithUserIds`. Those fields landed at the
- * action handler as `parsedInput.field === undefined`, propagated
- * into Drizzle's `.insert(savedViews).values({...})` call, and pg
- * rejected the INSERT (param values arrived as empty in the wire
- * format).
+ * Failure mode in production (deployment EBcSo7Aic): the wizard's
+ * doSaveAs handler calls createSavedView with only the required
+ * fields plus filters/sort/columnConfig — it omits `grouping`,
+ * `customFields`, and (for private/org views) `sharedWithUserIds`.
+ * Those fields landed at the action handler as `parsedInput.field
+ * === undefined`, propagated into Drizzle's `.insert(savedViews)
+ * .values({...})` call, and pg rejected the INSERT (param values
+ * arrived as empty in the wire format).
  *
- * Fix: each optional field's Zod schema in createSavedViewInput now
- * uses `.nullable().default(null)` (or `.default([])` for
- * sharedWithUserIds) so parsedInput carries an explicit null/[]
- * rather than undefined. The action body's `?? null` / `?? []`
- * ternaries remain as belt-and-suspenders.
+ * 2c.6.1 attempted `.nullable().default(null)` at the Zod schema
+ * layer. The production logs after that deploy showed it did NOT
+ * work — params at positions 7, 9, 11, 12 were still empty. The
+ * Zod default wasn't propagating through next-safe-action's parsing
+ * pipeline as expected.
+ *
+ * 2c.6.2 moves the defaulting to the action handler body via
+ * explicit object construction (a typed `values` variable with
+ * `?? null` / `?? []` on every nullable column) so there's a
+ * single, unambiguous code path between parsedInput and Drizzle's
+ * value serializer. The *ForCreate schemas in types.ts remain
+ * separate from the update schemas (for future divergence) but
+ * are now identical aliases to the optional+nullable forms.
  */
 
 import { describe, it, expect } from "vitest"
@@ -27,24 +34,26 @@ import { createOrganization, createUser } from "../helpers/factories"
 import { savedViews } from "@/modules/saved-views/schema"
 import { createSavedViewInput, updateSavedViewInput } from "@/modules/saved-views/types"
 
-describe("createSavedViewInput — Push 2c.6.1 null-default coercion", () => {
-  it("coerces omitted optional fields to null / [] (not undefined)", () => {
+describe("createSavedViewInput — Push 2c.6.2 schema contract", () => {
+  it("accepts minimal input; optional fields parse as undefined post-2c.6.2", () => {
+    // The handler body — not the Zod schema — is responsible for
+    // coercing absent → null/[]. This test pins the Zod contract:
+    // omitted optional fields produce undefined-keyed parsed output
+    // (the default Zod behavior for .optional().nullable()).
     const parsed = createSavedViewInput.parse({
       objectType: "contact",
       name: "Minimal view",
-      // every other field omitted → mirrors the wizard's doSaveAs
-      // payload for a private view with no grouping/customFields.
     })
     expect(parsed.visibility).toBe("private")
-    expect(parsed.sharedWithUserIds).toBeNull()
-    expect(parsed.filters).toBeNull()
-    expect(parsed.sort).toBeNull()
-    expect(parsed.columnConfig).toBeNull()
-    expect(parsed.grouping).toBeNull()
-    expect(parsed.customFields).toBeNull()
+    expect(parsed.sharedWithUserIds).toBeUndefined()
+    expect(parsed.filters).toBeUndefined()
+    expect(parsed.sort).toBeUndefined()
+    expect(parsed.columnConfig).toBeUndefined()
+    expect(parsed.grouping).toBeUndefined()
+    expect(parsed.customFields).toBeUndefined()
   })
 
-  it("preserves explicit values; does not clobber them with the default", () => {
+  it("preserves explicit values; passes them straight through", () => {
     const parsed = createSavedViewInput.parse({
       objectType: "contact",
       name: "Explicit view",
@@ -62,7 +71,7 @@ describe("createSavedViewInput — Push 2c.6.1 null-default coercion", () => {
     expect(parsed.customFields).toEqual({ ownerOverride: "abc123" })
   })
 
-  it("preserves explicit null; null and undefined collapse to the same output", () => {
+  it("accepts explicit null for each optional field", () => {
     const parsed = createSavedViewInput.parse({
       objectType: "contact",
       name: "Explicit-null view",
@@ -111,19 +120,30 @@ describe("updateSavedViewInput — partial-update semantics preserved", () => {
 })
 
 describe("savedViews INSERT — production-shape minimal payload", () => {
-  it("inserts cleanly with all jsonb/array nullables = null", async () => {
+  it("inserts cleanly when handler defaults absent → null/[]", async () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
       const orgId = await createOrganization(db, userId)
       await setOrgContext(db, orgId, "owner", userId)
 
-      // Build the exact payload the action would construct AFTER
-      // Zod parsing of a minimal wizard call (post-2c.6.1 defaults
-      // applied):
+      // Mirror the production failure path: parse a minimal wizard
+      // payload (no grouping/customFields/sharedWithUserIds) through
+      // Zod, then construct the INSERT values exactly as the action
+      // handler does — with explicit `?? null` / `?? []` on every
+      // nullable column. The 2c.6.2 fix lives in this construction
+      // step, not in Zod.
       const parsed = createSavedViewInput.parse({
         objectType: "contact",
         name: "Production minimal payload",
       })
+
+      // Sanity check the regression — parsedInput.field must be
+      // undefined post-2c.6.2 for the handler-body defaults to be
+      // load-bearing.
+      expect(parsed.sharedWithUserIds).toBeUndefined()
+      expect(parsed.sort).toBeUndefined()
+      expect(parsed.grouping).toBeUndefined()
+      expect(parsed.customFields).toBeUndefined()
 
       const id = createId()
       await db.insert(savedViews).values({
@@ -133,8 +153,6 @@ describe("savedViews INSERT — production-shape minimal payload", () => {
         name: parsed.name,
         ownerUserId: userId,
         visibility: parsed.visibility,
-        // Mirror the action body — kept as belt+suspenders even
-        // though the parsed values are already null/[].
         sharedWithUserIds:
           parsed.visibility === "shared_users" ? (parsed.sharedWithUserIds ?? []) : null,
         filters: parsed.filters ?? null,

@@ -72,23 +72,41 @@ export const createSavedView = orgAction
   .inputSchema(createSavedViewInput)
   .action(async ({ parsedInput, ctx }) => {
     const id = createId()
-    await ctx.db.insert(savedViews).values({
+    // Push 2c.6.2 — explicit-construction defaults moved from the
+    // Zod *ForCreate schemas (which previously had .default(null))
+    // into the handler body. Production logs after the 2c.6.1
+    // Zod-level fix still showed empty params for these 4 columns
+    // — Zod defaults weren't propagating to Drizzle through
+    // next-safe-action. Building the values object as a separate
+    // typed variable + an explicit `?? null` / `?? []` on every
+    // nullable column is the bulletproof form: no inline expression
+    // gymnastics, no dependence on Zod default semantics, no
+    // ambiguity about what Drizzle receives.
+    const sharedWithUserIds: string[] | null =
+      parsedInput.visibility === "shared_users" ? (parsedInput.sharedWithUserIds ?? []) : null
+    const filters = parsedInput.filters ?? null
+    const sort = parsedInput.sort ?? null
+    const columnConfig = parsedInput.columnConfig ?? []
+    const grouping = parsedInput.grouping ?? null
+    const customFields = parsedInput.customFields ?? null
+
+    const values: typeof savedViews.$inferInsert = {
       id,
       organizationId: ctx.activeOrg.id,
       objectType: parsedInput.objectType,
       name: parsedInput.name,
       ownerUserId: ctx.session.user.id,
       visibility: parsedInput.visibility,
-      sharedWithUserIds:
-        parsedInput.visibility === "shared_users" ? (parsedInput.sharedWithUserIds ?? []) : null,
-      filters: parsedInput.filters ?? null,
-      sort: parsedInput.sort ?? null,
-      columnConfig: parsedInput.columnConfig ?? [],
-      grouping: parsedInput.grouping ?? null,
-      customFields: parsedInput.customFields ?? null,
+      sharedWithUserIds,
+      filters,
+      sort,
+      columnConfig,
+      grouping,
+      customFields,
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
-    })
+    }
+    await ctx.db.insert(savedViews).values(values)
     await audit(
       {
         db: ctx.db,

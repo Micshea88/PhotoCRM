@@ -84,6 +84,37 @@ const baseClient = createSafeActionClient({
     Sentry.captureException(e)
     const raw = e instanceof Error ? e.message : String(e)
     const stack = e instanceof Error ? e.stack : undefined
+    // Push 2c.6.2 — also surface e.cause. Drizzle wraps pg errors as
+    // `new Error("Failed query: ...")` with the underlying pg error
+    // attached to `.cause` — without unwrapping we lose the actual
+    // failure reason (e.g. "invalid input syntax for type jsonb",
+    // "null value in column violates not-null constraint", "new row
+    // violates row-level security policy"). The 2c.6 part 1
+    // instrumentation didn't unwrap, so the 2c.6.1 production
+    // failure showed the SQL + param shape but not WHY pg rejected.
+    interface WithCause {
+      cause?: unknown
+    }
+    function describeCause(err: unknown): { message: string; stack?: string } | null {
+      const c = (err as WithCause | null)?.cause
+      if (c === null || c === undefined) return null
+      if (c instanceof Error) {
+        return { message: c.message, stack: c.stack }
+      }
+      // For non-Error causes (plain objects, strings, etc), prefer
+      // JSON.stringify but fall back to a manual key walk for objects
+      // so the lint check on stringification stays satisfied without
+      // sacrificing the diagnostic information.
+      if (typeof c === "object") {
+        try {
+          return { message: JSON.stringify(c) }
+        } catch {
+          return { message: "[unserializable cause]" }
+        }
+      }
+      return { message: typeof c === "string" ? c : `[cause: ${typeof c}]` }
+    }
+    const cause = describeCause(e)
     log.error(
       {
         actionName: utils.metadata.actionName,
@@ -91,6 +122,12 @@ const baseClient = createSafeActionClient({
           name: e instanceof Error ? e.name : "Unknown",
           message: redactPii(raw),
           stack: stack ? redactPii(stack) : undefined,
+          cause: cause
+            ? {
+                message: redactPii(cause.message),
+                stack: cause.stack ? redactPii(cause.stack) : undefined,
+              }
+            : undefined,
         },
       },
       "safe-action unexpected error",
@@ -101,6 +138,7 @@ const baseClient = createSafeActionClient({
     console.error(
       `[safe-action ${utils.metadata.actionName}]`,
       redactPii(raw),
+      cause ? `\n  cause: ${redactPii(cause.message)}` : "",
       stack ? redactPii(stack) : "",
     )
     if (process.env.NODE_ENV !== "production") {

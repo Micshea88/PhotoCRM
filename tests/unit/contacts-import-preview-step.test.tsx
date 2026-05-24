@@ -95,6 +95,8 @@ function renderPreview({
       onBulkTagsChange={noop}
       ownerEmailColumnMapped={false}
       onSetAction={noop}
+      onSetAllMatchedTo={noop}
+      onSetAllUnmatchedTo={noop}
       busy={false}
       onBack={noop}
       onCancel={noop}
@@ -189,5 +191,52 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
     })
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument()
+  })
+
+  it("renders the Push 2c.5 'Set all matched / unmatched' bulk controls above the row table", () => {
+    renderPreview({
+      cleanRows: [makeClean(1, { firstName: "Ada", lastName: "Lovelace" })],
+      previewRows: [makePreview(1, "create")],
+    })
+    // Two SetAllRow controls render with their respective labels.
+    expect(screen.getByLabelText("Set all matched rows to")).toBeInTheDocument()
+    expect(screen.getByLabelText("Set all unmatched rows to")).toBeInTheDocument()
+    // Both have their own Apply button (testing-library returns
+    // multiple — two Apply buttons + zero others on the Preview).
+    const applyButtons = screen.getAllByRole("button", { name: "Apply" })
+    expect(applyButtons.length).toBe(2)
+  })
+
+  it("clicking Set all matched → Apply invokes onSetAllMatchedTo with the dropdown value", async () => {
+    const onSetAllMatchedTo = vi.fn()
+    const { default: userEvent } = await import("@testing-library/user-event")
+    const user = userEvent.setup()
+    render(
+      <PreviewStep
+        cleanRows={[makeClean(1, { firstName: "Ada", lastName: "Lovelace" })]}
+        previewRows={[makePreview(1, "create")]}
+        orgMembers={owners}
+        orgMemberEmails={[]}
+        existingTags={[]}
+        ownerMode="self"
+        onOwnerModeChange={noop}
+        specificOwnerId="user-1"
+        onSpecificOwnerIdChange={noop}
+        bulkTags={[]}
+        onBulkTagsChange={noop}
+        ownerEmailColumnMapped={false}
+        onSetAction={noop}
+        onSetAllMatchedTo={onSetAllMatchedTo}
+        onSetAllUnmatchedTo={noop}
+        busy={false}
+        onBack={noop}
+        onCancel={noop}
+        onNext={noop}
+      />,
+    )
+    // The default for matched is "update"; click Apply directly.
+    const applyButtons = screen.getAllByRole("button", { name: "Apply" })
+    await user.click(applyButtons[0]!)
+    expect(onSetAllMatchedTo).toHaveBeenCalledWith("update")
   })
 })

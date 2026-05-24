@@ -254,8 +254,39 @@ export function ContactsImportWizard({
     goToStep("preview")
   }
 
+  // Push 2c.5 — track which rows the user has individually overridden
+  // so the bulk "Set all matched / unmatched to..." controls below
+  // skip them. The set lives at wizard level so it survives across
+  // re-renders of the Preview step's bulk-settings panel.
+  const [userTouchedRows, setUserTouchedRows] = useState<Set<number>>(new Set())
+
   function setRowAction(rowIndex: number, action: "create" | "update" | "skip") {
     setPreviewRows((prev) => prev.map((r) => (r.rowIndex === rowIndex ? { ...r, action } : r)))
+    setUserTouchedRows((prev) => {
+      const next = new Set(prev)
+      next.add(rowIndex)
+      return next
+    })
+  }
+
+  function setAllMatchedTo(action: "create" | "update" | "skip") {
+    setPreviewRows((prev) =>
+      prev.map((r) => {
+        if (userTouchedRows.has(r.rowIndex)) return r
+        if (!r.matchedContactId) return r
+        return { ...r, action }
+      }),
+    )
+  }
+
+  function setAllUnmatchedTo(action: "create" | "update" | "skip") {
+    setPreviewRows((prev) =>
+      prev.map((r) => {
+        if (userTouchedRows.has(r.rowIndex)) return r
+        if (r.matchedContactId) return r
+        return { ...r, action }
+      }),
+    )
   }
 
   // ─── Step 4: run ─────────────────────────────────────────────────────
@@ -387,6 +418,8 @@ export function ContactsImportWizard({
           onBulkTagsChange={setBulkTags}
           ownerEmailColumnMapped={mapping.includes("ownerUserId")}
           onSetAction={setRowAction}
+          onSetAllMatchedTo={setAllMatchedTo}
+          onSetAllUnmatchedTo={setAllUnmatchedTo}
           busy={busy}
           onBack={() => {
             goToStep("map")
@@ -621,6 +654,8 @@ export function PreviewStep({
   onBulkTagsChange,
   ownerEmailColumnMapped,
   onSetAction,
+  onSetAllMatchedTo,
+  onSetAllUnmatchedTo,
   busy,
   onBack,
   onCancel,
@@ -639,6 +674,10 @@ export function PreviewStep({
   onBulkTagsChange: (tags: string[]) => void
   ownerEmailColumnMapped: boolean
   onSetAction: (rowIndex: number, action: "create" | "update" | "skip") => void
+  /** Push 2c.5 — bulk Set-all controls. Apply to rows the user hasn't
+   *  individually overridden; error rows stay locked at Skip. */
+  onSetAllMatchedTo: (action: "create" | "update" | "skip") => void
+  onSetAllUnmatchedTo: (action: "create" | "update" | "skip") => void
   busy: boolean
   onBack: () => void
   /** Push 2c.2.2 — exits the wizard entirely (to /contacts). Co-located
@@ -789,6 +828,21 @@ export function PreviewStep({
         </fieldset>
       </div>
 
+      {/* Push 2c.5 — bulk "Set all to..." controls. Apply only to rows
+          the user hasn't individually overridden via the per-row
+          dropdown. Error rows (cleanRows with errors > 0) aren't in
+          previewRows so they stay locked at "Skip — has errors". */}
+      <SetAllRow
+        label="Set all matched rows to"
+        defaultAction="update"
+        onApply={onSetAllMatchedTo}
+      />
+      <SetAllRow
+        label="Set all unmatched rows to"
+        defaultAction="create"
+        onApply={onSetAllUnmatchedTo}
+      />
+
       {/* Row preview table */}
       <div className="max-h-[440px] overflow-auto rounded-md border border-[var(--color-border)]">
         <table className="w-full text-sm">
@@ -905,6 +959,53 @@ export function PreviewStep({
               : `Import ${String(willImportCount)} rows`}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Push 2c.5 — single-line "Set all <bucket> rows to: [action] [Apply]"
+ * control rendered twice above the Preview step's row table (once for
+ * matched rows, once for unmatched). Pure UI; the wizard owns the
+ * actual mutation via onSetAllMatchedTo / onSetAllUnmatchedTo.
+ */
+function SetAllRow({
+  label,
+  defaultAction,
+  onApply,
+}: {
+  label: string
+  defaultAction: "create" | "update" | "skip"
+  onApply: (action: "create" | "update" | "skip") => void
+}) {
+  const [action, setAction] = useState<"create" | "update" | "skip">(defaultAction)
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/30 px-3 py-2 text-xs">
+      <span className="text-[var(--color-muted-foreground)]">{label}:</span>
+      <select
+        value={action}
+        onChange={(e) => {
+          setAction(e.target.value as "create" | "update" | "skip")
+        }}
+        className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
+        aria-label={label}
+      >
+        <option value="create">Create new</option>
+        <option value="update">Update existing</option>
+        <option value="skip">Skip</option>
+      </select>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          onApply(action)
+        }}
+      >
+        Apply
+      </Button>
+      <span className="text-[10px] text-[var(--color-muted-foreground)]">
+        Skips rows you&apos;ve already changed individually + error rows.
+      </span>
     </div>
   )
 }

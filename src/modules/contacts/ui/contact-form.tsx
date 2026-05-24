@@ -482,8 +482,17 @@ export function ContactForm({
               </Button>
             </div>
           ))}
+          {/*
+           * Push 2c.5 — single "+ Add company" button. Was previously
+           * "+ Add another company", which read as the second button
+           * alongside CompanyPicker's inline "+ Add company"
+           * affordance (which still exists, but it CREATES a new
+           * Company entity rather than linking an existing one to
+           * this contact). Same affordance regardless of whether the
+           * user is adding their 1st, 2nd, or Nth additional company.
+           */}
           <Button type="button" variant="outline" size="sm" onClick={addExtraCompanyRow}>
-            + Add another company
+            + Add company
           </Button>
         </div>
       </section>

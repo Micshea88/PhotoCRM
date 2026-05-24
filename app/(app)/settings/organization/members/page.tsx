@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation"
+import { runWithOrgContext } from "@/lib/org-context"
 import { getSession } from "@/modules/auth/session"
 import {
   getCurrentMember,
   getOrganizationMembers,
   getPendingInvitations,
 } from "@/modules/org/queries"
+import { listExtendedRolesByUserId } from "@/modules/rbac/queries"
+import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { InviteMemberForm } from "@/modules/org/ui/invite-member-form"
 import { MembersList } from "@/modules/org/ui/members-list"
 import { PendingInvitations } from "@/modules/org/ui/pending-invitations"
@@ -18,10 +21,15 @@ export default async function OrgMembersPage() {
 
   const currentMember = await getCurrentMember(orgId, session.user.id)
   if (!currentMember) redirect("/dashboard")
+  const currentBaRole = currentMember.role as BetterAuthRole
 
-  const [members, pending] = await Promise.all([
+  const [members, pending, extendedRoles] = await Promise.all([
     getOrganizationMembers(orgId),
     getPendingInvitations(orgId),
+    runWithOrgContext(
+      { orgId, role: extendedFromBetterAuth(currentBaRole), userId: session.user.id },
+      () => listExtendedRolesByUserId(),
+    ),
   ])
 
   return (
@@ -46,6 +54,10 @@ export default async function OrgMembersPage() {
           members={members.map((m) => ({
             id: m.id,
             role: m.role,
+            // Push 2c.5 — extended role from memberRole, falling back
+            // to the BA-mapped default for members without a row.
+            extendedRole:
+              extendedRoles.get(m.user.id) ?? extendedFromBetterAuth(m.role as BetterAuthRole),
             user: {
               id: m.user.id,
               name: m.user.name,

@@ -4,13 +4,27 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
+import { setMemberExtendedRole } from "@/modules/rbac/actions"
+import { EXTENDED_ROLES, type ExtendedRole } from "@/modules/rbac/types"
 
 interface Member {
   id: string
+  /** Better Auth member.role — one of owner/admin/member. */
   role: string
+  /** Push 2c.5 — app-level extended role (6 values) from memberRole. */
+  extendedRole: ExtendedRole
   user: { id: string; name: string; email: string }
 }
 
+/**
+ * Push 2c.5 — picker exposes all 6 extended roles per the locked
+ * RBAC spec (owner / admin / manager / user / accountant / client).
+ * The select changes the EXTENDED role (memberRole table); the BA
+ * `member.role` column stays as-is, since BA only knows 3 roles and
+ * the app's permission gate reads from memberRole anyway. Permission
+ * enforcement at the BA layer continues to map owner→owner,
+ * admin→admin, everything else→"member" per extendedToBetterAuth.
+ */
 export function MembersList({
   members,
   currentUserId,
@@ -24,10 +38,14 @@ export function MembersList({
   const [busyId, setBusyId] = useState<string | null>(null)
   const canManage = currentUserRole === "owner" || currentUserRole === "admin"
 
-  async function changeRole(memberId: string, role: "admin" | "member") {
+  async function changeRole(memberId: string, role: ExtendedRole) {
     setBusyId(memberId)
-    await authClient.organization.updateMemberRole({ memberId, role })
+    const result = await setMemberExtendedRole({ memberId, role })
     setBusyId(null)
+    if (result.serverError) {
+      alert(result.serverError)
+      return
+    }
     router.refresh()
   }
 
@@ -47,19 +65,23 @@ export function MembersList({
             <p className="text-xs text-[var(--color-muted-foreground)]">{m.user.email}</p>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-[var(--color-muted-foreground)]">{m.role}</span>
-            {canManage && m.user.id !== currentUserId && m.role !== "owner" && (
+            <span className="text-[var(--color-muted-foreground)]">{m.extendedRole}</span>
+            {canManage && m.user.id !== currentUserId && m.extendedRole !== "owner" && (
               <>
                 <select
-                  value={m.role}
+                  aria-label={`Role for ${m.user.name}`}
+                  value={m.extendedRole}
                   onChange={(e) => {
-                    void changeRole(m.id, e.target.value as "admin" | "member")
+                    void changeRole(m.id, e.target.value as ExtendedRole)
                   }}
                   disabled={busyId === m.id}
                   className="h-8 rounded-md border border-[var(--color-input)] bg-transparent px-2 text-xs"
                 >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
+                  {EXTENDED_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                    </option>
+                  ))}
                 </select>
                 <Button
                   size="sm"

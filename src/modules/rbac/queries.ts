@@ -136,6 +136,28 @@ export async function hasPermission(
 }
 
 /**
+ * Push 2c.5 — bulk lookup of extended roles for every member in an
+ * org. Returns a Map<userId, ExtendedRole> so callers can flatten the
+ * extended role onto the member list with one query. Members WITHOUT
+ * an extended-role row fall back to extendedFromBetterAuth(ba.role)
+ * at the call site (this query doesn't synthesize fallbacks itself).
+ */
+export async function listExtendedRolesByUserId(): Promise<Map<string, ExtendedRole>> {
+  return withOrgContext(async (tx) => {
+    const rows = await tx
+      .select({ userId: memberRole.userId, role: memberRole.role })
+      .from(memberRole)
+    const out = new Map<string, ExtendedRole>()
+    for (const r of rows) {
+      if ((EXTENDED_ROLES as readonly string[]).includes(r.role)) {
+        out.set(r.userId, r.role as ExtendedRole)
+      }
+    }
+    return out
+  })
+}
+
+/**
  * All overrides for one user in the active org. Used by the Phase 4 admin
  * UI to render "which permissions does Alice have beyond/short-of her role
  * defaults?"

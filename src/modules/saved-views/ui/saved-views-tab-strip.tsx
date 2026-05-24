@@ -41,6 +41,46 @@ import {
 } from "../actions"
 import type { ColumnConfigItem, Filter, Sort, Visibility } from "../types"
 
+/**
+ * Push 2c.5 — surface BOTH serverError and validationErrors from a
+ * next-safe-action result. Push 2c left validation errors silent
+ * (they don't trigger result.serverError), so a row with a float
+ * width — which Zod's columnConfigItemSchema.width.int() rejects —
+ * looked like "nothing happened" to the user even though the action
+ * never ran. Width is now rounded in contacts-table's startResize,
+ * but this helper is the belt to that suspenders so future Zod
+ * additions are surfaced too.
+ */
+function describeActionError(result: {
+  serverError?: string
+  validationErrors?: unknown
+}): string | null {
+  if (result.serverError) return result.serverError
+  if (!result.validationErrors) return null
+  // validationErrors shape is { fieldName: { _errors: [...] }, ... }
+  // Walk one level deep and concatenate. Good enough for an alert; the
+  // toast UI can do prettier mapping later.
+  const issues: string[] = []
+  function walk(node: unknown, path: string[] = []): void {
+    if (!node || typeof node !== "object") return
+    const obj = node as Record<string, unknown>
+    if (Array.isArray(obj._errors)) {
+      for (const msg of obj._errors as unknown[]) {
+        if (typeof msg === "string") {
+          issues.push(`${path.join(".")}: ${msg}`)
+        }
+      }
+    }
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === "_errors") continue
+      walk(v, [...path, k])
+    }
+  }
+  walk(result.validationErrors)
+  if (issues.length === 0) return "Validation failed (no message)"
+  return issues.join("\n")
+}
+
 export interface SavedViewTab {
   id: string
   name: string
@@ -199,8 +239,9 @@ export function SavedViewsTabStrip({
       sort: currentState.sort,
     })
     setBusy(false)
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     startTransition(() => {
@@ -222,8 +263,9 @@ export function SavedViewsTabStrip({
     })
     setBusy(false)
     setSaveAsOpen(false)
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     const newId = result.data?.id
@@ -242,8 +284,9 @@ export function SavedViewsTabStrip({
     const result = await updateSavedView({ id: renameTarget.id, name })
     setBusy(false)
     setRenameTarget(null)
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     router.refresh()
@@ -253,8 +296,9 @@ export function SavedViewsTabStrip({
     if (!activeView) return
     const newName = `${activeView.name} (copy)`
     const result = await duplicateSavedView({ id: activeView.id, newName })
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     const newId = result.data?.id
@@ -272,8 +316,9 @@ export function SavedViewsTabStrip({
     const result = await deleteSavedView({ id: deleteTarget.id })
     setBusy(false)
     setDeleteTarget(null)
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     if (deleteTarget.id === activeViewId) {
@@ -299,8 +344,9 @@ export function SavedViewsTabStrip({
     })
     setBusy(false)
     setVisibilityTarget(null)
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     router.refresh()
@@ -313,8 +359,9 @@ export function SavedViewsTabStrip({
       objectType,
       viewId: isCurrentlyDefault ? null : activeView.id,
     })
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     router.refresh()
@@ -323,8 +370,9 @@ export function SavedViewsTabStrip({
   async function doUnpinActive() {
     if (!activeView) return
     const result = await unpinView({ objectType, viewId: activeView.id })
-    if (result.serverError) {
-      alert(result.serverError)
+    const errMsg = describeActionError(result)
+    if (errMsg) {
+      alert(errMsg)
       return
     }
     router.refresh()
@@ -409,8 +457,9 @@ export function SavedViewsTabStrip({
                   onPin={() => {
                     void (async () => {
                       const result = await pinView({ objectType, viewId: transientTab.id })
-                      if (result.serverError) {
-                        alert(result.serverError)
+                      const errMsg = describeActionError(result)
+                      if (errMsg) {
+                        alert(errMsg)
                         return
                       }
                       router.refresh()

@@ -24,7 +24,11 @@ import {
  *                          has scrolled the header off-screen)
  *   3. Restore records   → /contacts/deleted (the existing trash view;
  *                          users restore soft-deleted contacts there)
- *   4. Manage duplicates → disabled + native title="Coming soon"
+ *   4. View archived     → /contacts/archived (separate from deleted;
+ *                          archived contacts don't auto-purge — Push
+ *                          2c.5 restored this affordance after Push
+ *                          2c.2's overflow-menu removal dropped it)
+ *   5. Manage duplicates → disabled + native title="Coming soon"
  *                          (V1.5 feature; placeholder signals the
  *                          slot is planned and won't get repurposed)
  */
@@ -46,6 +50,9 @@ export function ContactsActionsDropdown({ onOpenEditColumns }: { onOpenEditColum
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/contacts/deleted">Restore records</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/contacts/archived">View archived</Link>
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled

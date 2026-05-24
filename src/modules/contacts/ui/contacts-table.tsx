@@ -162,10 +162,16 @@ export function ContactsTable({
   }
 
   // ── Width drag ─────────────────────────────────────────────────────
+  // Push 2c.5 — Math.round the final width to an integer. Mouse events
+  // on Retina screens carry subpixel clientX values (e.g. 247.5),
+  // which produced float widths that the saved-views columnConfig
+  // schema's `width: z.number().int()` rejected — surfacing as
+  // "Something went wrong" when the user saved a view with a
+  // drag-resized column.
   function startResize(columnId: string, startX: number, startWidth: number) {
     function onMove(e: MouseEvent) {
       const delta = e.clientX - startX
-      const next = Math.max(60, startWidth + delta)
+      const next = Math.max(60, Math.round(startWidth + delta))
       onColumnConfigChange(
         resolved.all.map((c) =>
           c.id === columnId ? { id: c.id, visible: c.visible, order: c.order, width: next } : c,

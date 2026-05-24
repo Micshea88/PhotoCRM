@@ -43,7 +43,7 @@ describe("ContactsActionsDropdown", () => {
     expect(screen.getByRole("button", { name: /actions/i })).toBeInTheDocument()
   })
 
-  it("opens to exactly the 4 org-level items in order", async () => {
+  it("opens to exactly the 5 org-level items in order", async () => {
     const user = userEvent.setup()
     render(<ContactsActionsDropdown onOpenEditColumns={() => undefined} />)
     await user.click(screen.getByRole("button", { name: /actions/i }))
@@ -52,6 +52,7 @@ describe("ContactsActionsDropdown", () => {
       "Edit columns",
       "Import contacts",
       "Restore records",
+      "View archived",
       "Manage duplicates",
     ])
   })

@@ -23,6 +23,22 @@ import {
 type DbHandle = NodePgDatabase<typeof schema>
 
 /**
+ * Push 2c.6.3 — detect the partial unique index violation on
+ * (organization_id, owner_user_id, object_type, name) WHERE
+ * deleted_at IS NULL. Drizzle wraps the pg error and attaches it
+ * via `.cause`; the pg error carries `code: "23505"` (unique
+ * violation) plus the constraint name. Matching on BOTH guards
+ * against accidental misclassification of some future unique
+ * index on the table.
+ */
+const SAVED_VIEW_NAME_UIDX = "saved_views_org_owner_object_name_uidx"
+function isUniqueViewNameViolation(err: unknown): boolean {
+  const cause = (err as { cause?: { code?: unknown; constraint?: unknown } } | null)?.cause
+  if (!cause || typeof cause !== "object") return false
+  return cause.code === "23505" && cause.constraint === SAVED_VIEW_NAME_UIDX
+}
+
+/**
  * Owner-only mutation gate. Loads the view's owner and requester's
  * id, throws FORBIDDEN if they don't match. Used by update / delete /
  * restore. Admins do not override in V1 — Phase 4 settings module
@@ -72,16 +88,11 @@ export const createSavedView = orgAction
   .inputSchema(createSavedViewInput)
   .action(async ({ parsedInput, ctx }) => {
     const id = createId()
-    // Push 2c.6.2 — explicit-construction defaults moved from the
-    // Zod *ForCreate schemas (which previously had .default(null))
-    // into the handler body. Production logs after the 2c.6.1
-    // Zod-level fix still showed empty params for these 4 columns
-    // — Zod defaults weren't propagating to Drizzle through
-    // next-safe-action. Building the values object as a separate
-    // typed variable + an explicit `?? null` / `?? []` on every
-    // nullable column is the bulletproof form: no inline expression
-    // gymnastics, no dependence on Zod default semantics, no
-    // ambiguity about what Drizzle receives.
+    // Push 2c.6.2 — explicit defaults via typed object construction.
+    // (The empty-param appearance in the Drizzle error log was a
+    // formatting artifact — NULLs render as nothing between commas.
+    // The actual production failure was a unique-constraint
+    // violation surfaced by the 2c.6.2 e.cause logging.)
     const sharedWithUserIds: string[] | null =
       parsedInput.visibility === "shared_users" ? (parsedInput.sharedWithUserIds ?? []) : null
     const filters = parsedInput.filters ?? null
@@ -106,7 +117,22 @@ export const createSavedView = orgAction
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     }
-    await ctx.db.insert(savedViews).values(values)
+    try {
+      await ctx.db.insert(savedViews).values(values)
+    } catch (err) {
+      // Push 2c.6.3 — translate the partial-unique-index violation
+      // on (org, owner, object_type, name) WHERE deleted_at IS NULL
+      // into a friendly CONFLICT error. Without this catch the raw
+      // Drizzle "Failed query: ..." string leaks to the user via
+      // describeActionError → alert().
+      if (isUniqueViewNameViolation(err)) {
+        throw new ActionError(
+          "CONFLICT",
+          `You already have a view named "${parsedInput.name}". Choose a different name.`,
+        )
+      }
+      throw err
+    }
     await audit(
       {
         db: ctx.db,
@@ -160,7 +186,19 @@ export const updateSavedView = orgAction
     if (rest.grouping !== undefined) patch.grouping = rest.grouping
     if ("customFields" in rest) patch.customFields = rest.customFields ?? null
 
-    await ctx.db.update(savedViews).set(patch).where(eq(savedViews.id, id))
+    try {
+      await ctx.db.update(savedViews).set(patch).where(eq(savedViews.id, id))
+    } catch (err) {
+      // Push 2c.6.3 — rename-to-existing-name path. Same partial
+      // unique index as create/duplicate.
+      if (isUniqueViewNameViolation(err) && rest.name !== undefined) {
+        throw new ActionError(
+          "CONFLICT",
+          `You already have a view named "${rest.name}". Choose a different name.`,
+        )
+      }
+      throw err
+    }
     await audit(
       {
         db: ctx.db,
@@ -265,22 +303,35 @@ export const duplicateSavedView = orgAction
     }
 
     const id = createId()
-    await ctx.db.insert(savedViews).values({
-      id,
-      organizationId: ctx.activeOrg.id,
-      objectType: source.objectType,
-      name: parsedInput.newName,
-      ownerUserId: ctx.session.user.id,
-      visibility: "private",
-      sharedWithUserIds: null,
-      filters: source.filters,
-      sort: source.sort,
-      columnConfig: source.columnConfig,
-      grouping: source.grouping,
-      customFields: source.customFields,
-      createdBy: ctx.session.user.id,
-      updatedBy: ctx.session.user.id,
-    })
+    try {
+      await ctx.db.insert(savedViews).values({
+        id,
+        organizationId: ctx.activeOrg.id,
+        objectType: source.objectType,
+        name: parsedInput.newName,
+        ownerUserId: ctx.session.user.id,
+        visibility: "private",
+        sharedWithUserIds: null,
+        filters: source.filters,
+        sort: source.sort,
+        columnConfig: source.columnConfig,
+        grouping: source.grouping,
+        customFields: source.customFields,
+        createdBy: ctx.session.user.id,
+        updatedBy: ctx.session.user.id,
+      })
+    } catch (err) {
+      // Push 2c.6.3 — same friendly-CONFLICT translation as
+      // createSavedView. Duplicate would otherwise leak the raw
+      // Drizzle error string.
+      if (isUniqueViewNameViolation(err)) {
+        throw new ActionError(
+          "CONFLICT",
+          `You already have a view named "${parsedInput.newName}". Choose a different name.`,
+        )
+      }
+      throw err
+    }
     await audit(
       {
         db: ctx.db,

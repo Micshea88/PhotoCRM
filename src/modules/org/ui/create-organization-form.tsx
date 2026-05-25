@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { setActiveOrgAndPersist } from "@/modules/auth/ui/persist-active-org"
 
 const slugRegex = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
 const schema = z.object({
@@ -64,7 +65,9 @@ export function CreateOrganizationForm() {
       setError(created.error.message ?? "Could not create organization")
       return
     }
-    await authClient.organization.setActive({ organizationId: created.data.id })
+    // Push 2c.6.11 — persist as last-active so the next sign-in
+    // restores the freshly-created org.
+    await setActiveOrgAndPersist(created.data.id)
     setSubmitting(false)
     router.push("/dashboard")
     router.refresh()

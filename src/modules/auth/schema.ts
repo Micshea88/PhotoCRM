@@ -7,6 +7,18 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  // Push 2c.6.11 — remembers which org this user had active on
+  // their last sign-in / session-cookie-issued moment. Sign-in
+  // restores it if the user is still a member of that org;
+  // org-switcher writes to it on every switch. Nullable: users
+  // who have never joined an org (or whose last-active org was
+  // deleted) have no recorded preference, and we fall back to
+  // single-org auto-pick or zero-org onboarding. SET NULL on
+  // organization delete so a removed org gracefully clears the
+  // preference instead of dangling.
+  lastActiveOrganizationId: text("last_active_organization_id").references(() => organization.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

@@ -197,6 +197,13 @@
       "when": 1779596080170,
       "tag": "0027_oval_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1779727242720,
+      "tag": "0028_wakeful_vision",
+      "breakpoints": true
     }
   ]
 }

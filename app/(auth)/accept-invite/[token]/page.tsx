@@ -153,21 +153,38 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   const session = await getSession()
 
   // State 6 — stale session cookie (cookie present but BA can't
-  // resolve to a real user). Clear the cookie in this response so
-  // the browser drops it before the user clicks Sign in / Create
-  // account, breaking the proxy's "cookie → auth-only redirect"
-  // loop.
+  // resolve to a real user). Push 2c.6.11 commit-A originally
+  // tried to clear the cookie inline via cookies().set() but
+  // Next.js 16 forbids cookie writes from a Server Component
+  // (production 500: "Cookies can only be modified in a Server
+  // Action or Route Handler", digest 4049270041). The fix: route
+  // the user's button click through /api/auth/clear-stale-session,
+  // a Route Handler that's allowed to write Set-Cookie. The
+  // browser drops the cookie BEFORE following the handler's
+  // redirect, so the next request lands cookie-free and proxy.ts
+  // doesn't bounce.
   if (!session?.user) {
     const cookieStore = await cookies()
     const hasStaleCookie = BA_COOKIE_NAMES.some((name) => cookieStore.has(name))
     if (hasStaleCookie) {
-      for (const name of BA_COOKIE_NAMES) {
-        cookieStore.set(name, "", { maxAge: 0, path: "/" })
-      }
-      const params = new URLSearchParams({
-        redirect: `/accept-invite/${token}`,
+      const acceptInvitePath = `/accept-invite/${token}`
+      const innerQp = new URLSearchParams({
+        redirect: acceptInvitePath,
         email: invitation.email,
-      })
+      }).toString()
+      // Each button hits the clear-stale-session handler with the
+      // FINAL landing as its `?redirect=`. The handler validates
+      // against its own allowlist (which includes /sign-in and
+      // /sign-up), clears the BA cookies via Set-Cookie, then
+      // 307s. The browser drops cookies on the response BEFORE
+      // following the 307, so /sign-in (or /sign-up) lands cookie-
+      // free and proxy.ts doesn't bounce.
+      const signInTarget = `/api/auth/clear-stale-session?redirect=${encodeURIComponent(
+        `/sign-in?${innerQp}`,
+      )}`
+      const signUpTarget = `/api/auth/clear-stale-session?redirect=${encodeURIComponent(
+        `/sign-up?${innerQp}`,
+      )}`
       return (
         <div className="space-y-6 text-center">
           <h1 className="text-2xl font-semibold">Sign in to accept</h1>
@@ -182,10 +199,10 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
           </Alert>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Button asChild>
-              <Link href={`/sign-in?${params.toString()}`}>Sign in</Link>
+              <a href={signInTarget}>Sign in</a>
             </Button>
             <Button asChild variant="outline">
-              <Link href={`/sign-up?${params.toString()}`}>Create account</Link>
+              <a href={signUpTarget}>Create account</a>
             </Button>
           </div>
         </div>

@@ -1,53 +1,62 @@
-import { cookies } from "next/headers"
 import { NextResponse, type NextRequest } from "next/server"
 
 /**
  * Push 2c.6.11 — Route Handler that clears Better Auth session
- * cookies + redirects.
+ * cookies + redirects. Production-hardened in commit (this one)
+ * after Mike's Safari smoke surfaced "too many redirects" on the
+ * 1c36761 implementation.
  *
- * Why a Route Handler instead of inline cookie writes from the
- * accept-invite Server Component? Next.js 16 forbids
- * `cookies().set()` from a Server Component render. Commit A
- * (`1accef6`) state 6 attempted exactly that and threw the
- * production 500:
+ * ROOT CAUSE OF THE 1c36761 REGRESSION:
  *
- *   Error: Cookies can only be modified in a Server Action or
- *   Route Handler. (digest: 4049270041)
+ *   - Set-Cookie deletes used `cookies().set(...)` (next/headers).
+ *     That writes against Next's auto-managed response, not the
+ *     freshly-constructed NextResponse.redirect(...) we returned.
+ *     The Set-Cookie headers never reached the wire on the
+ *     redirect response.
  *
- * Route Handlers ARE allowed to modify cookies. This endpoint:
+ *   - Even if the headers HAD reached the wire, they omitted
+ *     `Secure` — Safari rejects any Set-Cookie write against a
+ *     `__Secure-`-prefixed cookie that lacks the `Secure`
+ *     attribute (RFC 6265bis). The cookie persisted, proxy.ts
+ *     bounced /sign-in → /dashboard → /sign-in → loop.
  *
- *   1. Clears both BA session-cookie variants (HTTP + Secure).
- *   2. Validates the `?redirect=` target through a local
- *      allowlist (broader than verify-email's callbackURL
- *      allowlist — covers /sign-in and /sign-up which are the
- *      state-6 destinations). Fail-closed to /sign-in.
- *   3. Returns a 307 redirect. The browser drops the cookies on
- *      receiving the response (Set-Cookie Max-Age=0) BEFORE
- *      following the redirect, so the redirected request lands
- *      cookie-free and proxy.ts doesn't bounce.
+ *   - The handler also missed `__Secure-better-auth.session_data`
+ *     entirely (cookieCache is enabled in src/lib/auth.ts:49-52,
+ *     so this cookie is always present alongside session_token).
+ *     Same for chunked variants session_data.0/1/N when payload
+ *     exceeds 4KB.
  *
- * GET-only: state-6 buttons in accept-invite/[token]/page.tsx
- * route here via `<a href>` so navigation is predictable +
- * back-button-friendly.
+ * THE FIX (this commit):
  *
- * No auth check: this endpoint only clears the caller's own
- * cookies (Set-Cookie on their own response — no cross-user
- * impact). Anonymous visitors can hit it; they get a no-op
- * clear + the redirect.
+ *   - Build the redirect response FIRST, then call
+ *     response.cookies.set() directly on it. This is the documented
+ *     Next.js Route Handler pattern for "set headers on a response
+ *     I'm explicitly returning."
  *
- * Open-redirect defense: the allowlist below is strictly path-
- * prefix + must-start-with-`/`-not-`//`. No absolute URLs,
- * no protocol-relative, no traversal.
+ *   - Iterate the INCOMING request's cookies and detect anything
+ *     matching `better-auth.*` or `__Secure-better-auth.*`. That
+ *     covers session_token, session_data, dont_remember, AND any
+ *     chunked session_data.N variants without hardcoding. We only
+ *     clear cookies the browser is actually sending — no point
+ *     spraying deletions for cookies that don't exist.
+ *
+ *   - Each deletion Set-Cookie carries EVERY attribute BA originally
+ *     set (per cookies/index.mjs:24-41): Path=/, HttpOnly, SameSite=Lax,
+ *     Secure=true iff name starts with __Secure-. Plus Max-Age=0 +
+ *     Expires=Thu, 01 Jan 1970 00:00:00 GMT (belt-and-suspenders so
+ *     older Safari versions that prefer Expires over Max-Age also
+ *     honor the delete).
+ *
+ *   - Cache-Control: no-store. Safari aggressively caches 307s; a
+ *     cached one would skip the handler entirely on repeat clicks.
+ *
+ *   - The isAllowedTarget allowlist from 1c36761 stays UNCHANGED.
+ *     Open-redirect defense remains intact: only path-prefix
+ *     targets in ALLOWED_PREFIXES pass; fail-closed to /sign-in.
  */
 
-const BA_COOKIE_NAMES = ["better-auth.session_token", "__Secure-better-auth.session_token"] as const
+const BA_COOKIE_PREFIXES = ["better-auth.", "__Secure-better-auth."] as const
 
-/**
- * Allowlist for valid redirect targets from this handler. Wider
- * than `isValidCallbackUrl` because state 6 routes here on the
- * way to /sign-in or /sign-up (those aren't valid post-verify
- * destinations but ARE valid post-clear destinations).
- */
 const ALLOWED_PREFIXES = [
   "/sign-in",
   "/sign-up",
@@ -60,9 +69,6 @@ function isAllowedTarget(url: string): boolean {
   if (!url.startsWith("/")) return false
   if (url.startsWith("//")) return false
   if (url.includes("..")) return false
-  // First-path-segment ":" check rules out encoded pseudo-protocols
-  // that decoding would unmask. (URLSearchParams decodes; we get
-  // the decoded form here.)
   const firstSlash = url.indexOf("/", 1)
   const head = firstSlash === -1 ? url : url.slice(0, firstSlash)
   if (head.includes(":")) return false
@@ -75,12 +81,32 @@ function isAllowedTarget(url: string): boolean {
   })
 }
 
-export async function GET(request: NextRequest) {
-  const cookieStore = await cookies()
-  for (const name of BA_COOKIE_NAMES) {
-    cookieStore.set(name, "", { maxAge: 0, path: "/" })
-  }
+function isBaCookieName(name: string): boolean {
+  return BA_COOKIE_PREFIXES.some((p) => name.startsWith(p))
+}
+
+export function GET(request: NextRequest) {
   const rawRedirect = request.nextUrl.searchParams.get("redirect")
   const target = rawRedirect && isAllowedTarget(rawRedirect) ? rawRedirect : "/sign-in"
-  return NextResponse.redirect(new URL(target, request.url))
+  const response = NextResponse.redirect(new URL(target, request.url))
+
+  // Iterate incoming cookies; delete every BA-namespaced one with
+  // matching attributes. Attribute matching is critical for Safari
+  // — Secure-prefixed cookies REQUIRE Secure on the deletion
+  // response or the browser silently refuses the delete.
+  for (const cookie of request.cookies.getAll()) {
+    if (!isBaCookieName(cookie.name)) continue
+    const isSecurePrefixed = cookie.name.startsWith("__Secure-")
+    response.cookies.set(cookie.name, "", {
+      maxAge: 0,
+      expires: new Date(0),
+      path: "/",
+      secure: isSecurePrefixed,
+      httpOnly: true,
+      sameSite: "lax",
+    })
+  }
+
+  response.headers.set("Cache-Control", "no-store")
+  return response
 }

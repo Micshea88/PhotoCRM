@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
-import { and, eq } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { z } from "zod"
@@ -11,7 +11,7 @@ import { auth } from "@/lib/auth"
 import type * as schema from "@/db/schema"
 import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
-import { member } from "@/modules/auth/schema"
+import { invitation, member, user } from "@/modules/auth/schema"
 import { invitationExtendedRole, memberRole } from "./schema"
 import {
   extendedRoleSchema,
@@ -21,6 +21,80 @@ import {
 } from "./types"
 
 type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Push 2c.6.11 commit C — V1 one-email-one-org constraint.
+ *
+ * Architecture decision (Mike's V4 spec): one email can belong to
+ * at most one organization. Enforced at invitation-creation time.
+ * Two rejection cases:
+ *
+ *   1. Email already maps to a `user` row that has a `member` row
+ *      in a DIFFERENT org. (Same-org membership doesn't reach this
+ *      path — admins can't re-invite a current member; the UI
+ *      shows them in the members list.)
+ *   2. Email has a pending, non-expired `invitation` row in a
+ *      DIFFERENT org. (Same-org pending invitations are valid and
+ *      handled by Push 2c.6.10's Cancel / Resend / Reset UX.)
+ *
+ * Case-insensitive email match. The error message points the
+ * inviter toward the future account-linking work (V2) without
+ * implying it ships soon.
+ *
+ * Account-linking (one email → multiple orgs with switcher) is
+ * deferred. When it lands, this guard relaxes accordingly. Until
+ * then, the constraint prevents Mike from accidentally creating
+ * multi-org-per-email state that V1's sign-in flow doesn't know
+ * how to handle (single-org auto-pick).
+ */
+async function assertOneEmailOneOrg(
+  tx: DbHandle,
+  email: string,
+  currentOrgId: string,
+): Promise<void> {
+  const emailLower = email.toLowerCase().trim()
+
+  // Case 1 — existing user (any verification state) who's already a
+  // member of a different org.
+  const [existingUser] = await tx
+    .select({ id: user.id })
+    .from(user)
+    .where(sql`LOWER(${user.email}) = ${emailLower}`)
+    .limit(1)
+  if (existingUser) {
+    const [otherOrgMembership] = await tx
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.userId, existingUser.id), ne(member.organizationId, currentOrgId)))
+      .limit(1)
+    if (otherOrgMembership) {
+      throw new ActionError(
+        "CONFLICT",
+        `${email} is already part of another organization. They'll need to use a different email to join, or link their existing account (account linking is coming soon).`,
+      )
+    }
+  }
+
+  // Case 2 — pending invitation to a different org.
+  const [otherOrgInvite] = await tx
+    .select({ id: invitation.id })
+    .from(invitation)
+    .where(
+      and(
+        sql`LOWER(${invitation.email}) = ${emailLower}`,
+        eq(invitation.status, "pending"),
+        sql`${invitation.expiresAt} > NOW()`,
+        ne(invitation.organizationId, currentOrgId),
+      ),
+    )
+    .limit(1)
+  if (otherOrgInvite) {
+    throw new ActionError(
+      "CONFLICT",
+      `${email} already has a pending invitation to another organization. They'll need to use a different email to join, or wait for the other invitation to expire.`,
+    )
+  }
+}
 
 /**
  * Push 2c.6.10 — core invite-create logic extracted from
@@ -33,6 +107,9 @@ type DbHandle = NodePgDatabase<typeof schema>
  * invoking. orgAction's tx is passed as `tx`; both `auth.api`
  * round-trips run OUTSIDE that tx (BA owns its own connection) and
  * are compensated by cancelInvitation if the metadata insert fails.
+ *
+ * Push 2c.6.11 commit C — enforces the one-email-one-org constraint
+ * before calling BA. See assertOneEmailOneOrg above.
  */
 export async function createInviteWithExtendedRoleCore(
   tx: DbHandle,
@@ -44,6 +121,11 @@ export async function createInviteWithExtendedRoleCore(
     extendedRole: InvitableExtendedRole
   },
 ): Promise<{ invitationId: string }> {
+  // Push 2c.6.11 commit C — refuse cross-org membership/invitation
+  // before the BA call. If this throws, BA never sees the invite,
+  // so there's no compensation to perform.
+  await assertOneEmailOneOrg(tx, args.email, args.organizationId)
+
   const baRole = extendedToBetterAuth(args.extendedRole)
   let invitationId: string
   try {

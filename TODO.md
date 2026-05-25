@@ -108,6 +108,8 @@ Tags: `[sec]` security · `[db]` database/migrations · `[ci]` CI/verification �
 - [ ] **M15** `[ci]` Pre-commit `git add {staged_files}` after auto-fix breaks partial commits. **Open.**
 - [x] **M16** `[prod]` `vercel-build` migration step gated to `VERCEL_ENV === "production"`. (`db:check` preflight not yet — open.)
 - [ ] **M17** `[prod]` `DATABASE_URL` uses `sslmode=require` (or `prefer`/`verify-ca`) — currently aliased to `verify-full` by pg-connection-string@2 but reverts to weaker libpq semantics in pg@9 / pg-connection-string@3. **Open.** Change all Vercel env tiers to explicit `sslmode=verify-full` before bumping pg.
+- [ ] **M18** `[dx]` Sign-in form auto-picks the user's first org via `authClient.organization.list()[0]` if no active org is set on the session. V1 architecture (Push 2c.6.11 commit C) enforces one-email-one-org at invite-creation time so this "first" pick is the unique membership in practice. **Open** for V2 when account-linking lands. Was Push 2c.6.11 Old Commit B's target before scope-revert; revisit alongside V2 account-linking.
+- [ ] **M19** `[dx][prod]` Account-linking feature: let one email belong to multiple orgs with an in-app switcher to flip between them, plus a per-user `last_active_organization_id` preference so sign-in restores the previously-active org. Deferred to V2 — V1 ships the one-email-one-org constraint (Push 2c.6.11 commit C) and rejects cross-org invites at creation time. When this lands: relax the constraint in `src/modules/rbac/actions.ts:assertOneEmailOneOrg`; resurrect the persistence + switcher pattern from the Push 2c.6.11 Old-Commit-B revert (`cef8666`). Surface as a single product decision once we have a real customer who needs it.
 
 ---
 

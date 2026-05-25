@@ -204,6 +204,13 @@
       "when": 1779727242720,
       "tag": "0028_wakeful_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779731367667,
+      "tag": "0029_lush_the_twelve",
+      "breakpoints": true
     }
   ]
 }

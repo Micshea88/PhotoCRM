@@ -11,8 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { setActiveOrgAndPersist } from "@/modules/auth/ui/persist-active-org"
-import { resolveSignInActiveOrg } from "@/modules/auth/actions"
 
 const schema = z.object({
   email: z.email("Enter a valid email"),
@@ -55,22 +53,17 @@ export function SignInForm() {
       setError(result.error.message ?? "Sign-in failed")
       return
     }
-    // Push 2c.6.11 — multi-org-aware active-org resolution. Replaces
-    // the pre-2c.6.11 arbitrary `orgs[0]` pick. Priority:
-    //   1. user.last_active_organization_id, if still a valid
-    //      membership → restore
-    //   2. exactly ONE membership → auto-pick
-    //   3. multiple memberships, no valid last-active → null
-    //      (the switcher in the topbar handles selection on first
-    //      page load)
-    //   4. zero memberships → null (onboarding flow takes over)
+    // Restore an active organization from the user's memberships if none is set.
+    // Better Auth doesn't persist activeOrganizationId across sign-out/sign-in.
+    // V1 architecture (Push 2c.6.11 Commit C) enforces one-email-one-org at
+    // invite-creation time, so this list has at most one entry in practice.
+    const orgs = await authClient.organization.list()
     const session = await authClient.getSession()
     const hasActive = !!session.data?.session.activeOrganizationId
-    if (!hasActive) {
-      const resolution = await resolveSignInActiveOrg({})
-      const chosen = resolution.data?.organizationId
-      if (chosen) {
-        await setActiveOrgAndPersist(chosen)
+    if (!hasActive && orgs.data && orgs.data.length > 0) {
+      const first = orgs.data[0]
+      if (first) {
+        await authClient.organization.setActive({ organizationId: first.id })
       }
     }
     setSubmitting(false)

@@ -7,7 +7,6 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { acceptOrgInvitation } from "@/modules/org/actions"
-import { setActiveOrgAndPersist } from "@/modules/auth/ui/persist-active-org"
 
 /**
  * Push 2c.6.8 — client-side runner with explicit email-match
@@ -55,9 +54,7 @@ export function AcceptInviteRunner({
       setError("Could not accept invitation. Please try again or contact the inviter.")
       return
     }
-    // Push 2c.6.11 — wrap setActive with last-active persistence
-    // so the next sign-in restores this org.
-    await setActiveOrgAndPersist(result.data.organizationId)
+    await authClient.organization.setActive({ organizationId: result.data.organizationId })
     setSubmitting(false)
     router.push("/dashboard")
     router.refresh()

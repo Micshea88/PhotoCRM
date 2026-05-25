@@ -153,6 +153,43 @@ export async function findStaleUserShellByEmail(email: string) {
   return row ?? null
 }
 
+/**
+ * Push 2c.6.11 — onboarding banner uses this to detect that the
+ * just-signed-up user has a pending invitation waiting. Case-
+ * insensitive match on email (RFC 5321 local-parts are technically
+ * case-sensitive but every mailer treats them as case-insensitive;
+ * BA itself lowercases on send + accept).
+ *
+ * Filters:
+ *   - status = 'pending' (canceled/accepted/rejected ignored)
+ *   - expires_at > NOW() (expired invites are useless)
+ *
+ * Returns ALL matching rows ordered newest first so the UI can
+ * render a list when the user happens to have multi-org invites
+ * pending at the same time.
+ */
+export async function getPendingInvitationsForEmail(email: string) {
+  return db
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      organizationId: invitation.organizationId,
+      organizationName: organization.name,
+      expiresAt: invitation.expiresAt,
+      createdAt: invitation.createdAt,
+    })
+    .from(invitation)
+    .innerJoin(organization, eq(invitation.organizationId, organization.id))
+    .where(
+      and(
+        sql`LOWER(${invitation.email}) = LOWER(${email})`,
+        eq(invitation.status, "pending"),
+        sql`${invitation.expiresAt} > NOW()`,
+      ),
+    )
+    .orderBy(desc(invitation.createdAt))
+}
+
 export async function getInvitationById(invitationId: string) {
   const result = await db
     .select({

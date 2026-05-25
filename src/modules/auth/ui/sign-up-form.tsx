@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { isValidCallbackUrl } from "@/modules/auth/callback-url"
 
 const schema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -44,10 +45,19 @@ export function SignUpForm() {
   async function onSubmit(values: Values) {
     setSubmitting(true)
     setError(null)
+    // Push 2c.6.11 — when this signup is part of an invitation flow
+    // (the user arrived via /accept-invite/[token] → /sign-up?redirect=...),
+    // forward that redirect as `callbackURL` to BA's signUp.email so
+    // BA bakes it into the verification email link. After clicking
+    // verify, the user lands back at /accept-invite/[token] instead
+    // of being shunted to /dashboard → /onboarding/create-organization.
+    const rawRedirect = params.get("redirect")
+    const callbackURL = isValidCallbackUrl(rawRedirect) ? rawRedirect : undefined
     const result = await authClient.signUp.email({
       email: values.email,
       password: values.password,
       name: values.name,
+      ...(callbackURL ? { callbackURL } : {}),
     })
     if (result.error) {
       setSubmitting(false)

@@ -66,14 +66,13 @@ describe("ContactsActionsDropdown", () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
-  it("Manage duplicates is disabled with a 'Coming soon' tooltip", async () => {
+  it("Manage duplicates links to /contacts/duplicates (Push 4 B1 — live route)", async () => {
     const user = userEvent.setup()
     render(<ContactsActionsDropdown onOpenEditColumns={() => undefined} />)
     await user.click(screen.getByRole("button", { name: /actions/i }))
-    const manage = screen.getByRole("menuitem", { name: "Manage duplicates" })
-    // Radix sets aria-disabled / data-disabled on disabled menu items.
-    expect(manage.getAttribute("aria-disabled")).toBe("true")
-    expect(manage.getAttribute("title")).toBe("Coming soon")
+    const link = screen.getByRole("menuitem", { name: "Manage duplicates" })
+    expect(link.getAttribute("href")).toBe("/contacts/duplicates")
+    expect(link.getAttribute("aria-disabled")).not.toBe("true")
   })
 
   it("Import contacts and Restore records link to the right paths", async () => {

@@ -11,6 +11,7 @@ import {
   buildCleanRow,
   buildCustomFieldMapping,
   buildErrorsCsv,
+  coerceImportRawToTyped,
   CSV_MAX_ROWS,
   detectFieldType,
   detectionAgreesWithMapping,
@@ -27,6 +28,7 @@ import {
   type MappingChoice,
   type ParsedCsv,
 } from "../import-spec"
+import { formatCustomFieldCell } from "@/modules/custom-fields/ui/column-helpers"
 
 type Step = "upload" | "map" | "preview" | "done"
 const STEP_BY_NUM: Record<1 | 2 | 3 | 4, Step> = {
@@ -421,6 +423,7 @@ export function ContactsImportWizard({
           orgMembers={orgMembers}
           orgMemberEmails={orgMemberEmails}
           existingTags={existingTags}
+          customFieldDefs={customFieldDefs}
           ownerMode={ownerMode}
           onOwnerModeChange={setOwnerMode}
           specificOwnerId={specificOwnerId}
@@ -679,6 +682,7 @@ export function PreviewStep({
   orgMembers,
   orgMemberEmails,
   existingTags,
+  customFieldDefs,
   ownerMode,
   onOwnerModeChange,
   specificOwnerId,
@@ -699,6 +703,12 @@ export function PreviewStep({
   orgMembers: OrgMember[]
   orgMemberEmails: string[]
   existingTags: string[]
+  /** Push 4 (B1 Part 0) — per-org contact custom field defs. When any
+   * row's customValues references one of these, the preview surfaces
+   * the coerced typed display value in its own column so users can
+   * see what'll land on the contact's custom_fields jsonb before
+   * clicking Import. */
+  customFieldDefs: ImportCustomFieldDef[]
   ownerMode: OwnerMode
   onOwnerModeChange: (m: OwnerMode) => void
   specificOwnerId: string
@@ -718,6 +728,16 @@ export function PreviewStep({
   onCancel: () => void
   onNext: () => void
 }) {
+  // Push 4 (B1 Part 0) — surface a preview column for each custom
+  // field that ANY row in this import maps a value to. Skips defs that
+  // aren't referenced in the active mapping so the preview table
+  // doesn't widen pointlessly when the user only mapped a couple of
+  // intrinsic columns.
+  const usedCustomFieldIds = new Set<string>()
+  for (const row of cleanRows) {
+    for (const fieldId of Object.keys(row.customValues)) usedCustomFieldIds.add(fieldId)
+  }
+  const previewCustomFields = customFieldDefs.filter((d) => usedCustomFieldIds.has(d.id))
   const importableRows = cleanRows.filter((c) => c.errors.length === 0)
   const erroredRows = cleanRows.filter((c) => c.errors.length > 0)
   const byPreview = new Map(previewRows.map((p) => [p.rowIndex, p]))
@@ -885,6 +905,11 @@ export function PreviewStep({
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Email</th>
               <th className="px-3 py-2">Phone</th>
+              {previewCustomFields.map((d) => (
+                <th key={d.id} className="px-3 py-2">
+                  {d.name}
+                </th>
+              ))}
               <th className="px-3 py-2">Match / dup</th>
               <th className="px-3 py-2">Action</th>
             </tr>
@@ -929,6 +954,52 @@ export function PreviewStep({
                   </td>
                   <td className="px-3 py-2 align-top text-xs">{c.values.primaryEmail ?? "—"}</td>
                   <td className="px-3 py-2 align-top text-xs">{c.values.primaryPhone ?? "—"}</td>
+                  {previewCustomFields.map((def) => {
+                    const raw = c.customValues[def.id]
+                    if (raw === undefined) {
+                      return (
+                        <td
+                          key={def.id}
+                          className="px-3 py-2 align-top text-xs text-[var(--color-muted-foreground)]"
+                        >
+                          —
+                        </td>
+                      )
+                    }
+                    const typed = coerceImportRawToTyped(def.fieldType, raw)
+                    // checkbox renders as ✓ for true, blank for false,
+                    // with a hover tooltip explaining the coercion rules
+                    // (yes/no/true/false/1/0 spelling tolerated).
+                    if (def.fieldType === "checkbox") {
+                      return (
+                        <td
+                          key={def.id}
+                          className="px-3 py-2 align-top text-xs"
+                          title={`Raw "${raw}" → ${typed === true ? "true" : typed === false ? "false" : "unrecognized"}. Recognized: yes/no, true/false, 1/0, y/n.`}
+                        >
+                          {typed === true ? "✓" : ""}
+                        </td>
+                      )
+                    }
+                    return (
+                      <td
+                        key={def.id}
+                        className="px-3 py-2 align-top text-xs"
+                        title={`Raw value from CSV: "${raw}"`}
+                      >
+                        {formatCustomFieldCell(
+                          {
+                            id: def.id,
+                            name: def.name,
+                            fieldType: def.fieldType,
+                            options: null,
+                            archivedAt: def.archivedAt,
+                          },
+                          typed,
+                        ) || "—"}
+                      </td>
+                    )
+                  })}
                   <td className="px-3 py-2 align-top text-xs">
                     {hasError ? (
                       <span className="text-red-700 dark:text-red-400">—</span>

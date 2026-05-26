@@ -284,6 +284,44 @@ function normalizeHeader(header: string): string {
 }
 
 /**
+ * Push 4 (B1) — turn a single per-row raw string into the typed
+ * value the custom-fields validator + read-only renderer expect.
+ * Pure function; safe to call from client (the preview cell uses it
+ * to mirror the server's typed write).
+ *
+ * Returns `null` when the raw string can't be coerced — the preview
+ * row should render the cell as blank, and the server-side
+ * coerceImportCustomValues drops the entry identically.
+ */
+export function coerceImportRawToTyped(fieldType: string, raw: string): unknown {
+  switch (fieldType) {
+    case "checkbox": {
+      const lower = raw.toLowerCase()
+      if (["true", "yes", "y", "1"].includes(lower)) return true
+      if (["false", "no", "n", "0"].includes(lower)) return false
+      return null
+    }
+    case "number":
+    case "currency": {
+      const n = Number(raw)
+      return Number.isFinite(n) ? n : null
+    }
+    case "multi_select": {
+      const items = raw
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      return items.length > 0 ? items : null
+    }
+    default:
+      // Everything else passes through as the raw string the user
+      // uploaded. The custom-fields validator on the server does
+      // authoritative shape checking later.
+      return raw
+  }
+}
+
+/**
  * Push 4 (A4) — per-type cell coercion for custom field imports.
  * Returns the raw string to forward to the server (which will JSON-
  * parse / cast per the field's type) or undefined to drop the cell

@@ -28,9 +28,12 @@ import {
  *                          archived contacts don't auto-purge — Push
  *                          2c.5 restored this affordance after Push
  *                          2c.2's overflow-menu removal dropped it)
- *   5. Manage duplicates → disabled + native title="Coming soon"
- *                          (V1.5 feature; placeholder signals the
- *                          slot is planned and won't get repurposed)
+ *   5. Manage duplicates → /contacts/duplicates (Push 4 B1 made
+ *                          this live; the detection engine ships in
+ *                          B1, merge UI in B2). Owner+Admin only at
+ *                          the page level; non-elevated roles still
+ *                          see the menu item but the route redirects
+ *                          to /dashboard.
  */
 export function ContactsActionsDropdown({ onOpenEditColumns }: { onOpenEditColumns: () => void }) {
   return (
@@ -54,13 +57,8 @@ export function ContactsActionsDropdown({ onOpenEditColumns }: { onOpenEditColum
         <DropdownMenuItem asChild>
           <Link href="/contacts/archived">View archived</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled
-          title="Coming soon"
-          // Radix disabled also blocks click, but we keep the title
-          // attribute so hover-tooltip still hints at intent.
-        >
-          Manage duplicates
+        <DropdownMenuItem asChild>
+          <Link href="/contacts/duplicates">Manage duplicates</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

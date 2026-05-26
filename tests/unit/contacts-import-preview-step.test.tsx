@@ -76,9 +76,11 @@ function makePreview(
 function renderPreview({
   cleanRows,
   previewRows,
+  customFieldDefs = [],
 }: {
   cleanRows: CleanRow[]
   previewRows: PreviewRow[]
+  customFieldDefs?: { id: string; name: string; fieldType: string; archivedAt: string | null }[]
 }) {
   return render(
     <PreviewStep
@@ -87,6 +89,7 @@ function renderPreview({
       orgMembers={owners}
       orgMemberEmails={[]}
       existingTags={[]}
+      customFieldDefs={customFieldDefs}
       ownerMode="self"
       onOwnerModeChange={noop}
       specificOwnerId="user-1"
@@ -218,6 +221,7 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
         orgMembers={owners}
         orgMemberEmails={[]}
         existingTags={[]}
+        customFieldDefs={[]}
         ownerMode="self"
         onOwnerModeChange={noop}
         specificOwnerId="user-1"
@@ -238,5 +242,77 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
     const applyButtons = screen.getAllByRole("button", { name: "Apply" })
     await user.click(applyButtons[0]!)
     expect(onSetAllMatchedTo).toHaveBeenCalledWith("update")
+  })
+})
+
+describe("PreviewStep — Push 4 B1 Part 0 custom field columns", () => {
+  it("renders a column per mapped custom field and coerces checkbox values to ✓ / blank", () => {
+    const defId = "ckdef1"
+    const row1: CleanRow = {
+      rowIndex: 1,
+      values: { firstName: "Ada", lastName: "Lovelace" },
+      customValues: { [defId]: "yes" },
+      errors: [],
+      warnings: [],
+    }
+    const row2: CleanRow = {
+      rowIndex: 2,
+      values: { firstName: "Grace", lastName: "Hopper" },
+      customValues: { [defId]: "no" },
+      errors: [],
+      warnings: [],
+    }
+    renderPreview({
+      cleanRows: [row1, row2],
+      previewRows: [
+        {
+          rowIndex: 1,
+          matchedContactId: null,
+          matchedContactName: null,
+          action: "create",
+          duplicateOfRow: null,
+        },
+        {
+          rowIndex: 2,
+          matchedContactId: null,
+          matchedContactName: null,
+          action: "create",
+          duplicateOfRow: null,
+        },
+      ],
+      customFieldDefs: [
+        { id: defId, name: "TOP 10 Vendor", fieldType: "checkbox", archivedAt: null },
+      ],
+    })
+    // Header carries the custom field name.
+    expect(screen.getByRole("columnheader", { name: "TOP 10 Vendor" })).toBeInTheDocument()
+    // ✓ rendered exactly once (for the "yes" row); the "no" row's cell is blank.
+    expect(screen.getAllByText("✓").length).toBe(1)
+  })
+
+  it("omits the custom field columns entirely when no row mapped any cf:* value", () => {
+    const row1: CleanRow = {
+      rowIndex: 1,
+      values: { firstName: "Ada", lastName: "Lovelace" },
+      customValues: {},
+      errors: [],
+      warnings: [],
+    }
+    renderPreview({
+      cleanRows: [row1],
+      previewRows: [
+        {
+          rowIndex: 1,
+          matchedContactId: null,
+          matchedContactName: null,
+          action: "create",
+          duplicateOfRow: null,
+        },
+      ],
+      customFieldDefs: [
+        { id: "x", name: "TOP 10 Vendor", fieldType: "checkbox", archivedAt: null },
+      ],
+    })
+    expect(screen.queryByRole("columnheader", { name: "TOP 10 Vendor" })).toBeNull()
   })
 })

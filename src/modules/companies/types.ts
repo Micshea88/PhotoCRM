@@ -20,12 +20,19 @@ const optionalText = z
   .transform((v) => (v.trim() === "" ? null : v.trim()))
   .nullable()
 
+// Push 4 (A3) — custom_fields jsonb payload. Validation happens at the
+// action layer against the org's custom_field_definitions for
+// record_type='company'. Shape is unknown at the input-schema level
+// because the actual schema is per-org.
+const customFieldsSchema = z.record(z.string(), z.unknown()).nullable().optional()
+
 export const createCompanyInput = z.object({
   name: z.string().min(1).max(200),
   website: websiteSchema.optional(),
   mainPhone: optionalText.optional(),
   instagramHandle: optionalText.optional(),
   category: optionalText.optional(),
+  customFields: customFieldsSchema,
 })
 
 export const updateCompanyInput = z.object({
@@ -35,6 +42,7 @@ export const updateCompanyInput = z.object({
   mainPhone: optionalText.optional(),
   instagramHandle: optionalText.optional(),
   category: optionalText.optional(),
+  customFields: customFieldsSchema,
 })
 
 export const deleteCompanyInput = z.object({ id: z.string() })

@@ -5,6 +5,11 @@ import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
+import {
+  prepareCustomFieldsForCreate,
+  prepareCustomFieldsForUpdate,
+} from "@/modules/custom-fields/host-helpers"
+import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { companies } from "./schema"
 import {
   createCompanyInput,
@@ -13,6 +18,8 @@ import {
   updateCompanyInput,
 } from "./types"
 
+const COMPANY_RECORD_TYPE = "company"
+
 /**
  * Companies CRUD. No standalone /companies routes in V1 — the only UI
  * surface is the typeahead-with-inline-create picker embedded in
@@ -20,12 +27,21 @@ import {
  * is forward-looking; today it's a no-op against a not-yet-rendered
  * route, which is safe and cheaper than guessing wrong about cache
  * boundaries.
+ *
+ * TODO Push P4.x (Companies UI): wire CustomFieldsRenderer into the
+ * company form. Use listActiveFieldDefinitionsForRecordType('company')
+ * for the form rendering. The engine + validators are wired here;
+ * the UI is the only remaining work.
  */
 export const createCompany = orgAction
   .metadata({ actionName: "companies.create" })
   .inputSchema(createCompanyInput)
   .action(async ({ parsedInput, ctx }) => {
     const id = createId()
+    const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      COMPANY_RECORD_TYPE,
+      parsedInput.customFields,
+    )
     await ctx.db.insert(companies).values({
       id,
       organizationId: ctx.activeOrg.id,
@@ -34,6 +50,7 @@ export const createCompany = orgAction
       mainPhone: parsedInput.mainPhone ?? null,
       instagramHandle: parsedInput.instagramHandle ?? null,
       category: parsedInput.category ?? null,
+      customFields: validatedCustomFields,
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
@@ -57,10 +74,37 @@ export const updateCompany = orgAction
   .inputSchema(updateCompanyInput)
   .action(async ({ parsedInput, ctx }) => {
     const { id, ...rest } = parsedInput
+
+    let patchedRest: typeof rest = rest
+    let customFieldChanges: CustomFieldChange[] = []
+    if ("customFields" in rest) {
+      const [existingRow] = await ctx.db
+        .select({ customFields: companies.customFields })
+        .from(companies)
+        .where(
+          and(
+            eq(companies.id, id),
+            eq(companies.organizationId, ctx.activeOrg.id),
+            isNull(companies.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!existingRow) {
+        throw new ActionError("NOT_FOUND", "Company not found")
+      }
+      const prep = await prepareCustomFieldsForUpdate(
+        COMPANY_RECORD_TYPE,
+        existingRow.customFields,
+        rest.customFields,
+      )
+      patchedRest = { ...rest, customFields: prep.value }
+      customFieldChanges = prep.changes
+    }
+
     const result = await ctx.db
       .update(companies)
       .set({
-        ...rest,
+        ...patchedRest,
         updatedAt: new Date(),
         updatedBy: ctx.session.user.id,
       })
@@ -75,6 +119,10 @@ export const updateCompany = orgAction
     if (result.length === 0) {
       throw new ActionError("NOT_FOUND", "Company not found")
     }
+    const auditMetadata: Record<string, unknown> = { ...rest }
+    if (customFieldChanges.length > 0) {
+      auditMetadata.customFieldChanges = customFieldChanges
+    }
     await audit(
       {
         db: ctx.db,
@@ -84,7 +132,7 @@ export const updateCompany = orgAction
         userAgent: ctx.userAgent,
       },
       "companies.updated",
-      { resourceType: "company", resourceId: id, metadata: rest },
+      { resourceType: "company", resourceId: id, metadata: auditMetadata },
     )
     revalidatePath("/contacts")
     return { id }

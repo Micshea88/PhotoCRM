@@ -11,7 +11,14 @@ import { contacts } from "@/modules/contacts/schema"
 import { member } from "@/modules/auth/schema"
 import { projects } from "@/modules/projects/schema"
 import { pipelines, pipelineStages } from "@/modules/pipelines/schema"
+import {
+  prepareCustomFieldsForCreate,
+  prepareCustomFieldsForUpdate,
+} from "@/modules/custom-fields/host-helpers"
+import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { opportunities } from "./schema"
+
+const OPPORTUNITY_RECORD_TYPE = "opportunity"
 import {
   createOpportunityInput,
   deleteOpportunityInput,
@@ -124,6 +131,11 @@ async function assertPipelineInOrg(db: DbHandle, pipelineId: string, orgId: stri
 }
 
 // ─── ACTIONS ───────────────────────────────────────────────────────────
+//
+// TODO Push P4.x (Pipeline UI): wire CustomFieldsRenderer into the
+// opportunity form. Use listActiveFieldDefinitionsForRecordType('opportunity')
+// for the form rendering. The engine + validators are wired here; the
+// UI is the only remaining work.
 
 export const createOpportunity = orgAction
   .metadata({ actionName: "opportunities.create" })
@@ -151,6 +163,10 @@ export const createOpportunity = orgAction
       parsedInput.probabilityBps ?? (stage.probability !== null ? stage.probability * 100 : null)
 
     const id = createId()
+    const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      OPPORTUNITY_RECORD_TYPE,
+      parsedInput.customFields,
+    )
     await ctx.db.insert(opportunities).values({
       id,
       organizationId: ctx.activeOrg.id,
@@ -163,6 +179,7 @@ export const createOpportunity = orgAction
       status: "open",
       ownerUserId: parsedInput.ownerUserId ?? ctx.session.user.id,
       expectedCloseDate: parsedInput.expectedCloseDate ?? null,
+      customFields: validatedCustomFields,
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
@@ -213,6 +230,31 @@ export const updateOpportunity = orgAction
     if (rest.ownerUserId !== undefined) patch.ownerUserId = rest.ownerUserId
     if (rest.expectedCloseDate !== undefined) patch.expectedCloseDate = rest.expectedCloseDate
 
+    let opportunityCustomFieldChanges: CustomFieldChange[] = []
+    if ("customFields" in rest) {
+      const [existingRow] = await ctx.db
+        .select({ customFields: opportunities.customFields })
+        .from(opportunities)
+        .where(
+          and(
+            eq(opportunities.id, id),
+            eq(opportunities.organizationId, ctx.activeOrg.id),
+            isNull(opportunities.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!existingRow) {
+        throw new ActionError("NOT_FOUND", "Opportunity not found")
+      }
+      const prep = await prepareCustomFieldsForUpdate(
+        OPPORTUNITY_RECORD_TYPE,
+        existingRow.customFields,
+        rest.customFields,
+      )
+      patch.customFields = prep.value
+      opportunityCustomFieldChanges = prep.changes
+    }
+
     const result = await ctx.db
       .update(opportunities)
       .set(patch)
@@ -228,6 +270,10 @@ export const updateOpportunity = orgAction
     if (!first) {
       throw new ActionError("NOT_FOUND", "Opportunity not found")
     }
+    const auditMetadata: Record<string, unknown> = { ...rest }
+    if (opportunityCustomFieldChanges.length > 0) {
+      auditMetadata.customFieldChanges = opportunityCustomFieldChanges
+    }
     await audit(
       {
         db: ctx.db,
@@ -237,7 +283,7 @@ export const updateOpportunity = orgAction
         userAgent: ctx.userAgent,
       },
       "opportunities.updated",
-      { resourceType: "opportunity", resourceId: id, metadata: rest },
+      { resourceType: "opportunity", resourceId: id, metadata: auditMetadata },
     )
     revalidatePath(`/events/${first.projectId}`)
     return { id }

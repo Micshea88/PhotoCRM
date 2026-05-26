@@ -40,6 +40,33 @@ export async function listFieldDefinitionsForRecordType(recordType: string) {
 }
 
 /**
+ * Active-only variant: archived definitions excluded. Use this for
+ * host-form rendering (Push 4 A3) — archived defs should disappear
+ * from the create/edit form while their existing jsonb values on
+ * already-saved host rows stay intact.
+ *
+ * Action-layer validators must NOT use this — they need the archived
+ * defs to (a) preserve existing archived values on update, and (b)
+ * surface the "field has been archived" error when the payload
+ * actively tries to write to one.
+ */
+export async function listActiveFieldDefinitionsForRecordType(recordType: string) {
+  return withOrgContext(async (tx) => {
+    return tx
+      .select()
+      .from(customFieldDefinitions)
+      .where(
+        and(
+          eq(customFieldDefinitions.recordType, recordType),
+          isNull(customFieldDefinitions.deletedAt),
+          isNull(customFieldDefinitions.archivedAt),
+        ),
+      )
+      .orderBy(customFieldDefinitions.order, customFieldDefinitions.name)
+  })
+}
+
+/**
  * Lookup by id. Used by host-module value validators ("does this jsonb key
  * correspond to a real definition, of the right type?"). Returns null for
  * not-found, including soft-deleted definitions — caller cannot distinguish

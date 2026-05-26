@@ -180,3 +180,62 @@ export function validateCustomFieldsPayload(
   }
   return out
 }
+
+/**
+ * Push 4 (A3) — archive-aware variant. Splits definitions into
+ * `active` vs `archived` and applies mode-specific behavior:
+ *
+ *   - CREATE: keys for archived defs are silently dropped (same UX as
+ *     unknown keys — the form shouldn't have rendered them).
+ *
+ *   - UPDATE: keys for archived defs throw a friendly
+ *     `ArchivedFieldUpdateError`, so the action layer can surface a
+ *     "Field 'X' has been archived..." message back to the user. The
+ *     existing jsonb values on the host row are PRESERVED (not
+ *     touched) by the caller — this validator only sees the new
+ *     payload; the caller is responsible for merging in archived
+ *     values from the existing row before writing.
+ *
+ * Returns only the validated ACTIVE entries. The caller computes the
+ * preserved-archived map separately from the existing row, then merges
+ * before writing.
+ *
+ * `onUnknownKey` still fires for genuinely-unknown keys (definition
+ * deleted, not just archived) — same semantics as the unarchived
+ * variant.
+ */
+export class ArchivedFieldUpdateError extends Error {
+  constructor(public readonly fieldName: string) {
+    super(
+      `Field "${fieldName}" has been archived and cannot be updated. Restore the field first or remove it from the update.`,
+    )
+    this.name = "ArchivedFieldUpdateError"
+  }
+}
+
+export function validateCustomFieldsPayloadWithArchive(
+  activeDefs: Map<string, CustomFieldDefinition>,
+  archivedDefs: Map<string, CustomFieldDefinition>,
+  payload: Record<string, unknown>,
+  mode: "create" | "update",
+  opts: ValidatePayloadOptions = {},
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [defId, raw] of Object.entries(payload)) {
+    const activeDef = activeDefs.get(defId)
+    if (activeDef) {
+      out[defId] = validateCustomFieldValue(activeDef, raw)
+      continue
+    }
+    const archivedDef = archivedDefs.get(defId)
+    if (archivedDef) {
+      if (mode === "update") {
+        throw new ArchivedFieldUpdateError(archivedDef.name)
+      }
+      // create: silent drop. Same UX as unknown-key drop.
+      continue
+    }
+    opts.onUnknownKey?.(defId)
+  }
+  return out
+}

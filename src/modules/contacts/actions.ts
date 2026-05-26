@@ -5,12 +5,14 @@ import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
-import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { companies } from "@/modules/companies/schema"
-import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
-import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
+import {
+  prepareCustomFieldsForCreate,
+  prepareCustomFieldsForUpdate,
+} from "@/modules/custom-fields/host-helpers"
+import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
 import {
   addContactCompanyAssociationInput,
@@ -40,38 +42,6 @@ const CONTACT_RECORD_TYPE = "contact"
 
 /** Loose db type — accepts the pool-backed db or a PgTransaction. */
 type DbHandle = NodePgDatabase<typeof schema>
-
-/**
- * Validate custom_fields payload against the org's custom_field_definitions
- * for `record_type='contact'`. Returns the parsed payload (with unknown
- * keys dropped) or throws ActionError("VALIDATION") with the offending
- * field name.
- *
- * Skips the DB roundtrip entirely when the payload is empty/null —
- * common case for contacts created without custom data.
- */
-async function validateContactCustomFields(
-  customFields: Record<string, unknown> | null | undefined,
-): Promise<Record<string, unknown> | null> {
-  if (!customFields || Object.keys(customFields).length === 0) return null
-  const defs = await listFieldDefinitionsForRecordType(CONTACT_RECORD_TYPE)
-  const defMap = new Map(defs.map((d) => [d.id, d]))
-  try {
-    return validateCustomFieldsPayload(defMap, customFields, {
-      onUnknownKey: (defId) => {
-        log.warn(
-          { defId, recordType: CONTACT_RECORD_TYPE },
-          "custom_fields: dropped value for unknown definition id (likely soft-deleted)",
-        )
-      },
-    })
-  } catch (err) {
-    throw new ActionError(
-      "VALIDATION",
-      err instanceof Error ? err.message : "Invalid custom field value",
-    )
-  }
-}
 
 /**
  * Verify a company reference points at a non-deleted company in the active
@@ -107,7 +77,10 @@ export const createContact = orgAction
   .inputSchema(createContactInput)
   .action(async ({ parsedInput, ctx }) => {
     await assertCompanyInOrg(ctx.db, parsedInput.companyId, ctx.activeOrg.id)
-    const validatedCustomFields = await validateContactCustomFields(parsedInput.customFields)
+    const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      CONTACT_RECORD_TYPE,
+      parsedInput.customFields,
+    )
     const id = createId()
     await ctx.db.insert(contacts).values({
       id,
@@ -173,11 +146,29 @@ export const updateContact = orgAction
     // If `customFields` is omitted from the update payload, leave existing
     // values untouched.
     let patchedRest: typeof rest = rest
+    let customFieldChanges: CustomFieldChange[] = []
     if ("customFields" in rest) {
-      patchedRest = {
-        ...rest,
-        customFields: await validateContactCustomFields(rest.customFields),
+      const [existingRow] = await ctx.db
+        .select({ customFields: contacts.customFields })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.id, id),
+            eq(contacts.organizationId, ctx.activeOrg.id),
+            isNull(contacts.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!existingRow) {
+        throw new ActionError("NOT_FOUND", "Contact not found")
       }
+      const prep = await prepareCustomFieldsForUpdate(
+        CONTACT_RECORD_TYPE,
+        existingRow.customFields,
+        rest.customFields,
+      )
+      patchedRest = { ...rest, customFields: prep.value }
+      customFieldChanges = prep.changes
     }
     const result = await ctx.db
       .update(contacts)
@@ -197,6 +188,10 @@ export const updateContact = orgAction
     if (result.length === 0) {
       throw new ActionError("NOT_FOUND", "Contact not found")
     }
+    const auditMetadata: Record<string, unknown> = { ...rest }
+    if (customFieldChanges.length > 0) {
+      auditMetadata.customFieldChanges = customFieldChanges
+    }
     await audit(
       {
         db: ctx.db,
@@ -206,7 +201,7 @@ export const updateContact = orgAction
         userAgent: ctx.userAgent,
       },
       "contacts.updated",
-      { resourceType: "contact", resourceId: id, metadata: rest },
+      { resourceType: "contact", resourceId: id, metadata: auditMetadata },
     )
     revalidatePath("/contacts")
     revalidatePath(`/contacts/${id}`)

@@ -24,6 +24,12 @@ const isoDateNullable = z
 
 const probabilityBpsField = z.number().int().min(0).max(10_000).nullable().optional()
 
+// Push 4 (A3) — custom_fields jsonb payload. Validation happens at the
+// action layer against the org's custom_field_definitions for
+// record_type='opportunity'. Shape is unknown at the input-schema
+// level because the actual schema is per-org.
+const customFieldsSchema = z.record(z.string(), z.unknown()).nullable().optional()
+
 export const createOpportunityInput = z.object({
   projectId: z.string(),
   pipelineId: z.string(),
@@ -33,6 +39,7 @@ export const createOpportunityInput = z.object({
   probabilityBps: probabilityBpsField,
   ownerUserId: z.string().nullable().optional(),
   expectedCloseDate: isoDateNullable.optional(),
+  customFields: customFieldsSchema,
 })
 
 export const updateOpportunityInput = z.object({
@@ -42,6 +49,7 @@ export const updateOpportunityInput = z.object({
   probabilityBps: probabilityBpsField,
   ownerUserId: z.string().nullable().optional(),
   expectedCloseDate: isoDateNullable.optional(),
+  customFields: customFieldsSchema,
 })
 
 /**

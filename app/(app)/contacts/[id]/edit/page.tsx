@@ -12,7 +12,7 @@ import {
   listContactsForOrg,
 } from "@/modules/contacts/queries"
 import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
-import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
+import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
 
@@ -38,7 +38,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         const [associations, customFields, companies, contacts, leadSources, hiddenSources] =
           await Promise.all([
             listContactCompanyAssociations(id),
-            listFieldDefinitionsForRecordType("contact"),
+            listActiveFieldDefinitionsForRecordType("contact"),
             listCompaniesForOrg(),
             listContactsForOrg(),
             listDistinctContactLeadSources(),

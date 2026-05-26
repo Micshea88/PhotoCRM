@@ -1,33 +1,47 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
+import Image from "next/image"
 import { upload } from "@vercel/blob/client"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import type { CustomFieldDefinition } from "../schema"
 import type { FieldType } from "../types"
+import { UserRefPicker, type UserOption } from "./user-ref-picker"
+import { ContactRefPicker, type ContactOption } from "./contact-ref-picker"
 
 /**
- * Generic renderer for `custom_fields` form input. Given the host's
- * definitions + the current values jsonb, renders one input per field
- * type. Maintains its values internally and propagates the full map
- * up via `onChange` whenever any field changes.
+ * Generic renderer for `custom_fields` form input AND read-only display.
  *
- * Field-type coverage:
+ * Field-type coverage (edit mode):
  *   - text / multiline / number / currency / date / datetime / email /
- *     phone / url     → native inputs
+ *     phone / url                          → native inputs
  *   - single_select / radio                → <select> / radio group
  *   - multi_select                         → checkboxes
  *   - checkbox                             → <input type="checkbox">
  *   - file / image                         → @vercel/blob client upload,
  *                                            stores returned URL as value
- *   - user_ref / contact_ref / event_ref   → free-text ID input (proper
- *                                            pickers ship per-module
- *                                            later — V1 is paste-an-ID)
+ *   - user_ref                             → UserRefPicker when
+ *                                            `userOptions` passed, else
+ *                                            paste-an-id text input
+ *   - contact_ref                          → ContactRefPicker when
+ *                                            `contactOptions` passed, else
+ *                                            paste-an-id text input
+ *   - event_ref                            → paste-an-id text input
+ *                                            (EventRefPicker ships with
+ *                                            Events UI push P4.x)
  *   - formula                              → read-only placeholder
  *                                            (evaluator deferred per
  *                                            validators.ts case "formula")
+ *
+ * Read-only mode (Push 4 A3, built but not yet consumed — Push 3's
+ * HubSpot detail rebuild is its first consumer): pass `readOnly={true}`
+ * and the same definitions+values to render a label/value pair per
+ * field with no inputs. Empty values render as "—". File / image
+ * render as anchor / inline thumbnail. user_ref / contact_ref render
+ * the option's label (resolved from `userOptions` / `contactOptions`
+ * by id) and, if the caller passes `linkRef`, wrap it in a Link.
  *
  * `required` is rendered as a visual asterisk but NOT enforced here —
  * per validators.ts, the host form layer (Zod schema or onSubmit) owns
@@ -38,12 +52,24 @@ export function CustomFieldsRenderer({
   definitions,
   values,
   onChange,
+  readOnly = false,
+  userOptions,
+  contactOptions,
+  linkRef,
 }: {
   definitions: CustomFieldDefinition[]
   values: Record<string, unknown>
-  onChange: (next: Record<string, unknown>) => void
+  onChange?: (next: Record<string, unknown>) => void
+  readOnly?: boolean
+  /** Pre-loaded org members; when supplied, user_ref renders as a picker. */
+  userOptions?: UserOption[]
+  /** Pre-loaded org contacts; when supplied, contact_ref renders as a picker. */
+  contactOptions?: ContactOption[]
+  /** Optional link resolver for read-only reference rendering. */
+  linkRef?: (kind: "user" | "contact" | "event", id: string) => string | null
 }) {
   function setField(defId: string, value: unknown) {
+    if (!onChange) return
     if (value === "" || value === null || value === undefined) {
       const { [defId]: _omit, ...rest } = values
       void _omit
@@ -54,10 +80,28 @@ export function CustomFieldsRenderer({
   }
 
   if (definitions.length === 0) {
+    if (readOnly) return null
     return (
       <p className="text-sm text-[var(--color-muted-foreground)]">
         No custom fields defined yet. Add some in Settings → Custom fields.
       </p>
+    )
+  }
+
+  if (readOnly) {
+    return (
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {definitions.map((def) => (
+          <FieldReadOnly
+            key={def.id}
+            definition={def}
+            value={values[def.id]}
+            userOptions={userOptions}
+            contactOptions={contactOptions}
+            linkRef={linkRef}
+          />
+        ))}
+      </dl>
     )
   }
 
@@ -71,6 +115,8 @@ export function CustomFieldsRenderer({
           onChange={(v) => {
             setField(def.id, v)
           }}
+          userOptions={userOptions}
+          contactOptions={contactOptions}
         />
       ))}
     </div>
@@ -81,10 +127,14 @@ function FieldInput({
   definition,
   value,
   onChange,
+  userOptions,
+  contactOptions,
 }: {
   definition: CustomFieldDefinition
   value: unknown
   onChange: (value: unknown) => void
+  userOptions?: UserOption[]
+  contactOptions?: ContactOption[]
 }) {
   const fieldType = definition.fieldType as FieldType
   const inputId = `cf-${definition.id}`
@@ -340,21 +390,87 @@ function FieldInput({
       )
 
     case "user_ref":
-    case "contact_ref":
-    case "event_ref":
+      if (userOptions) {
+        return (
+          <div className="space-y-2">
+            {label}
+            <UserRefPicker
+              id={inputId}
+              options={userOptions}
+              value={typeof value === "string" ? value : null}
+              onChange={(id) => {
+                onChange(id)
+              }}
+            />
+          </div>
+        )
+      }
       return (
         <div className="space-y-2">
           {label}
           <Input
             id={inputId}
             value={typeof value === "string" ? value : ""}
-            placeholder={`Paste a ${fieldType.replace("_ref", "")} id`}
+            placeholder="Paste a user id"
             onChange={(e) => {
               onChange(e.target.value)
             }}
           />
           <p className="text-xs text-[var(--color-muted-foreground)]">
-            V1: paste the record id. A proper picker will land later.
+            V1: paste the record id. Pass <code>userOptions</code> for the picker UX.
+          </p>
+        </div>
+      )
+
+    case "contact_ref":
+      if (contactOptions) {
+        return (
+          <div className="space-y-2">
+            {label}
+            <ContactRefPicker
+              id={inputId}
+              options={contactOptions}
+              value={typeof value === "string" ? value : null}
+              onChange={(id) => {
+                onChange(id)
+              }}
+            />
+          </div>
+        )
+      }
+      return (
+        <div className="space-y-2">
+          {label}
+          <Input
+            id={inputId}
+            value={typeof value === "string" ? value : ""}
+            placeholder="Paste a contact id"
+            onChange={(e) => {
+              onChange(e.target.value)
+            }}
+          />
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            V1: paste the record id. Pass <code>contactOptions</code> for the picker UX.
+          </p>
+        </div>
+      )
+
+    case "event_ref":
+      // TODO Events UI push (P4.x): swap for EventRefPicker once that
+      // module lands. Until then it's a paste-an-id text input.
+      return (
+        <div className="space-y-2">
+          {label}
+          <Input
+            id={inputId}
+            value={typeof value === "string" ? value : ""}
+            placeholder="Paste an event id"
+            onChange={(e) => {
+              onChange(e.target.value)
+            }}
+          />
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            V1: paste the record id. EventRefPicker ships with the Events UI push.
           </p>
         </div>
       )
@@ -376,6 +492,158 @@ function FieldInput({
   }
 }
 
+function FieldReadOnly({
+  definition,
+  value,
+  userOptions,
+  contactOptions,
+  linkRef,
+}: {
+  definition: CustomFieldDefinition
+  value: unknown
+  userOptions?: UserOption[]
+  contactOptions?: ContactOption[]
+  linkRef?: (kind: "user" | "contact" | "event", id: string) => string | null
+}) {
+  const fieldType = definition.fieldType as FieldType
+  return (
+    <div className="space-y-1">
+      <dt className="text-xs font-medium text-[var(--color-muted-foreground)]">
+        {definition.name}
+      </dt>
+      <dd className="text-sm">
+        {renderReadOnlyValue(definition, value, fieldType, userOptions, contactOptions, linkRef)}
+      </dd>
+    </div>
+  )
+}
+
+const EMPTY = <span className="text-[var(--color-muted-foreground)]">—</span>
+
+function renderReadOnlyValue(
+  definition: CustomFieldDefinition,
+  value: unknown,
+  fieldType: FieldType,
+  userOptions: UserOption[] | undefined,
+  contactOptions: ContactOption[] | undefined,
+  linkRef: ((kind: "user" | "contact" | "event", id: string) => string | null) | undefined,
+): ReactNode {
+  if (value === null || value === undefined || value === "") return EMPTY
+
+  switch (fieldType) {
+    case "text":
+    case "multiline":
+    case "email":
+    case "phone":
+      return typeof value === "string" ? value : EMPTY
+    case "number":
+      return typeof value === "number" ? String(value) : EMPTY
+    case "currency":
+      if (typeof value !== "number") return EMPTY
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
+    case "date":
+      return typeof value === "string" ? value : EMPTY
+    case "datetime":
+      if (typeof value !== "string") return EMPTY
+      try {
+        return new Date(value).toLocaleString()
+      } catch {
+        return value
+      }
+    case "url":
+      if (typeof value !== "string") return EMPTY
+      return (
+        <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+          {value}
+        </a>
+      )
+    case "single_select":
+    case "radio": {
+      if (typeof value !== "string") return EMPTY
+      const choices = readChoicesSafe(definition)
+      const match = choices.find((c) => c.value === value)
+      return match?.label ?? value
+    }
+    case "multi_select": {
+      if (!Array.isArray(value)) return EMPTY
+      const choices = readChoicesSafe(definition)
+      const labels = (value as string[]).map((v) => {
+        const m = choices.find((c) => c.value === v)
+        return m?.label ?? v
+      })
+      return labels.length === 0 ? EMPTY : labels.join(", ")
+    }
+    case "checkbox":
+      return value === true ? "Yes" : "No"
+    case "file":
+      if (typeof value !== "string") return EMPTY
+      return (
+        <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+          Download file
+        </a>
+      )
+    case "image":
+      if (typeof value !== "string") return EMPTY
+      return (
+        <Image
+          src={value}
+          alt={definition.name}
+          width={320}
+          height={128}
+          unoptimized
+          className="max-h-32 w-auto max-w-xs rounded"
+        />
+      )
+    case "user_ref": {
+      if (typeof value !== "string") return EMPTY
+      const u = userOptions?.find((x) => x.id === value)
+      const label = u ? u.name : value
+      const href = linkRef?.("user", value)
+      return href ? (
+        <a href={href} className="text-blue-600 underline">
+          {label}
+        </a>
+      ) : (
+        label
+      )
+    }
+    case "contact_ref": {
+      if (typeof value !== "string") return EMPTY
+      const c = contactOptions?.find((x) => x.id === value)
+      const label = c ? `${c.firstName} ${c.lastName}`.trim() : value
+      const href = linkRef?.("contact", value)
+      return href ? (
+        <a href={href} className="text-blue-600 underline">
+          {label}
+        </a>
+      ) : (
+        label
+      )
+    }
+    case "event_ref": {
+      if (typeof value !== "string") return EMPTY
+      const href = linkRef?.("event", value)
+      return href ? (
+        <a href={href} className="text-blue-600 underline">
+          {value}
+        </a>
+      ) : (
+        value
+      )
+    }
+    case "formula":
+      // Evaluator deferred. If a computed scalar was written to jsonb
+      // already (post-evaluator world), render it; otherwise placeholder.
+      if (typeof value === "string" || typeof value === "number") return String(value)
+      if (typeof value === "boolean") return value ? "Yes" : "No"
+      return <span className="text-[var(--color-muted-foreground)]">(formula)</span>
+    default: {
+      const exhaustive: never = fieldType
+      return <span className="text-red-600">Unknown field type: {String(exhaustive)}</span>
+    }
+  }
+}
+
 interface Choice {
   value: string
   label: string
@@ -384,6 +652,10 @@ interface Choice {
 function readChoices(def: CustomFieldDefinition): Choice[] {
   const options = def.options as { choices?: Choice[] } | null | undefined
   return options?.choices ?? []
+}
+
+function readChoicesSafe(def: CustomFieldDefinition): Choice[] {
+  return readChoices(def)
 }
 
 function BlobUploadField({

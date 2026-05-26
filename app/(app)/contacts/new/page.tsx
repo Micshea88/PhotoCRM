@@ -8,7 +8,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listContactsForOrg } from "@/modules/contacts/queries"
 import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
-import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
+import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
 
@@ -31,7 +31,7 @@ export default async function NewContactPage() {
           await Promise.all([
             listCompaniesForOrg(),
             listContactsForOrg(),
-            listFieldDefinitionsForRecordType("contact"),
+            listActiveFieldDefinitionsForRecordType("contact"),
             listDistinctContactLeadSources(),
             listHiddenLeadSources(),
           ])

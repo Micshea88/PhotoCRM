@@ -5,13 +5,15 @@ import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
-import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { contacts } from "@/modules/contacts/schema"
 import { member } from "@/modules/auth/schema"
-import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
-import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
+import {
+  prepareCustomFieldsForCreate,
+  prepareCustomFieldsForUpdate,
+} from "@/modules/custom-fields/host-helpers"
+import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { projects, projectContacts, projectPhotographers, projectSubEvents } from "./schema"
 import {
   instantiateProjectFromTemplate as instantiateProjectFromTemplateFn,
@@ -83,37 +85,22 @@ async function assertMemberOfOrg(db: DbHandle, userId: string, orgId: string) {
   }
 }
 
-async function validateProjectCustomFields(
-  customFields: Record<string, unknown> | null | undefined,
-): Promise<Record<string, unknown> | null> {
-  if (!customFields || Object.keys(customFields).length === 0) return null
-  const defs = await listFieldDefinitionsForRecordType(PROJECT_RECORD_TYPE)
-  const defMap = new Map(defs.map((d) => [d.id, d]))
-  try {
-    return validateCustomFieldsPayload(defMap, customFields, {
-      onUnknownKey: (defId) => {
-        log.warn(
-          { defId, recordType: PROJECT_RECORD_TYPE },
-          "custom_fields: dropped value for unknown definition id",
-        )
-      },
-    })
-  } catch (err) {
-    throw new ActionError(
-      "VALIDATION",
-      err instanceof Error ? err.message : "Invalid custom field value",
-    )
-  }
-}
-
 // ─── PROJECT CRUD ──────────────────────────────────────────────────────
+//
+// TODO Push P4.x (Events UI): wire CustomFieldsRenderer into the project
+// (Event) form. Use listActiveFieldDefinitionsForRecordType('project')
+// for the form rendering. The engine + validators are wired here; the
+// UI is the only remaining work.
 
 export const createProject = orgAction
   .metadata({ actionName: "projects.create" })
   .inputSchema(createProjectInput)
   .action(async ({ parsedInput, ctx }) => {
     const id = createId()
-    const validatedCustomFields = await validateProjectCustomFields(parsedInput.customFields)
+    const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      PROJECT_RECORD_TYPE,
+      parsedInput.customFields,
+    )
     // Anniversary auto-derivation: for Wedding type, default anniversary
     // to primary_date if the caller didn't explicitly provide one.
     const anniversaryDate =
@@ -217,8 +204,29 @@ export const updateProject = orgAction
     if (rest.projectNotes !== undefined) patch.projectNotes = rest.projectNotes
     if (rest.internalNotes !== undefined) patch.internalNotes = rest.internalNotes
     if (rest.templateId !== undefined) patch.templateId = rest.templateId
+    let projectCustomFieldChanges: CustomFieldChange[] = []
     if ("customFields" in rest) {
-      patch.customFields = await validateProjectCustomFields(rest.customFields)
+      const [existingRow] = await ctx.db
+        .select({ customFields: projects.customFields })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.id, id),
+            eq(projects.organizationId, ctx.activeOrg.id),
+            isNull(projects.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!existingRow) {
+        throw new ActionError("NOT_FOUND", "Project not found")
+      }
+      const prep = await prepareCustomFieldsForUpdate(
+        PROJECT_RECORD_TYPE,
+        existingRow.customFields,
+        rest.customFields,
+      )
+      patch.customFields = prep.value
+      projectCustomFieldChanges = prep.changes
     }
 
     const result = await ctx.db
@@ -275,6 +283,9 @@ export const updateProject = orgAction
           ...rest,
           ...(taskRecomputeStats ? { taskRecompute: taskRecomputeStats } : {}),
           ...(paymentRecomputeStats ? { paymentRecompute: paymentRecomputeStats } : {}),
+          ...(projectCustomFieldChanges.length > 0
+            ? { customFieldChanges: projectCustomFieldChanges }
+            : {}),
         },
       },
     )

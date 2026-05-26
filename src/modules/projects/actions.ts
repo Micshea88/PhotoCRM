@@ -98,6 +98,7 @@ export const createProject = orgAction
   .action(async ({ parsedInput, ctx }) => {
     const id = createId()
     const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      ctx.db,
       PROJECT_RECORD_TYPE,
       parsedInput.customFields,
     )
@@ -221,6 +222,7 @@ export const updateProject = orgAction
         throw new ActionError("NOT_FOUND", "Project not found")
       }
       const prep = await prepareCustomFieldsForUpdate(
+        ctx.db,
         PROJECT_RECORD_TYPE,
         existingRow.customFields,
         rest.customFields,

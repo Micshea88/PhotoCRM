@@ -164,6 +164,7 @@ export const createOpportunity = orgAction
 
     const id = createId()
     const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      ctx.db,
       OPPORTUNITY_RECORD_TYPE,
       parsedInput.customFields,
     )
@@ -247,6 +248,7 @@ export const updateOpportunity = orgAction
         throw new ActionError("NOT_FOUND", "Opportunity not found")
       }
       const prep = await prepareCustomFieldsForUpdate(
+        ctx.db,
         OPPORTUNITY_RECORD_TYPE,
         existingRow.customFields,
         rest.customFields,

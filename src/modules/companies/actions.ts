@@ -39,6 +39,7 @@ export const createCompany = orgAction
   .action(async ({ parsedInput, ctx }) => {
     const id = createId()
     const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      ctx.db,
       COMPANY_RECORD_TYPE,
       parsedInput.customFields,
     )
@@ -93,6 +94,7 @@ export const updateCompany = orgAction
         throw new ActionError("NOT_FOUND", "Company not found")
       }
       const prep = await prepareCustomFieldsForUpdate(
+        ctx.db,
         COMPANY_RECORD_TYPE,
         existingRow.customFields,
         rest.customFields,

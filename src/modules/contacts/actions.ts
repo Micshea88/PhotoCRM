@@ -78,6 +78,7 @@ export const createContact = orgAction
   .action(async ({ parsedInput, ctx }) => {
     await assertCompanyInOrg(ctx.db, parsedInput.companyId, ctx.activeOrg.id)
     const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
+      ctx.db,
       CONTACT_RECORD_TYPE,
       parsedInput.customFields,
     )
@@ -163,6 +164,7 @@ export const updateContact = orgAction
         throw new ActionError("NOT_FOUND", "Contact not found")
       }
       const prep = await prepareCustomFieldsForUpdate(
+        ctx.db,
         CONTACT_RECORD_TYPE,
         existingRow.customFields,
         rest.customFields,

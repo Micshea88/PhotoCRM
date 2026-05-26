@@ -1,13 +1,17 @@
 import "server-only"
 import { and, eq, isNull, sql } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type { PgTable } from "drizzle-orm/pg-core"
 import { withOrgContext } from "@/lib/org-context"
+import type * as schema from "@/db/schema"
 import { contacts } from "@/modules/contacts/schema"
 import { companies } from "@/modules/companies/schema"
 import { opportunities } from "@/modules/opportunities/schema"
 import { projects } from "@/modules/projects/schema"
 import { tasks } from "@/modules/tasks/schema"
 import { customFieldDefinitions } from "./schema"
+
+type DbHandle = NodePgDatabase<typeof schema>
 
 /**
  * Definitions for one record type, ordered by the explicit `order` column
@@ -37,6 +41,36 @@ export async function listFieldDefinitionsForRecordType(recordType: string) {
       )
       .orderBy(customFieldDefinitions.order, customFieldDefinitions.name)
   })
+}
+
+/**
+ * Parametric variant of `listFieldDefinitionsForRecordType` for callers
+ * that already have a `ctx.db` transaction handle with
+ * `app.current_org` set — specifically host-entity actions that need
+ * to validate `custom_fields` payloads from inside the action's own
+ * transaction.
+ *
+ * orgAction sets transaction-local pg settings but does NOT populate
+ * AsyncLocalStorage, so calling the ALS-based variant
+ * (`listFieldDefinitionsForRecordType`) from inside an action throws.
+ * Mirrors the `lookupExtendedMemberRole(tx, userId)` pattern in
+ * `src/modules/rbac/queries.ts`.
+ *
+ * The `tx` parameter MUST be the same transaction whose pg session
+ * settings include the right `app.current_org` — RLS won't filter
+ * correctly otherwise.
+ */
+export async function listFieldDefinitionsForRecordTypeWithDb(tx: DbHandle, recordType: string) {
+  return tx
+    .select()
+    .from(customFieldDefinitions)
+    .where(
+      and(
+        eq(customFieldDefinitions.recordType, recordType),
+        isNull(customFieldDefinitions.deletedAt),
+      ),
+    )
+    .orderBy(customFieldDefinitions.order, customFieldDefinitions.name)
 }
 
 /**

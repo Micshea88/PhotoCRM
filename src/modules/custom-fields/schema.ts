@@ -54,6 +54,13 @@ export const customFieldDefinitions = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: text("deleted_by").references(() => user.id, { onDelete: "set null" }),
+    // Push 4 (A2) — Archived is distinct from Deleted. Archived definitions
+    // stop appearing in host-record forms (e.g. the contact form's Custom
+    // fields section) but their existing jsonb values on host rows stay
+    // intact. Deleted (deletedAt) is the soft-delete that the
+    // purge-deleted cron eventually hard-removes.
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedBy: text("archived_by").references(() => user.id, { onDelete: "set null" }),
   },
   (t) => [
     uniqueIndex("custom_field_definitions_org_record_name_uidx")

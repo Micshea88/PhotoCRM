@@ -66,7 +66,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // plain array to a SYNC sidebar component below.
   const sidebarItems = await runWithOrgContext(
     { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
-    async () => resolveSidebarItems(session.user.id),
+    async () => resolveSidebarItems(session.user.id, extendedRole),
   )
 
   return (

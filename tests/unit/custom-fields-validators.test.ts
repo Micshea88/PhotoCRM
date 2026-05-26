@@ -30,6 +30,8 @@ function def(
     updatedBy: USER_ID,
     deletedAt: null,
     deletedBy: null,
+    archivedAt: null,
+    archivedBy: null,
   }
 }
 

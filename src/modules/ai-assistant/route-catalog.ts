@@ -108,6 +108,20 @@ export const ROUTE_CATALOG: readonly CatalogRoute[] = [
     description: "List of tasks across your events.",
     requiresPermission: "view_events",
   },
+  {
+    // Push 4 (A2) — Custom fields manager. Owner + Admin only; the
+    // sidebar gate in resolveSidebarItems additionally hides this
+    // for Manager / Team member / Accountant. The `manage_settings`
+    // permission listed here is the right wire-level gate, but the
+    // sidebar resolver also checks the extended role since Manager
+    // has manage_settings yet must NOT see this surface (matches
+    // the spec: "match the Members pattern exactly").
+    id: "settings_custom_fields",
+    path: "/settings/custom-fields",
+    title: "Custom fields",
+    description: "Per-record-type custom field definitions for this studio.",
+    requiresPermission: "manage_settings",
+  },
 ] as const
 
 const ROUTE_BY_ID = new Map(ROUTE_CATALOG.map((r) => [r.id, r]))

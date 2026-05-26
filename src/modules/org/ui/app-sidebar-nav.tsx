@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Settings,
+  SlidersHorizontal,
   TrendingUp,
   Users,
   type LucideIcon,
@@ -28,6 +29,7 @@ export type SidebarIconKey =
   | "opportunities"
   | "tasks"
   | "settings"
+  | "customFields"
 
 const ICONS: Record<SidebarIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -36,6 +38,7 @@ const ICONS: Record<SidebarIconKey, LucideIcon> = {
   opportunities: TrendingUp,
   tasks: CheckSquare,
   settings: Settings,
+  customFields: SlidersHorizontal,
 }
 
 export interface AppSidebarItem {

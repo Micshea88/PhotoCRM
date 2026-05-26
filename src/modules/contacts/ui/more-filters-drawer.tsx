@@ -11,6 +11,10 @@ export interface CustomFieldDef {
   name: string
   fieldType: string
   options: { choices?: { value: string; label: string }[] } | null
+  /** Push 4 (A4) — surface archived state so the drawer (and other
+   * consumers sharing this prop shape) can suffix the label with
+   * "(archived)" and prevent new filter additions on archived fields. */
+  archivedAt: string | Date | null
 }
 
 interface MoreFiltersDrawerProps {
@@ -285,7 +289,12 @@ function CustomFieldInput({ field }: { field: CustomFieldDef }) {
   }
 
   const getParam = (op: string) => params.get(`cf:${field.id}:${op}`) ?? ""
-  const label = field.name
+  // Push 4 (A4) — suffix archived defs so loaded saved views show
+  // the user why the filter row is greyed out. Archived defs can
+  // still be CLEARED from a view but new filter values shouldn't be
+  // entered; the per-type input rows remain rendered so the user
+  // can edit-then-clear.
+  const label = field.archivedAt ? `${field.name} (archived)` : field.name
 
   switch (field.fieldType) {
     case "formula":

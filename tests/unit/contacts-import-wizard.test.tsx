@@ -57,6 +57,7 @@ const baseProps = {
   currentUserId: "user-1",
   orgMembers: [{ id: "user-1", name: "Mike", email: "mike@example.com" }],
   existingTags: ["vip"],
+  customFieldDefs: [],
 }
 
 describe("ContactsImportWizard — step rendering by ?step= URL param", () => {

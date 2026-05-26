@@ -433,10 +433,11 @@ function mkRow(
 ): {
   rowIndex: number
   values: Record<string, string>
+  customValues: Record<string, string>
   errors: string[]
   warnings: string[]
 } {
   const v: Record<string, string> = {}
   for (const [k, val] of Object.entries(values)) if (val !== undefined) v[k] = val
-  return { rowIndex, values: v, errors: [], warnings: [] }
+  return { rowIndex, values: v, customValues: {}, errors: [], warnings: [] }
 }

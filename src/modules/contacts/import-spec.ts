@@ -130,6 +130,39 @@ export function parseCsv(text: string): ParsedCsv {
  * null-mapping means "Don't include in import" — rendered as the
  * dropdown default for unmatched columns.
  */
+/**
+ * Push 4 (A4) — minimal custom-field def shape consumed by the CSV
+ * import. Same source-of-truth columns the More Filters + Edit
+ * Columns drawers use; the type is duplicated locally so the spec
+ * (used in client + server import paths) stays import-light.
+ */
+export interface ImportCustomFieldDef {
+  id: string
+  name: string
+  fieldType: string
+  archivedAt: string | Date | null
+}
+
+/**
+ * MappingChoice is the value selected per CSV column in the wizard's
+ * "Maps to" dropdown. Either an intrinsic ImportableField OR a
+ * `cf:<fieldId>` token pointing at a non-archived custom field
+ * definition on this org.
+ */
+export type MappingChoice = ImportableField | `cf:${string}`
+
+export function isCustomFieldMapping(choice: MappingChoice | null): choice is `cf:${string}` {
+  return typeof choice === "string" && choice.startsWith("cf:")
+}
+
+export function customFieldIdFromMapping(choice: `cf:${string}`): string {
+  return choice.slice(3)
+}
+
+export function buildCustomFieldMapping(fieldId: string): `cf:${string}` {
+  return `cf:${fieldId}`
+}
+
 export const IMPORTABLE_FIELDS = [
   "fullName",
   "firstName",
@@ -250,8 +283,64 @@ function normalizeHeader(header: string): string {
   return header.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
-export function autoMapHeaders(headers: string[]): (ImportableField | null)[] {
-  return headers.map((h) => HEADER_HINTS[normalizeHeader(h)] ?? null)
+/**
+ * Push 4 (A4) — per-type cell coercion for custom field imports.
+ * Returns the raw string to forward to the server (which will JSON-
+ * parse / cast per the field's type) or undefined to drop the cell
+ * with a row-level warning. Surface-level validation only — the
+ * server-side validator in src/modules/custom-fields/validators.ts
+ * is the authoritative check.
+ */
+function coerceCustomFieldCell(
+  def: ImportCustomFieldDef,
+  raw: string,
+  warnings: string[],
+): string | undefined {
+  switch (def.fieldType) {
+    case "number":
+    case "currency":
+      if (Number.isFinite(Number(raw))) return raw
+      warnings.push(`Custom field "${def.name}" expects a number; "${raw}" was skipped`)
+      return undefined
+    case "date":
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+      warnings.push(`Custom field "${def.name}" expects YYYY-MM-DD; "${raw}" was skipped`)
+      return undefined
+    case "checkbox": {
+      const lower = raw.toLowerCase()
+      if (["true", "yes", "y", "1"].includes(lower)) return "true"
+      if (["false", "no", "n", "0"].includes(lower)) return "false"
+      warnings.push(`Custom field "${def.name}" expects true/false; "${raw}" was skipped`)
+      return undefined
+    }
+    default:
+      // text / multiline / email / phone / url / select-style /
+      // reference / file / image — accept the raw value; the
+      // server-side validator does authoritative checks.
+      return raw
+  }
+}
+
+export function autoMapHeaders(
+  headers: string[],
+  customFields: ImportCustomFieldDef[] = [],
+): (MappingChoice | null)[] {
+  // Push 4 (A4) — extend HEADER_HINTS with per-org custom-field name
+  // aliases. Archived defs are excluded so they can't be auto-mapped
+  // (a UI surface that wouldn't take new writes anyway). The
+  // intrinsic-side aliases still win; only previously-unmatched
+  // headers fall through to the custom-field check.
+  const cfHints = new Map<string, `cf:${string}`>()
+  for (const def of customFields) {
+    if (def.archivedAt) continue
+    cfHints.set(normalizeHeader(def.name), buildCustomFieldMapping(def.id))
+  }
+  return headers.map((h) => {
+    const n = normalizeHeader(h)
+    const intrinsic = HEADER_HINTS[n]
+    if (intrinsic) return intrinsic
+    return cfHints.get(n) ?? null
+  })
 }
 
 // ─── Field-type sniffing (mapping-step warnings) ───────────────────────
@@ -374,6 +463,11 @@ export function parseTagsCell(raw: string): string[] {
 export interface CleanRow {
   rowIndex: number // 1-based for user-facing error reporting
   values: Partial<Record<ImportableField, string>>
+  /** Push 4 (A4) — raw string values for any cf:* mappings, keyed by
+   * custom field definition id. The server import action turns these
+   * into a custom_fields jsonb on the contact row, with per-type
+   * coercion (numbers, booleans, multi-select arrays). */
+  customValues: Record<string, string>
   errors: string[]
   warnings: string[]
 }
@@ -381,16 +475,35 @@ export interface CleanRow {
 export function buildCleanRow(
   rowIndex: number,
   rawRow: string[],
-  mapping: (ImportableField | null)[],
+  mapping: (MappingChoice | null)[],
+  customFields: ImportCustomFieldDef[] = [],
 ): CleanRow {
   const values: Partial<Record<ImportableField, string>> = {}
+  const customValues: Record<string, string> = {}
   const errors: string[] = []
   const warnings: string[] = []
+  const cfDefById = new Map(customFields.map((d) => [d.id, d]))
   for (let i = 0; i < mapping.length; i++) {
     const field = mapping[i]
     if (!field) continue
     const raw = (rawRow[i] ?? "").trim()
     if (!raw) continue
+    if (isCustomFieldMapping(field)) {
+      const fieldId = customFieldIdFromMapping(field)
+      const def = cfDefById.get(fieldId)
+      // Defensive: drop mappings whose def has gone (deleted between
+      // mapping step and import submit).
+      if (!def) continue
+      // Per-type validation: surface a warning + drop when the cell
+      // value doesn't look right for the field's type. The server
+      // validator (host-helpers.prepareCustomFieldsForCreate) does
+      // the authoritative check; this is just a friendlier UX so
+      // import error rows are smaller.
+      const typed = coerceCustomFieldCell(def, raw, warnings)
+      if (typed === undefined) continue
+      customValues[fieldId] = typed
+      continue
+    }
     values[field] = raw
   }
 
@@ -461,7 +574,7 @@ export function buildCleanRow(
     }
   }
 
-  return { rowIndex, values, errors, warnings }
+  return { rowIndex, values, customValues, errors, warnings }
 }
 
 /**

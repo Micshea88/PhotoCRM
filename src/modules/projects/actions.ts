@@ -91,6 +91,13 @@ async function assertMemberOfOrg(db: DbHandle, userId: string, orgId: string) {
 // (Event) form. Use listActiveFieldDefinitionsForRecordType('project')
 // for the form rendering. The engine + validators are wired here; the
 // UI is the only remaining work.
+//
+// TODO Push P4.x (Events list UI): the saved-views custom-field
+// column / filter / sort engine is record_type-agnostic — call
+// listActiveFieldDefinitionsForRecordType('project') from the events
+// list page's Edit Columns + More Filters loaders and the saved-view
+// jsonb (`field: "customField.<fieldId>"`) plumbing will work the
+// same way it does on /contacts.
 
 export const createProject = orgAction
   .metadata({ actionName: "projects.create" })

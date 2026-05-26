@@ -83,13 +83,35 @@ function isCustomFieldOp(op: string): op is CustomFieldFilter["op"] {
 function mergeViewFiltersIntoOverrides(
   overrides: ContactFilterOverrides,
   storedFilters: unknown[] | null,
+  cfDefsByFieldId: Map<string, { fieldType: string }>,
 ): ContactFilterOverrides {
   if (!storedFilters || storedFilters.length === 0) return overrides
   const out: ContactFilterOverrides = { ...overrides }
+  // Accumulator for custom-field filters lifted out of the stored
+  // saved-view filter array. URL overrides win — only entries the URL
+  // didn't already supply land here.
+  const urlCfKeys = new Set((out.customFields ?? []).map((cf) => `${cf.fieldId}:${cf.op}`))
+  const cfFromView: CustomFieldFilter[] = []
   for (const raw of storedFilters) {
     if (!raw || typeof raw !== "object") continue
     const f = raw as { field?: unknown; op?: unknown; value?: unknown }
     if (typeof f.field !== "string") continue
+    // Push 4 (A4) — custom field filters in saved-view jsonb use the
+    // `field: "customField.<fieldId>"` namespacing convention (set by
+    // contacts-shell.tsx:serializeFiltersFromParams). Translate them
+    // back into the URL-overrides shape so the list query receives
+    // them and the More Filters drawer reflects active state.
+    if (f.field.startsWith("customField.")) {
+      const fieldId = f.field.slice("customField.".length)
+      const def = cfDefsByFieldId.get(fieldId)
+      const drawerOp = canonicalToDrawerOp(typeof f.op === "string" ? f.op : "", def?.fieldType)
+      if (!fieldId || !drawerOp) continue
+      const valueStr = typeof f.value === "string" ? f.value : null
+      if (!valueStr) continue
+      if (urlCfKeys.has(`${fieldId}:${drawerOp}`)) continue
+      cfFromView.push({ fieldId, op: drawerOp, value: valueStr })
+      continue
+    }
     switch (f.field) {
       case "contactType":
         if (!out.contactType && typeof f.value === "string") out.contactType = f.value
@@ -136,7 +158,40 @@ function mergeViewFiltersIntoOverrides(
         break
     }
   }
+  if (cfFromView.length > 0) {
+    out.customFields = [...(out.customFields ?? []), ...cfFromView]
+  }
   return out
+}
+
+/**
+ * Translate the canonical filter op (the shape stored in the
+ * saved_views.filters jsonb) back into the drawer-side op set
+ * (contains / eq / in / min / max / from / to) that the URL params +
+ * buildContactConditions both speak. Mirrors the inverse mapping in
+ * contacts-shell.tsx:serializeFiltersFromParams.
+ *
+ * Returns null when the op isn't recognised for a custom field —
+ * silently dropped (forward-compat).
+ */
+function canonicalToDrawerOp(
+  canonical: string,
+  fieldType: string | undefined,
+): CustomFieldFilter["op"] | null {
+  switch (canonical) {
+    case "contains":
+      return "contains"
+    case "eq":
+      return "eq"
+    case "in":
+      return "in"
+    case "gte":
+      return fieldType === "date" || fieldType === "datetime" ? "from" : "min"
+    case "lte":
+      return fieldType === "date" || fieldType === "datetime" ? "to" : "max"
+    default:
+      return null
+  }
 }
 
 export default async function ContactsPage({
@@ -184,9 +239,11 @@ export default async function ContactsPage({
         const activeView = savedViewRows.find((v) => v.id === activeViewId) ?? defaultView
 
         // Merge view-stored filters with URL overrides (URL wins).
+        const cfDefsByFieldId = new Map(cfDefs.map((d) => [d.id, { fieldType: d.fieldType }]))
         const appliedFilters = mergeViewFiltersIntoOverrides(
           urlOverrides,
           (activeView?.filters as unknown[] | null) ?? null,
+          cfDefsByFieldId,
         )
 
         // Pagination — page + pageSize resolved from URL with prefs fallback.
@@ -262,6 +319,7 @@ export default async function ContactsPage({
                 : null,
               updatedAt: contact.updatedAt.toISOString(),
               notes: contact.notes,
+              customFields: contact.customFields,
             }
           }),
           totalCount: contactResult.totalCount,
@@ -301,6 +359,7 @@ export default async function ContactsPage({
             name: d.name,
             fieldType: d.fieldType,
             options: (d.options as { choices?: { value: string; label: string }[] } | null) ?? null,
+            archivedAt: d.archivedAt ? d.archivedAt.toISOString() : null,
           })),
           orgMembers,
         }

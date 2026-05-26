@@ -9,6 +9,7 @@ import { previewContactsImport, runContactsImport } from "../import-actions"
 import {
   autoMapHeaders,
   buildCleanRow,
+  buildCustomFieldMapping,
   buildErrorsCsv,
   CSV_MAX_ROWS,
   detectFieldType,
@@ -17,10 +18,13 @@ import {
   findCsvInternalDuplicates,
   firstNonEmptySample,
   IMPORTABLE_FIELDS,
+  isCustomFieldMapping,
   parseCsv,
   type CleanRow,
   type DetectedType,
   type ImportableField,
+  type ImportCustomFieldDef,
+  type MappingChoice,
   type ParsedCsv,
 } from "../import-spec"
 
@@ -103,10 +107,14 @@ export function ContactsImportWizard({
   currentUserId,
   orgMembers,
   existingTags,
+  customFieldDefs,
 }: {
   currentUserId: string
   orgMembers: OrgMember[]
   existingTags: string[]
+  /** Push 4 (A4) — non-archived contact custom field defs for the
+   * mapping dropdown's Custom fields optgroup. Empty array OK. */
+  customFieldDefs: ImportCustomFieldDef[]
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -127,7 +135,7 @@ export function ContactsImportWizard({
   }
 
   const [parsed, setParsed] = useState<ParsedCsv | null>(null)
-  const [mapping, setMapping] = useState<(ImportableField | null)[]>([])
+  const [mapping, setMapping] = useState<(MappingChoice | null)[]>([])
   const [cleanRows, setCleanRows] = useState<CleanRow[]>([])
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([])
   const [orgMemberEmails, setOrgMemberEmails] = useState<string[]>([])
@@ -199,7 +207,7 @@ export function ContactsImportWizard({
         return
       }
       setParsed(next)
-      setMapping(autoMapHeaders(next.headers))
+      setMapping(autoMapHeaders(next.headers, customFieldDefs))
       goToStep("map")
     } catch {
       setError(
@@ -214,7 +222,7 @@ export function ContactsImportWizard({
   async function continueToPreview() {
     if (!parsed) return
     setError(null)
-    const cleaned = parsed.rows.map((row, i) => buildCleanRow(i + 1, row, mapping))
+    const cleaned = parsed.rows.map((row, i) => buildCleanRow(i + 1, row, mapping, customFieldDefs))
     setCleanRows(cleaned)
     const sendable = cleaned.filter((c) => c.errors.length === 0)
     if (sendable.length === 0) {
@@ -228,6 +236,7 @@ export function ContactsImportWizard({
       rows: sendable.map((c) => ({
         rowIndex: c.rowIndex,
         values: stripUndefined(c.values),
+        customValues: c.customValues,
       })),
     })
     setBusy(false)
@@ -306,6 +315,7 @@ export function ContactsImportWizard({
         return {
           rowIndex: c.rowIndex,
           values: stripUndefined(c.values),
+          customValues: c.customValues,
           action: p?.action ?? "create",
           matchedContactId: p?.matchedContactId ?? null,
         }
@@ -393,6 +403,7 @@ export function ContactsImportWizard({
           rowCount={parsed.rows.length}
           sampleValues={sampleValues}
           detectedTypes={detectedTypes}
+          customFieldDefs={customFieldDefs}
           busy={busy}
           onBack={() => {
             goToStep("upload")
@@ -521,18 +532,22 @@ function MapStep({
   busy,
   onBack,
   onNext,
+  customFieldDefs,
 }: {
   headers: string[]
-  mapping: (ImportableField | null)[]
-  onChange: (next: (ImportableField | null)[]) => void
+  mapping: (MappingChoice | null)[]
+  onChange: (next: (MappingChoice | null)[]) => void
   rowCount: number
   sampleValues: string[]
   detectedTypes: DetectedType[]
   busy: boolean
   onBack: () => void
   onNext: () => void
+  customFieldDefs: ImportCustomFieldDef[]
 }) {
-  const mapped = new Set(mapping.filter((m): m is ImportableField => !!m))
+  const mapped = new Set(
+    mapping.filter((m): m is ImportableField => typeof m === "string" && !isCustomFieldMapping(m)),
+  )
   // Push 2c.1 — preview enables when at least one identifier-shaped
   // field is mapped. lastName preferred, fullName equivalent, email
   // also works (HubSpot pattern: email-only leads are common).
@@ -563,9 +578,15 @@ function MapStep({
             {headers.map((h, i) => {
               const chosen = mapping[i] ?? null
               const detected = detectedTypes[i] ?? null
-              const agrees = detectionAgreesWithMapping(detected, chosen)
-              const showWarning = detected !== null && chosen !== null && !agrees
-              const showSuggestionCheck = detected !== null && chosen !== null && agrees
+              // Custom-field mappings (cf:*) skip the detection-mismatch
+              // warning since the wizard's coerceCustomFieldCell already
+              // surfaced any type concerns row-by-row.
+              const intrinsic: ImportableField | null =
+                chosen !== null && !isCustomFieldMapping(chosen) ? chosen : null
+              const agrees = intrinsic ? detectionAgreesWithMapping(detected, intrinsic) : true
+              const detectedMismatch =
+                detected !== null && intrinsic !== null && !agrees ? intrinsic : null
+              const showSuggestionCheck = detected !== null && intrinsic !== null && agrees
               return (
                 <tr key={h + String(i)} className="border-t border-[var(--color-border)] align-top">
                   <td className="px-3 py-2 font-mono text-xs">{h}</td>
@@ -578,17 +599,29 @@ function MapStep({
                         value={chosen ?? ""}
                         onChange={(e) => {
                           const next = [...mapping]
-                          next[i] = (e.target.value || null) as ImportableField | null
+                          const v = e.target.value
+                          next[i] = v ? (v as MappingChoice) : null
                           onChange(next)
                         }}
                         className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
                       >
                         <option value="">— Don&apos;t include in import —</option>
-                        {IMPORTABLE_FIELDS.map((f) => (
-                          <option key={f} value={f}>
-                            {FIELD_LABELS[f]}
-                          </option>
-                        ))}
+                        <optgroup label="Standard fields">
+                          {IMPORTABLE_FIELDS.map((f) => (
+                            <option key={f} value={f}>
+                              {FIELD_LABELS[f]}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customFieldDefs.length > 0 && (
+                          <optgroup label="Custom fields">
+                            {customFieldDefs.map((def) => (
+                              <option key={def.id} value={buildCustomFieldMapping(def.id)}>
+                                {def.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       {showSuggestionCheck && (
                         <span
@@ -600,10 +633,10 @@ function MapStep({
                         </span>
                       )}
                     </div>
-                    {showWarning && (
+                    {detectedMismatch && (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                         This column looks like {humanizeType(detected)} but is mapped to{" "}
-                        {FIELD_LABELS[chosen]}.
+                        {FIELD_LABELS[detectedMismatch]}.
                       </p>
                     )}
                   </td>

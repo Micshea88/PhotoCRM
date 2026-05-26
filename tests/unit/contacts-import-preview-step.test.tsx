@@ -56,7 +56,7 @@ function makeClean(
   errors: string[] = [],
   warnings: string[] = [],
 ): CleanRow {
-  return { rowIndex, values, errors, warnings }
+  return { rowIndex, values, customValues: {}, errors, warnings }
 }
 
 function makePreview(

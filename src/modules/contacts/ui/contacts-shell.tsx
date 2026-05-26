@@ -293,6 +293,7 @@ export function ContactsShell({
             onColumnConfigChange={setColumnConfig}
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
+            customFieldDefs={customFieldDefs}
           />
           <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
         </>
@@ -312,6 +313,7 @@ export function ContactsShell({
         }}
         columns={columnConfig}
         onChange={setColumnConfig}
+        customFieldDefs={customFieldDefs}
       />
     </div>
   )

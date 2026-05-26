@@ -1,5 +1,12 @@
 import { contactLabel } from "../display"
 import { formatPhoneDisplay } from "@/lib/format/phone"
+import {
+  buildCustomFieldColumnId,
+  customFieldColumnLabel,
+  formatCustomFieldCell,
+  readCustomFieldValue,
+  type ListCustomFieldDef,
+} from "@/modules/custom-fields/ui/column-helpers"
 
 /**
  * Column registry for the contacts list. Each entry maps a stable
@@ -45,6 +52,10 @@ export interface ContactRow {
   ownerName: string | null
   updatedAt: string | null
   notes: string | null
+  /** Push 4 (A4) — raw custom_fields jsonb. The column renderer reads
+   * the per-definition value from here. Nullable because most
+   * contacts won't have any. */
+  customFields: Record<string, unknown> | null
 }
 
 export interface ContactColumnDef {
@@ -298,19 +309,63 @@ export interface ColumnConfigItem {
 }
 
 /**
+ * Push 4 (A4) — build a per-custom-field column def. Used to extend
+ * the column registry dynamically at render time. The id namespacing
+ * (`cf:<fieldId>`) is centralised in
+ * `@/modules/custom-fields/ui/column-helpers`.
+ */
+function buildCustomFieldColumnDef(def: ListCustomFieldDef): ContactColumnDef {
+  const id = buildCustomFieldColumnId(def.id)
+  const render = (row: ContactRow) =>
+    formatCustomFieldCell(def, readCustomFieldValue(row.customFields, def.id))
+  return {
+    id,
+    label: customFieldColumnLabel(def),
+    defaultWidth: 180,
+    render,
+    measureText: render,
+  }
+}
+
+/**
+ * Compose the intrinsic CONTACT_COLUMN_REGISTRY with per-org custom
+ * field definitions. Used by `resolveContactColumns` callers (Edit
+ * columns drawer, table render). When no custom fields are defined
+ * yet, the merged registry equals the intrinsic one.
+ */
+export function buildContactColumnRegistry(
+  customFieldDefs: ListCustomFieldDef[],
+): Record<string, ContactColumnDef> {
+  const merged: Record<string, ContactColumnDef> = { ...CONTACT_COLUMN_REGISTRY }
+  for (const def of customFieldDefs) {
+    const cfCol = buildCustomFieldColumnDef(def)
+    merged[cfCol.id] = cfCol
+  }
+  return merged
+}
+
+/**
  * Resolve a stored column_config (or empty/missing) into the actual
- * ordered + visible columns to render. Two responsibilities:
+ * ordered + visible columns to render. Three responsibilities:
  *   1. Drop ids that no longer exist in the registry (forward-compat).
  *   2. Append registry ids missing from the saved config as
  *      hidden-by-default, so the Edit columns drawer can offer them.
+ *   3. Push 4 (A4) — merge per-org custom-field columns into the
+ *      registry before resolving. When `customFieldDefs` is omitted,
+ *      behavior matches pre-A4 (intrinsic-only).
  */
-export function resolveContactColumns(saved: ColumnConfigItem[]): {
+export function resolveContactColumns(
+  saved: ColumnConfigItem[],
+  customFieldDefs: ListCustomFieldDef[] = [],
+): {
   visible: ContactColumnDef[]
   all: (ColumnConfigItem & { def: ContactColumnDef })[]
 } {
-  const inRegistry = saved.filter((c) => CONTACT_COLUMN_REGISTRY[c.id])
+  const registry = buildContactColumnRegistry(customFieldDefs)
+  const allIds = Object.keys(registry)
+  const inRegistry = saved.filter((c) => registry[c.id])
   const knownIds = new Set(inRegistry.map((c) => c.id))
-  const missing = ALL_CONTACT_COLUMN_IDS.filter((id) => !knownIds.has(id))
+  const missing = allIds.filter((id) => !knownIds.has(id))
   // Hidden-by-default fallback. The first time a user opens Edit
   // columns these will show up unchecked at the bottom.
   const maxOrder = inRegistry.reduce((m, c) => Math.max(m, c.order), -1)
@@ -325,7 +380,7 @@ export function resolveContactColumns(saved: ColumnConfigItem[]): {
   ].sort((a, b) => a.order - b.order)
 
   const all = padded.flatMap((c) => {
-    const def = CONTACT_COLUMN_REGISTRY[c.id]
+    const def = registry[c.id]
     return def ? [{ ...c, def }] : []
   })
   const visible = all.filter((c) => c.visible).map((c) => c.def)

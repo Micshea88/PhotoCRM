@@ -109,6 +109,9 @@ export const projects = pgTable(
     ),
     index("projects_org_primary_date_idx").on(t.organizationId, t.primaryDate, t.deletedAt),
     index("projects_org_type_deleted_idx").on(t.organizationId, t.projectType, t.deletedAt),
+    // Push 4 (A4) — GIN index on custom_fields jsonb for the future
+    // events list's custom-field filters.
+    index("projects_custom_fields_gin_idx").using("gin", t.customFields),
   ],
 )
 

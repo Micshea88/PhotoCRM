@@ -91,6 +91,9 @@ export const opportunities = pgTable(
     index("opportunities_org_owner_deleted_idx").on(t.organizationId, t.ownerUserId, t.deletedAt),
     // Average time in stage: stage_changed_at index.
     index("opportunities_stage_changed_idx").on(t.stageId, t.stageChangedAt),
+    // Push 4 (A4) — GIN index on custom_fields jsonb for the future
+    // pipeline list's custom-field filters.
+    index("opportunities_custom_fields_gin_idx").using("gin", t.customFields),
   ],
 )
 

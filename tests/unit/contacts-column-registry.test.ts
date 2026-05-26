@@ -76,6 +76,7 @@ function makeRow(overrides: Partial<ContactRow> = {}): ContactRow {
     ownerName: null,
     updatedAt: null,
     notes: null,
+    customFields: null,
     ...overrides,
   }
 }

@@ -8,6 +8,12 @@ import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { member, user } from "@/modules/auth/schema"
 import { companies } from "@/modules/companies/schema"
+import { listFieldDefinitionsForRecordTypeWithDb } from "@/modules/custom-fields/queries"
+import {
+  prepareCustomFieldsForCreate,
+  prepareCustomFieldsForUpdate,
+} from "@/modules/custom-fields/host-helpers"
+import type { CustomFieldDefinition } from "@/modules/custom-fields/schema"
 import { contacts } from "./schema"
 import {
   CSV_MAX_ROWS,
@@ -16,6 +22,59 @@ import {
   parseTagsCell,
   type ImportableField,
 } from "./import-spec"
+
+const CONTACT_RECORD_TYPE = "contact"
+
+/**
+ * Push 4 (A4) — turn the wizard's per-row raw string values into the
+ * typed jsonb shape the custom-field validators expect. Unknown
+ * field ids are silently dropped; per-row malformed cells fall
+ * through to the validator's exception (caught in the action loop).
+ *
+ * Booleans accept the standard human spellings (true/yes/y/1 → true,
+ * false/no/n/0 → false). Multi-select cells split on `,` or `;` and
+ * trim whitespace. Numeric / currency cast via Number(). Everything
+ * else passes through as the string the user uploaded.
+ */
+function coerceImportCustomValues(
+  defById: Map<string, CustomFieldDefinition>,
+  raw: Record<string, string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [fieldId, value] of Object.entries(raw)) {
+    const def = defById.get(fieldId)
+    if (!def) continue
+    switch (def.fieldType) {
+      case "checkbox": {
+        const lower = value.toLowerCase()
+        if (["true", "yes", "y", "1"].includes(lower)) out[fieldId] = true
+        else if (["false", "no", "n", "0"].includes(lower)) out[fieldId] = false
+        break
+      }
+      case "number":
+      case "currency": {
+        const n = Number(value)
+        if (Number.isFinite(n)) out[fieldId] = n
+        break
+      }
+      case "multi_select": {
+        const items = value
+          .split(/[,;]/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (items.length > 0) out[fieldId] = items
+        break
+      }
+      default:
+        // text / multiline / email / phone / url / date / datetime /
+        // select-style / reference / file / image / formula — all
+        // pass through as strings. The custom-fields validator on the
+        // server casts/checks per-type.
+        out[fieldId] = value
+    }
+  }
+  return out
+}
 
 /**
  * Push 2c / 2c.1 — CSV import. Two-step server contract:
@@ -38,6 +97,12 @@ const importableFieldsSet = new Set<string>(IMPORTABLE_FIELDS)
 const importRowSchema = z.object({
   rowIndex: z.number().int().min(1),
   values: z.record(z.string(), z.string()),
+  // Push 4 (A4) — raw string values for any cf:* mappings, keyed by
+  // custom_field_definitions.id. Per-type coercion happens at the
+  // action layer below (string → number / boolean / multi-select
+  // array). The server-side validator does the authoritative shape
+  // check via prepareCustomFieldsForCreate / ForUpdate.
+  customValues: z.record(z.string(), z.string()).optional(),
 })
 
 const previewInput = z.object({
@@ -379,6 +444,44 @@ export const runContactsImport = orgAction
 
     const bulk = await loadBulkContext(ctx, parsedInput)
 
+    // Push 4 (A4) — fetch this org's contact custom field defs once so
+    // per-row coercion + the create/update helpers don't re-query each
+    // row. Includes archived defs (the helpers split active/archived
+    // internally) so update paths can preserve archived-keyed values
+    // on rows that still carry them.
+    const cfDefs = await listFieldDefinitionsForRecordTypeWithDb(ctx.db, CONTACT_RECORD_TYPE)
+    const cfDefById = new Map(cfDefs.map((d) => [d.id, d]))
+    const hasAnyCustomValues = parsedInput.rows.some(
+      (r) => r.customValues && Object.keys(r.customValues).length > 0,
+    )
+    // Batch-load existing custom_fields jsonb for update targets when
+    // ANY row carries a cf:* mapping. Skipping the batch when no
+    // custom-field mappings exist keeps the existing import flow free
+    // of the extra read.
+    const existingCustomFieldsById = new Map<string, Record<string, unknown> | null>()
+    if (hasAnyCustomValues) {
+      const updateIds = parsedInput.rows
+        .filter(
+          (r): r is typeof r & { matchedContactId: string } =>
+            r.action === "update" && typeof r.matchedContactId === "string",
+        )
+        .map((r) => r.matchedContactId)
+      const distinct = [...new Set(updateIds)]
+      if (distinct.length > 0) {
+        const rows = await ctx.db
+          .select({ id: contacts.id, customFields: contacts.customFields })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.organizationId, ctx.activeOrg.id),
+              isNull(contacts.deletedAt),
+              inArray(contacts.id, distinct),
+            ),
+          )
+        for (const row of rows) existingCustomFieldsById.set(row.id, row.customFields)
+      }
+    }
+
     // Pre-resolve update target ids so a stale client id can't update
     // a row in another org. RLS would catch it but error messages are
     // better when we fail-fast.
@@ -423,6 +526,42 @@ export const runContactsImport = orgAction
       }
       const ownerUserId = ownerResolution.ownerUserId ?? ctx.session.user.id
       const { patch } = buildPatch(values, bulk)
+      // Push 4 (A4) — coerce + validate the per-row custom-field
+      // values from raw strings into typed jsonb (number / boolean /
+      // multi-select array / etc), then merge with archive-aware
+      // semantics on update. The helpers throw on malformed values
+      // which we surface as a per-row error rather than failing the
+      // batch.
+      let cfPatchValue: Record<string, unknown> | null = null
+      const rawCfValues = r.customValues ?? {}
+      const hasCustomMappings = Object.keys(rawCfValues).length > 0
+      try {
+        if (hasCustomMappings) {
+          const typed = coerceImportCustomValues(cfDefById, rawCfValues)
+          if (r.action === "create") {
+            const prep = await prepareCustomFieldsForCreate(ctx.db, CONTACT_RECORD_TYPE, typed)
+            cfPatchValue = prep.value
+          } else {
+            const existing = existingCustomFieldsById.get(r.matchedContactId ?? "") ?? null
+            const prep = await prepareCustomFieldsForUpdate(
+              ctx.db,
+              CONTACT_RECORD_TYPE,
+              existing,
+              typed,
+            )
+            cfPatchValue = prep.value
+          }
+        }
+      } catch (err) {
+        results.push({
+          rowIndex: r.rowIndex,
+          ok: false,
+          error: err instanceof Error ? err.message : "Custom field validation failed",
+        })
+        errorCount++
+        continue
+      }
+
       try {
         if (r.action === "create") {
           if (!patch.firstName || !patch.lastName) {
@@ -448,6 +587,7 @@ export const runContactsImport = orgAction
             contactType: patch.contactType ?? null,
             lifecycleStatus: patch.lifecycleStatus ?? null,
             tags: patch.tags ?? null,
+            customFields: cfPatchValue,
             ownerUserId,
             createdBy: ctx.session.user.id,
             updatedBy: ctx.session.user.id,
@@ -483,6 +623,11 @@ export const runContactsImport = orgAction
               // "self" mode leaves existing contact owners alone on
               // update to avoid silently reassigning others' contacts.
               ...(parsedInput.ownerMode === "self" ? {} : { ownerUserId }),
+              // Push 4 (A4) — only touch customFields when this row
+              // mapped at least one cf:* column. No mapping = leave
+              // existing jsonb intact (matches the action-layer
+              // "no scrubbing" invariant from A3).
+              ...(hasCustomMappings ? { customFields: cfPatchValue } : {}),
               updatedAt: new Date(),
               updatedBy: ctx.session.user.id,
             })

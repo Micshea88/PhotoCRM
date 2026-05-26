@@ -105,6 +105,10 @@ export const contacts = pgTable(
     // GIN index for tag containment queries (tags @> ARRAY['vip']).
     // Drizzle doesn't have first-class GIN-on-array; raw SQL via name().
     index("contacts_tags_gin_idx").using("gin", t.tags),
+    // Push 4 (A4) — GIN index on custom_fields jsonb. Backs the
+    // /contacts list's custom-field filters (contains / eq / in /
+    // gte / lte) via the ->> + ? path operators.
+    index("contacts_custom_fields_gin_idx").using("gin", t.customFields),
     // Email index for duplicate detection (Requirements §6.1).
     index("contacts_org_email_idx").on(t.organizationId, t.primaryEmail),
     // P4.2 push 2a.5 — fast filter for the main list query which excludes

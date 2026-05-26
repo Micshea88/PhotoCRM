@@ -7,6 +7,7 @@ import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { Button } from "@/components/ui/button"
 import { listDistinctContactTags } from "@/modules/contacts/filter-spec"
+import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { ContactsImportWizard } from "@/modules/contacts/ui/contacts-import-wizard"
 
 export const dynamic = "force-dynamic"
@@ -26,8 +27,19 @@ export default async function ContactsImportPage() {
     async () => {
       const extended = (await getExtendedMemberRole(session.user.id)) ?? tentativeRole
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
-        const tags = await listDistinctContactTags()
-        return { tags }
+        const [tags, cfDefs] = await Promise.all([
+          listDistinctContactTags(),
+          listActiveFieldDefinitionsForRecordType("contact"),
+        ])
+        return {
+          tags,
+          customFieldDefs: cfDefs.map((d) => ({
+            id: d.id,
+            name: d.name,
+            fieldType: d.fieldType,
+            archivedAt: d.archivedAt ? d.archivedAt.toISOString() : null,
+          })),
+        }
       })
     },
   )
@@ -54,6 +66,7 @@ export default async function ContactsImportPage() {
         currentUserId={session.user.id}
         orgMembers={members}
         existingTags={data.tags}
+        customFieldDefs={data.customFieldDefs}
       />
     </div>
   )

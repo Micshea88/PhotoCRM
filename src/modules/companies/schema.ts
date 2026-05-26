@@ -61,6 +61,10 @@ export const companies = pgTable(
       t.deletedAt,
       t.createdAt.desc(),
     ),
+    // Push 4 (A4) — GIN index on custom_fields jsonb for the future
+    // /companies list's custom-field filters. Engine-agnostic: same
+    // index shape as contacts/opportunities/projects.
+    index("companies_custom_fields_gin_idx").using("gin", t.customFields),
   ],
 )
 

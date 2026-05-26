@@ -32,6 +32,15 @@ const COMPANY_RECORD_TYPE = "company"
  * company form. Use listActiveFieldDefinitionsForRecordType('company')
  * for the form rendering. The engine + validators are wired here;
  * the UI is the only remaining work.
+ *
+ * TODO Push P4.x (Companies list UI): the saved-views custom-field
+ * column / filter / sort plumbing is entity-agnostic (see
+ * src/modules/custom-fields/ui/column-helpers.ts and the contacts
+ * list integration in /contacts/page.tsx). The companies list page
+ * should call listActiveFieldDefinitionsForRecordType('company') for
+ * the Edit Columns + More Filters drawers, and the saved-view
+ * filters jsonb will pick up `customField.<fieldId>` entries
+ * automatically via the same `field:` namespacing.
  */
 export const createCompany = orgAction
   .metadata({ actionName: "companies.create" })

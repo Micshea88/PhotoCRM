@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { DeleteConfirmModal } from "@/components/ui/delete-confirm-modal"
+import type { ListCustomFieldDef } from "@/modules/custom-fields/ui/column-helpers"
 import { archiveContact, deleteContact } from "../actions"
 import { fontFromElement, getMeasurementContext, measureColumnAutoFit } from "./column-auto-fit"
 import { resolveContactColumns, type ColumnConfigItem, type ContactRow } from "./columns"
@@ -40,6 +41,9 @@ interface ContactsTableProps {
   /** Push 2c — controlled selection state for bulk actions. */
   selectedIds: Set<string>
   onSelectedIdsChange: (next: Set<string>) => void
+  /** Push 4 (A4) — per-org custom field definitions. Merged into the
+   * column registry at render time so cf:* column ids resolve. */
+  customFieldDefs?: ListCustomFieldDef[]
 }
 
 export type { ContactRow }
@@ -68,6 +72,7 @@ export function ContactsTable({
   onColumnConfigChange,
   selectedIds,
   onSelectedIdsChange,
+  customFieldDefs,
 }: ContactsTableProps) {
   // Header checkbox tri-state: all visible selected / partial / none.
   const allOnPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
@@ -102,7 +107,7 @@ export function ContactsTable({
   // scroll / resize events and paint an always-visible thumb.
   const scrollWrapperRef = useRef<HTMLDivElement | null>(null)
 
-  const resolved = resolveContactColumns(columnConfig)
+  const resolved = resolveContactColumns(columnConfig, customFieldDefs ?? [])
   const visibleIds = resolved.visible.map((c) => c.id)
 
   function onArchive(id: string) {

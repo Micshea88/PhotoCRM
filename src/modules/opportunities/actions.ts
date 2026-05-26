@@ -136,6 +136,13 @@ async function assertPipelineInOrg(db: DbHandle, pipelineId: string, orgId: stri
 // opportunity form. Use listActiveFieldDefinitionsForRecordType('opportunity')
 // for the form rendering. The engine + validators are wired here; the
 // UI is the only remaining work.
+//
+// TODO Push P4.x (Pipeline list UI): the saved-views custom-field
+// column / filter / sort engine is record_type-agnostic — call
+// listActiveFieldDefinitionsForRecordType('opportunity') from the
+// pipeline list page's Edit Columns + More Filters loaders and the
+// saved-view jsonb (`field: "customField.<fieldId>"`) plumbing will
+// work the same way it does on /contacts.
 
 export const createOpportunity = orgAction
   .metadata({ actionName: "opportunities.create" })

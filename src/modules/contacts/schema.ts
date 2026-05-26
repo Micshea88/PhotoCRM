@@ -77,6 +77,14 @@ export const contacts = pgTable(
     notes: text("notes"),
     internalNotes: text("internal_notes"),
     customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
+    // Push 4 (A1) — IDs of records merged INTO this contact. Append-
+    // only audit trail; the actual merge action (B2) writes the loser
+    // ids here on each merge so the merge history is recoverable
+    // alongside audit_log.
+    mergedRecordIds: jsonb("merged_record_ids")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),

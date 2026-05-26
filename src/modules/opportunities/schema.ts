@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, date, index } from "drizzle-orm/pg-core"
+import { pgTable, text, integer, jsonb, timestamp, date, index } from "drizzle-orm/pg-core"
 import { organization, user } from "@/modules/auth/schema"
 import { projects } from "@/modules/projects/schema"
 import { contacts } from "@/modules/contacts/schema"
@@ -62,6 +62,10 @@ export const opportunities = pgTable(
     expectedCloseDate: date("expected_close_date"),
     stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
     lostReason: text("lost_reason"),
+    // Push 4 (A1) — custom-fields jsonb. Matches the nullable + no-
+    // default pattern used on contacts/companies/projects/tasks. Reads
+    // use `record.customFields ?? {}` everywhere.
+    customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),

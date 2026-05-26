@@ -20,6 +20,17 @@ export const auditLog = pgTable(
   (t) => [
     index("audit_log_org_created_idx").on(t.organizationId, t.createdAt.desc()),
     index("audit_log_actor_idx").on(t.actorUserId),
+    // Push 4 (A1) — per-record audit history lookups. "Show me all
+    // audit entries for contact X" hits this composite for free.
+    // Same shape Mike's Push 4 spec proposed under a new `audit_logs`
+    // table; instead we re-use the existing `audit_log` (singular)
+    // and add the missing entity-lookup index.
+    index("audit_log_org_resource_created_idx").on(
+      t.organizationId,
+      t.resourceType,
+      t.resourceId,
+      t.createdAt.desc(),
+    ),
   ],
 )
 

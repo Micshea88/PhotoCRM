@@ -35,6 +35,12 @@ export const companies = pgTable(
     instagramHandle: text("instagram_handle"),
     category: text("category"),
     customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
+    // Push 4 (A1) — IDs of companies merged INTO this row. See the
+    // matching column on contacts; same semantic.
+    mergedRecordIds: jsonb("merged_record_ids")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),

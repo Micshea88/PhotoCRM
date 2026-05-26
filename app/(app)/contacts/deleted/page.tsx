@@ -84,10 +84,10 @@ export default async function ContactsDeletedPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-[var(--color-muted-foreground)]">
-                    {row.deletedAt ? new Date(row.deletedAt).toLocaleDateString() : ""}
+                    {new Date(row.deletedAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <RestoreDeletedButton id={row.id} />
+                    <RestoreDeletedButton id={row.id} mergedIntoWinnerId={row.mergedIntoWinnerId} />
                   </td>
                 </tr>
               ))}

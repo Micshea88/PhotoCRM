@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
+import { listFieldDefinitionsForRecordTypeWithDb } from "@/modules/custom-fields/queries"
+import type { ListCustomFieldDef } from "@/modules/custom-fields/ui/column-helpers"
 import type { ExtendedRole } from "@/modules/rbac/types"
 import {
   findDuplicateCompanyGroups,
@@ -19,23 +21,36 @@ import {
   type CompanyDisplayRow,
   type ContactDisplayRow,
 } from "./queries"
+import {
+  executeCompanyMerge,
+  executeContactMerge,
+  mergeCompaniesInput,
+  mergeContactsInput,
+} from "./merge-engine"
 
 /**
- * Push 4 (B1) — On-demand duplicates scans. Owner+Admin only
- * (mirrors the A2 settings/custom-fields gate).
+ * Push 4 (B1 + B2) — duplicates module server actions.
  *
- * Detection is computed-on-demand: no persistence of groups. Each
- * scan loads the active org's records, runs the in-memory matching
- * engine, hydrates display rows for matched ids, and writes a
- * single audit log entry with metadata.recordCount +
- * metadata.resultGroupCount for telemetry. A future V1.x cron
- * version can re-use this same action body — only the trigger
- * changes.
+ * B1 scan actions are computed-on-demand: no persistence of groups.
+ * Each scan loads the active org's records, runs the matching
+ * engine, hydrates display rows, and writes a single audit log
+ * entry with metadata.recordCount + metadata.resultGroupCount for
+ * telemetry. The scan result also includes the active custom field
+ * defs (non-archived) for the entity type — the merge modal labels
+ * cf:* comparison rows from this set.
+ *
+ * B2 merge actions are thin wrappers around `executeContactMerge` /
+ * `executeCompanyMerge` in `./merge-engine`. Engine in a separate
+ * file so integration tests can call it directly via the test DB +
+ * setOrgContext (orgAction needs cookies; tests bypass it).
+ *
+ * RBAC: Owner + Admin only — matches the A2 settings/custom-fields
+ * gating pattern.
  */
 
 function assertOwnerOrAdmin(role: ExtendedRole) {
   if (role !== "owner" && role !== "admin") {
-    throw new ActionError("FORBIDDEN", "Only owners and admins can scan for duplicates.")
+    throw new ActionError("FORBIDDEN", "Only owners and admins can manage duplicates.")
   }
 }
 
@@ -70,8 +85,6 @@ export const scanContactDuplicates = orgAction
         const row = displays.get(id)
         if (row) records.push(row)
       }
-      // A group whose underlying rows all vanished mid-scan is dropped
-      // rather than rendered as an empty card.
       if (records.length < 2) continue
       hydrated.push({ reasons: g.reasons, records })
     }
@@ -94,8 +107,19 @@ export const scanContactDuplicates = orgAction
       },
     )
 
+    const allCfDefs = await listFieldDefinitionsForRecordTypeWithDb(ctx.db, "contact")
+    const customFieldDefs: ListCustomFieldDef[] = allCfDefs
+      .filter((d) => d.archivedAt === null)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        fieldType: d.fieldType,
+        options: (d.options as { choices?: { value: string; label: string }[] } | null) ?? null,
+        archivedAt: d.archivedAt ? d.archivedAt.toISOString() : null,
+      }))
+
     revalidatePath("/contacts/duplicates")
-    return { groups: hydrated, recordCount: candidates.length }
+    return { groups: hydrated, recordCount: candidates.length, customFieldDefs }
   })
 
 export const scanCompanyDuplicates = orgAction
@@ -139,6 +163,62 @@ export const scanCompanyDuplicates = orgAction
       },
     )
 
+    const allCfDefs = await listFieldDefinitionsForRecordTypeWithDb(ctx.db, "company")
+    const customFieldDefs: ListCustomFieldDef[] = allCfDefs
+      .filter((d) => d.archivedAt === null)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        fieldType: d.fieldType,
+        options: (d.options as { choices?: { value: string; label: string }[] } | null) ?? null,
+        archivedAt: d.archivedAt ? d.archivedAt.toISOString() : null,
+      }))
+
     revalidatePath("/companies/duplicates")
-    return { groups: hydrated, recordCount: candidates.length }
+    return { groups: hydrated, recordCount: candidates.length, customFieldDefs }
+  })
+
+// ─── MERGE ACTIONS (B2) ────────────────────────────────────────────────
+
+export const mergeContacts = orgAction
+  .metadata({ actionName: "contacts.merged" })
+  .inputSchema(mergeContactsInput)
+  .action(async ({ parsedInput, ctx }) => {
+    assertOwnerOrAdmin(ctx.activeOrg.role)
+    const result = await executeContactMerge(
+      ctx.db,
+      {
+        organizationId: ctx.activeOrg.id,
+        userId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      parsedInput,
+    )
+    revalidatePath("/contacts")
+    revalidatePath("/contacts/duplicates")
+    revalidatePath("/contacts/deleted")
+    revalidatePath(`/contacts/${result.winnerId}`)
+    return result
+  })
+
+export const mergeCompanies = orgAction
+  .metadata({ actionName: "companies.merged" })
+  .inputSchema(mergeCompaniesInput)
+  .action(async ({ parsedInput, ctx }) => {
+    assertOwnerOrAdmin(ctx.activeOrg.role)
+    const result = await executeCompanyMerge(
+      ctx.db,
+      {
+        organizationId: ctx.activeOrg.id,
+        userId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      parsedInput,
+    )
+    revalidatePath("/contacts")
+    revalidatePath("/companies/duplicates")
+    revalidatePath("/companies/deleted")
+    return result
   })

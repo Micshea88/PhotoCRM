@@ -135,14 +135,50 @@ export async function listContactsByTags(tags: string[]) {
  * Soft-deleted contacts (trash view). Same shape as listContactsForOrg
  * but inverts the deletedAt filter and orders by most-recently-deleted
  * first so the trash UI shows the latest tombstones at the top.
+ *
+ * Push 4 (B2) — also surfaces a `mergedIntoWinnerId` per row: the id
+ * of the live contact whose `merged_record_ids` jsonb contains this
+ * row's id (= "this contact was a merge loser"). The Restore button
+ * uses it to show the spec-mandated warning before restoring a
+ * merged-loser as a separate record.
+ *
+ * The LEFT JOIN uses the jsonb `?` operator (key-exists for arrays of
+ * scalars). The candidate set is bounded to the same org + active
+ * (non-deleted) winners — a winner that was itself later merged
+ * into yet another record would also be deleted, so the lookup
+ * naturally truncates to the most-recent surviving winner.
  */
 export async function listDeletedContactsForOrg() {
   return withOrgContext(async (tx) => {
-    return tx
-      .select()
-      .from(contacts)
-      .where(sql`${contacts.deletedAt} IS NOT NULL`)
-      .orderBy(sql`${contacts.deletedAt} DESC NULLS LAST`)
+    const rows = await tx.execute<{
+      id: string
+      first_name: string
+      last_name: string
+      primary_email: string | null
+      primary_phone: string | null
+      deleted_at: Date
+      merged_into_winner_id: string | null
+    }>(sql`
+      SELECT
+        d.id, d.first_name, d.last_name, d.primary_email, d.primary_phone, d.deleted_at,
+        w.id AS merged_into_winner_id
+      FROM ${contacts} d
+      LEFT JOIN ${contacts} w
+        ON w.organization_id = d.organization_id
+        AND w.deleted_at IS NULL
+        AND w.merged_record_ids ? d.id
+      WHERE d.deleted_at IS NOT NULL
+      ORDER BY d.deleted_at DESC NULLS LAST
+    `)
+    return rows.rows.map((r) => ({
+      id: r.id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      primaryEmail: r.primary_email,
+      primaryPhone: r.primary_phone,
+      deletedAt: r.deleted_at,
+      mergedIntoWinnerId: r.merged_into_winner_id,
+    }))
   })
 }
 

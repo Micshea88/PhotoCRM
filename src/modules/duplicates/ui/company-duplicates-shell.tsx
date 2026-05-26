@@ -3,8 +3,10 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { formatPhoneDisplay } from "@/lib/format/phone"
+import type { ListCustomFieldDef } from "@/modules/custom-fields/ui/column-helpers"
 import { scanCompanyDuplicates, type CompanyDuplicateGroupView } from "../actions"
 import type { CompanyMatchReason } from "../matching"
+import { CompanyMergeModal } from "./merge-company-modal"
 
 const REASON_LABEL: Record<CompanyMatchReason, string> = {
   domain: "Same domain",
@@ -20,8 +22,10 @@ const REASON_LABEL: Record<CompanyMatchReason, string> = {
 export function CompanyDuplicatesShell() {
   const [groups, setGroups] = useState<CompanyDuplicateGroupView[] | null>(null)
   const [recordCount, setRecordCount] = useState<number | null>(null)
+  const [customFieldDefs, setCustomFieldDefs] = useState<ListCustomFieldDef[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reviewGroup, setReviewGroup] = useState<CompanyDuplicateGroupView | null>(null)
 
   async function runScan() {
     setBusy(true)
@@ -34,6 +38,7 @@ export function CompanyDuplicatesShell() {
     }
     setGroups(result.data?.groups ?? null)
     setRecordCount(result.data?.recordCount ?? null)
+    setCustomFieldDefs(result.data?.customFieldDefs ?? [])
   }
 
   return (
@@ -92,9 +97,7 @@ export function CompanyDuplicatesShell() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Stub — merge UI ships in B2.
-                    // eslint-disable-next-line no-console
-                    console.log("Merge UI ships in B2", g)
+                    setReviewGroup(g)
                   }}
                 >
                   Review
@@ -124,6 +127,19 @@ export function CompanyDuplicatesShell() {
           ))}
         </ul>
       )}
+
+      <CompanyMergeModal
+        open={reviewGroup !== null}
+        group={reviewGroup}
+        customFieldDefs={customFieldDefs}
+        onClose={() => {
+          setReviewGroup(null)
+        }}
+        onMerged={() => {
+          setReviewGroup(null)
+          void runScan()
+        }}
+      />
     </div>
   )
 }

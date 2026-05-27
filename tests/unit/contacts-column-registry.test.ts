@@ -183,6 +183,34 @@ describe("resolveContactColumns backward compat", () => {
   })
 })
 
+describe("displayLabel column (Push 4 hotfix v2)", () => {
+  it("renders bare first + last name — NOT the picker-style 'Name — email' form", () => {
+    const def = registryDef("displayLabel")
+    expect(
+      def.render(
+        makeRow({ firstName: "Ada", lastName: "Lovelace", primaryEmail: "ada@example.com" }),
+      ),
+    ).toBe("Ada Lovelace")
+  })
+
+  it("trims trailing whitespace when one name component is empty", () => {
+    const def = registryDef("displayLabel")
+    expect(def.render(makeRow({ firstName: "Ada", lastName: "" }))).toBe("Ada")
+    expect(def.render(makeRow({ firstName: "", lastName: "Lovelace" }))).toBe("Lovelace")
+  })
+
+  it("falls back to em-dash when both name parts are empty", () => {
+    const def = registryDef("displayLabel")
+    expect(def.render(makeRow({ firstName: "", lastName: "" }))).toBe("—")
+  })
+
+  it("measureText returns the same string as render (auto-fit accuracy)", () => {
+    const def = registryDef("displayLabel")
+    const row = makeRow({ firstName: "Ada", lastName: "Lovelace" })
+    expect(def.measureText(row)).toBe(def.render(row))
+  })
+})
+
 function registryDef(id: string) {
   const def = CONTACT_COLUMN_REGISTRY[id]
   if (!def) throw new Error(`registry missing id: ${id}`)

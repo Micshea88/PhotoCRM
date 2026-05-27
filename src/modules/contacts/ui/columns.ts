@@ -1,4 +1,3 @@
-import { contactLabel } from "../display"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import {
   buildCustomFieldColumnId,
@@ -79,11 +78,32 @@ export interface ContactColumnDef {
 // render function already returns a plain string, measureText is the
 // same function. Listed explicitly per column so a future render change
 // (e.g., adding an icon prefix) won't silently break auto-fit accuracy.
+//
+// Push 4 hotfix v2 — the Name cell renders the bare first + last name
+// with an em-dash fallback for the (defensive) empty-name case.
+//
+// Earlier this called `contactLabel(...)` which produces the
+// "Name — email" / "Name — Company" disambiguation form intended for
+// picker dropdowns (CompanyPicker, ContactRefPicker). That form bled
+// into the list table making the Name column visually noisy and
+// redundant with the dedicated Email column.
+//
+// The column id stays `displayLabel` so existing
+// saved_views.column_config jsonb keeps pointing at the same column —
+// only the cell renderer changes. contactLabel() is still exported
+// from `../display` and used by the picker components + the
+// /contacts/[id] detail header + the /contacts/deleted and
+// /contacts/archived trash views, where the disambiguation form is
+// the right UX.
+//
+// Empty-name fallback: firstName / lastName are NOT NULL in the
+// schema and the contacts.import action defaults missing names to
+// "Unknown", so in practice this branch never fires. It's defensive
+// — matches the em-dash empty-cell convention used elsewhere in
+// the table.
 function displayLabelText(row: ContactRow): string {
-  return contactLabel(
-    { firstName: row.firstName, lastName: row.lastName, primaryEmail: row.primaryEmail },
-    row.companyName,
-  )
+  const name = `${row.firstName} ${row.lastName}`.trim()
+  return name.length > 0 ? name : "—"
 }
 
 export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {

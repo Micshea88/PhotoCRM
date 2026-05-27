@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   CheckSquare,
   ChevronDown,
@@ -235,6 +236,10 @@ function SidebarParentRow({
   onToggleExpanded: () => void
 }) {
   const [popoutOpen, setPopoutOpen] = useState(false)
+  // Popout coordinates in viewport space (top + left in px). null
+  // until measured — render branch waits on this so the popout never
+  // flashes at 0,0 before the first measurement.
+  const [popoutPos, setPopoutPos] = useState<{ top: number; left: number } | null>(null)
   const anchorRef = useRef<HTMLButtonElement>(null)
   const popoutRef = useRef<HTMLDivElement>(null)
 
@@ -248,8 +253,36 @@ function SidebarParentRow({
     setPrevCollapsed(collapsed)
     if (!collapsed && popoutOpen) {
       setPopoutOpen(false)
+      setPopoutPos(null)
     }
   }
+
+  // Closing the popout resets BOTH popoutOpen and popoutPos. Resetting
+  // popoutPos here (rather than in a useLayoutEffect cleanup branch
+  // that would setState-in-effect) keeps the lint rule happy and
+  // prevents a stale-coords flash on the next open.
+  function closePopout() {
+    setPopoutOpen(false)
+    setPopoutPos(null)
+  }
+
+  // Measure the anchor button when the popout opens. The popout is
+  // portaled into document.body to escape the sidebar's
+  // overflow-hidden clip (which exists for the C2 width-collapse
+  // animation). Position: fixed coords come from getBoundingClientRect.
+  //
+  // useLayoutEffect to set the position BEFORE the browser paints —
+  // otherwise the portal would briefly render at top:0/left:0 before
+  // sliding into place.
+  useLayoutEffect(() => {
+    if (!popoutOpen) return
+    const anchor = anchorRef.current
+    if (!anchor) return
+    const rect = anchor.getBoundingClientRect()
+    // 8px gap between the anchor's right edge and the popout's left
+    // edge — matches the previous `ml-2` (8px) spacing.
+    setPopoutPos({ top: rect.top, left: rect.right + 8 })
+  }, [popoutOpen])
 
   useEffect(() => {
     if (!popoutOpen) return
@@ -258,16 +291,26 @@ function SidebarParentRow({
       if (!t) return
       if (popoutRef.current?.contains(t)) return
       if (anchorRef.current?.contains(t)) return
-      setPopoutOpen(false)
+      closePopout()
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setPopoutOpen(false)
+      if (e.key === "Escape") closePopout()
+    }
+    // Scroll or resize while open: just close it. Re-measuring would
+    // work but the popout is ephemeral by design (HubSpot pattern),
+    // and closing on layout shift is the simpler, less janky choice.
+    function onLayoutShift() {
+      closePopout()
     }
     document.addEventListener("mousedown", onPointer)
     document.addEventListener("keydown", onKey)
+    window.addEventListener("scroll", onLayoutShift, true)
+    window.addEventListener("resize", onLayoutShift)
     return () => {
       document.removeEventListener("mousedown", onPointer)
       document.removeEventListener("keydown", onKey)
+      window.removeEventListener("scroll", onLayoutShift, true)
+      window.removeEventListener("resize", onLayoutShift)
     }
   }, [popoutOpen])
 
@@ -275,13 +318,64 @@ function SidebarParentRow({
   const children = item.children ?? []
 
   if (collapsed) {
+    // Portal the popout into document.body so it escapes the
+    // sidebar's overflow-hidden clip. Render only after position is
+    // measured (popoutPos !== null) to avoid a top:0/left:0 flash.
+    // Guard `typeof document` for SSR — this component is "use client"
+    // but the file gets imported by server components too.
+    const popout =
+      popoutOpen && popoutPos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={popoutRef}
+              role="menu"
+              aria-label={item.label}
+              data-testid={`sidebar-popout-${item.label.toLowerCase()}`}
+              style={{ position: "fixed", top: popoutPos.top, left: popoutPos.left }}
+              className="z-50 min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] py-1 shadow-md"
+            >
+              <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
+                {item.label}
+              </div>
+              {children.map((child) => {
+                if (!child.href) return null
+                const ChildIcon = ICONS[child.icon]
+                const childActive = pathname.startsWith(child.href)
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    role="menuitem"
+                    onClick={closePopout}
+                    aria-current={childActive ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 text-sm",
+                      childActive
+                        ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
+                        : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+                    )}
+                  >
+                    <ChildIcon className="size-4 shrink-0" />
+                    <span className="truncate">{child.label}</span>
+                  </Link>
+                )
+              })}
+            </div>,
+            document.body,
+          )
+        : null
+
     return (
       <div className="relative">
         <button
           ref={anchorRef}
           type="button"
           onClick={() => {
-            setPopoutOpen((o) => !o)
+            if (popoutOpen) {
+              closePopout()
+            } else {
+              setPopoutOpen(true)
+            }
           }}
           aria-haspopup="menu"
           aria-expanded={popoutOpen}
@@ -297,44 +391,7 @@ function SidebarParentRow({
         >
           <Icon className="size-4 shrink-0" />
         </button>
-        {popoutOpen && (
-          <div
-            ref={popoutRef}
-            role="menu"
-            aria-label={item.label}
-            data-testid={`sidebar-popout-${item.label.toLowerCase()}`}
-            className="absolute top-0 left-full z-50 ml-2 min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] py-1 shadow-md"
-          >
-            <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-              {item.label}
-            </div>
-            {children.map((child) => {
-              if (!child.href) return null
-              const ChildIcon = ICONS[child.icon]
-              const childActive = pathname.startsWith(child.href)
-              return (
-                <Link
-                  key={child.href}
-                  href={child.href}
-                  role="menuitem"
-                  onClick={() => {
-                    setPopoutOpen(false)
-                  }}
-                  aria-current={childActive ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 text-sm",
-                    childActive
-                      ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-                      : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
-                  )}
-                >
-                  <ChildIcon className="size-4 shrink-0" />
-                  <span className="truncate">{child.label}</span>
-                </Link>
-              )
-            })}
-          </div>
-        )}
+        {popout}
       </div>
     )
   }

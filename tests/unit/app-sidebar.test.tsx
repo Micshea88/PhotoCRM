@@ -54,21 +54,21 @@ const CLIENT_ITEMS: AppSidebarItem[] = [
 
 describe("AppSidebarNav — renders the items the server passes in", () => {
   it("owner sees all six entries", () => {
-    render(<AppSidebarNav items={OWNER_ITEMS} />)
+    render(<AppSidebarNav items={OWNER_ITEMS} collapsed={false} onToggle={vi.fn()} />)
     for (const item of OWNER_ITEMS) {
       expect(screen.getByText(item.label)).toBeInTheDocument()
     }
   })
 
   it("user (standard team-member tier) sees the same six entries", () => {
-    render(<AppSidebarNav items={USER_ITEMS} />)
+    render(<AppSidebarNav items={USER_ITEMS} collapsed={false} onToggle={vi.fn()} />)
     for (const item of USER_ITEMS) {
       expect(screen.getByText(item.label)).toBeInTheDocument()
     }
   })
 
   it("client sees only Dashboard + Settings", () => {
-    render(<AppSidebarNav items={CLIENT_ITEMS} />)
+    render(<AppSidebarNav items={CLIENT_ITEMS} collapsed={false} onToggle={vi.fn()} />)
     expect(screen.getByText("Dashboard")).toBeInTheDocument()
     expect(screen.getByText("Settings")).toBeInTheDocument()
     expect(screen.queryByText("Contacts")).not.toBeInTheDocument()
@@ -79,13 +79,13 @@ describe("AppSidebarNav — renders the items the server passes in", () => {
 
 describe("AppSidebarNav — active-state highlighting", () => {
   it("marks the dashboard link as aria-current when on /dashboard", () => {
-    render(<AppSidebarNav items={OWNER_ITEMS} />)
+    render(<AppSidebarNav items={OWNER_ITEMS} collapsed={false} onToggle={vi.fn()} />)
     const dashboard = screen.getByRole("link", { name: /Dashboard/ })
     expect(dashboard).toHaveAttribute("aria-current", "page")
   })
 
   it("non-active links have no aria-current", () => {
-    render(<AppSidebarNav items={OWNER_ITEMS} />)
+    render(<AppSidebarNav items={OWNER_ITEMS} collapsed={false} onToggle={vi.fn()} />)
     const contacts = screen.getByRole("link", { name: /Contacts/ })
     expect(contacts).not.toHaveAttribute("aria-current")
   })

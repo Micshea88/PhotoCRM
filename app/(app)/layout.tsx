@@ -7,8 +7,10 @@ import { getSession } from "@/modules/auth/session"
 import { getCurrentMember, getUserOrganizations } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
-import { AppSidebar, resolveSidebarItems } from "@/modules/org/ui/app-sidebar"
+import { resolveSidebarItems } from "@/modules/org/ui/app-sidebar"
 import { AppTopbar } from "@/modules/org/ui/app-topbar"
+import { ClientLayoutShell } from "@/modules/org/ui/client-layout-shell"
+import { getUserPreference } from "@/modules/user-preferences/queries"
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getSession()
@@ -58,28 +60,41 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const activeOrg = organizations.find((o) => o.id === activeOrgId)
   const studioName = activeOrg?.name ?? "Studio"
 
-  // Pre-compute the sidebar items INSIDE a runWithOrgContext scope.
-  // hasPermission needs ALS to be active, and in Next.js production RSC
-  // the layout's ALS scope does NOT propagate into async child server
-  // components — those render outside the layout's frame. So we resolve
-  // the permission-gated item list here, fully await it, and pass a
-  // plain array to a SYNC sidebar component below.
-  const sidebarItems = await runWithOrgContext(
+  // Pre-compute the sidebar items + nav-collapsed preference INSIDE
+  // a runWithOrgContext scope. hasPermission + getUserPreference need
+  // ALS to be active, and in Next.js production RSC the layout's
+  // ALS scope does NOT propagate into async child server components —
+  // those render outside the layout's frame. Resolve here, fully
+  // await, and pass plain values to the client wrapper.
+  const { sidebarItems, navCollapsed } = await runWithOrgContext(
     { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
-    async () => resolveSidebarItems(session.user.id, extendedRole),
+    async () => {
+      const [items, navPref] = await Promise.all([
+        resolveSidebarItems(session.user.id, extendedRole),
+        getUserPreference("nav_collapsed", null),
+      ])
+      return {
+        sidebarItems: items,
+        // Cast jsonb unknown → boolean; defaults to false when unset
+        // or any non-boolean (defensive against forward-incompat
+        // value shapes).
+        navCollapsed: navPref === true,
+      }
+    },
   )
 
   return (
-    <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[56px_1fr]">
+    <div className="flex h-screen flex-col">
       <AppTopbar
         user={{ name: session.user.name, email: session.user.email }}
         studioName={studioName}
         organizations={organizations.map((o) => ({ id: o.id, name: o.name, slug: o.slug }))}
         activeOrgId={activeOrgId}
-        className="col-span-2 border-b border-[var(--color-border)]"
+        className="border-b border-[var(--color-border)]"
       />
-      <AppSidebar items={sidebarItems} className="border-r border-[var(--color-border)]" />
-      <main className="overflow-y-auto p-6">{children}</main>
+      <ClientLayoutShell sidebarItems={sidebarItems} initialCollapsed={navCollapsed}>
+        {children}
+      </ClientLayoutShell>
     </div>
   )
 }

@@ -232,6 +232,13 @@
       "when": 1779816090938,
       "tag": "0032_push4_custom_fields_gin_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1779890707846,
+      "tag": "0033_push3_c2_user_preferences",
+      "breakpoints": true
     }
   ]
 }

@@ -173,8 +173,33 @@ Pathway to replace HoneyBook for K&K's workflow. Non-negotiable.
   collapsed, transition).
 - Bottom nav (5 items) on mobile: Home / Contacts / Tasks /
   Dashboards / Search.
-- Collapse state persists per-user via **localStorage** (no new DB
-  table required — simpler, no migration).
+- Collapse state persists per-user via the `user_preferences` table
+  (jsonb key-value, RLS-scoped). The `nav_collapsed` key is global
+  to the user (organization_id NULL) so the pref follows them across
+  orgs. The post-C2 nav hotfix introduces a second key
+  `nav_settings_expanded` with the same shape.
+
+### Sidebar invariants (Push 3 post-C2 nav hotfix)
+
+These rules are locked. Future sidebar changes MUST preserve them.
+
+**Settings always last:** the Settings parent group MUST stay as the
+last entry of the desktop sidebar (after dashboard, contacts, events,
+opportunities, tasks). Enforced by a runtime assert in
+`src/modules/org/ui/app-sidebar.tsx` (`SIDEBAR_TREE`). Rationale:
+matches the HubSpot/HoneyBook nav pattern Mike's users are coming
+from, and visually anchors administrative routes below operational
+ones. To add a new top-level entry, insert it BEFORE the Settings
+parent in `SIDEBAR_TREE`.
+
+**KNOWN GAP — mobile settings access (deferred):** The desktop
+sidebar (`lg:block`) is the only path to `/settings/*` routes.
+Mobile users (< 1024px) currently have no UI affordance to reach
+settings. Address in a dedicated mobile polish push — options
+include: (a) replace one bottom-nav slot with Settings, (b) add a
+header hamburger that opens a mobile drawer rendering the sidebar,
+or (c) add a More menu to the bottom-nav. Decision deferred to a
+focused prompt.
 
 ### Mobile patterns
 

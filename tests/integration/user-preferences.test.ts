@@ -141,6 +141,39 @@ describe("user_preferences — db-level invariants", () => {
     })
   })
 
+  it("nav_settings_expanded — independent row from nav_collapsed for same user", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+      await db.insert(userPreferences).values([
+        {
+          id: createId(),
+          userId,
+          organizationId: null,
+          key: "nav_collapsed",
+          value: true,
+        },
+        {
+          id: createId(),
+          userId,
+          organizationId: null,
+          key: "nav_settings_expanded",
+          value: true,
+        },
+      ])
+      const navCollapsed = await getUserPreferenceWithDb(db, userId, "nav_collapsed", null)
+      const settingsExpanded = await getUserPreferenceWithDb(
+        db,
+        userId,
+        "nav_settings_expanded",
+        null,
+      )
+      expect(navCollapsed).toBe(true)
+      expect(settingsExpanded).toBe(true)
+    })
+  })
+
   it("RLS policy exists on user_preferences", async () => {
     await withTestDb(async (db) => {
       const result = await db.execute<{ policyname: string }>(sql`

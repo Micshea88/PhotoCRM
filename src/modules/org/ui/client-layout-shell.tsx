@@ -36,10 +36,12 @@ import { AppSidebarNav, type AppSidebarItem } from "./app-sidebar-nav"
 export function ClientLayoutShell({
   sidebarItems,
   initialCollapsed,
+  initialSettingsExpanded,
   children,
 }: {
   sidebarItems: AppSidebarItem[]
   initialCollapsed: boolean
+  initialSettingsExpanded: boolean
   children: ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed)
@@ -65,7 +67,12 @@ export function ClientLayoutShell({
       }
     >
       <aside className="hidden shrink-0 overflow-hidden lg:block" style={sidebarStyle}>
-        <AppSidebarNav items={sidebarItems} collapsed={collapsed} onToggle={toggle} />
+        <AppSidebarNav
+          items={sidebarItems}
+          collapsed={collapsed}
+          onToggle={toggle}
+          initialSettingsExpanded={initialSettingsExpanded}
+        />
       </aside>
       <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">{children}</main>
       <AppBottomNav className="lg:hidden" />

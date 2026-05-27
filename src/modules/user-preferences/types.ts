@@ -12,12 +12,19 @@ import { z } from "zod"
  * Known keys (V1):
  *   - `nav_collapsed`: boolean. organization_id = null (UI pref
  *     follows the user across orgs).
+ *   - `nav_settings_expanded`: boolean. Inline-expand state for the
+ *     Settings parent group in the desktop sidebar (P3 post-C2 nav
+ *     hotfix). organization_id = null (UI pref follows the user).
+ *
+ * Naming convention: snake_case, no namespace dots. Matches the C2
+ * `nav_collapsed` precedent — keeps related keys easy to grep by
+ * prefix (`nav_*` for nav UI prefs, future modules pick their own).
  *
  * Future keys land here as they ship. Adding a key here does NOT
  * require a migration — the storage is jsonb.
  */
 
-export const USER_PREFERENCE_KEYS = ["nav_collapsed"] as const
+export const USER_PREFERENCE_KEYS = ["nav_collapsed", "nav_settings_expanded"] as const
 export type UserPreferenceKey = (typeof USER_PREFERENCE_KEYS)[number]
 
 export const userPreferenceKeySchema = z.enum(USER_PREFERENCE_KEYS)
@@ -28,6 +35,7 @@ export const userPreferenceKeySchema = z.enum(USER_PREFERENCE_KEYS)
  */
 export const userPreferenceValueSchemas: Record<UserPreferenceKey, z.ZodType> = {
   nav_collapsed: z.boolean(),
+  nav_settings_expanded: z.boolean(),
 }
 
 export const setUserPreferenceInput = z

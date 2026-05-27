@@ -60,18 +60,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const activeOrg = organizations.find((o) => o.id === activeOrgId)
   const studioName = activeOrg?.name ?? "Studio"
 
-  // Pre-compute the sidebar items + nav-collapsed preference INSIDE
-  // a runWithOrgContext scope. hasPermission + getUserPreference need
-  // ALS to be active, and in Next.js production RSC the layout's
-  // ALS scope does NOT propagate into async child server components —
-  // those render outside the layout's frame. Resolve here, fully
-  // await, and pass plain values to the client wrapper.
-  const { sidebarItems, navCollapsed } = await runWithOrgContext(
+  // Pre-compute the sidebar items + UI prefs INSIDE a runWithOrgContext
+  // scope. hasPermission + getUserPreference need ALS to be active,
+  // and in Next.js production RSC the layout's ALS scope does NOT
+  // propagate into async child server components — those render
+  // outside the layout's frame. Resolve here, fully await, and pass
+  // plain values to the client wrapper.
+  const { sidebarItems, navCollapsed, settingsExpanded } = await runWithOrgContext(
     { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
     async () => {
-      const [items, navPref] = await Promise.all([
+      const [items, navPref, settingsPref] = await Promise.all([
         resolveSidebarItems(session.user.id, extendedRole),
         getUserPreference("nav_collapsed", null),
+        getUserPreference("nav_settings_expanded", null),
       ])
       return {
         sidebarItems: items,
@@ -79,6 +80,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         // or any non-boolean (defensive against forward-incompat
         // value shapes).
         navCollapsed: navPref === true,
+        settingsExpanded: settingsPref === true,
       }
     },
   )
@@ -92,7 +94,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         activeOrgId={activeOrgId}
         className="border-b border-[var(--color-border)]"
       />
-      <ClientLayoutShell sidebarItems={sidebarItems} initialCollapsed={navCollapsed}>
+      <ClientLayoutShell
+        sidebarItems={sidebarItems}
+        initialCollapsed={navCollapsed}
+        initialSettingsExpanded={settingsExpanded}
+      >
         {children}
       </ClientLayoutShell>
     </div>

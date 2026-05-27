@@ -16,6 +16,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
 }))
 
+vi.mock("@/modules/user-preferences/actions", () => ({
+  setUserPreference: vi.fn(),
+}))
+
 const ITEMS: AppSidebarItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/contacts", label: "Contacts", icon: "contacts" },
@@ -23,13 +27,27 @@ const ITEMS: AppSidebarItem[] = [
 
 describe("AppSidebarNav — collapse state", () => {
   it("renders labels when expanded", () => {
-    render(<AppSidebarNav items={ITEMS} collapsed={false} onToggle={vi.fn()} />)
+    render(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={false}
+        onToggle={vi.fn()}
+        initialSettingsExpanded={false}
+      />,
+    )
     expect(screen.getByText("Dashboard")).toBeInTheDocument()
     expect(screen.getByText("Contacts")).toBeInTheDocument()
   })
 
   it("hides labels when collapsed (icons-only)", () => {
-    render(<AppSidebarNav items={ITEMS} collapsed={true} onToggle={vi.fn()} />)
+    render(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={true}
+        onToggle={vi.fn()}
+        initialSettingsExpanded={false}
+      />,
+    )
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument()
     expect(screen.queryByText("Contacts")).not.toBeInTheDocument()
     // Links still rendered, accessible via title attribute (hover tooltip).
@@ -40,7 +58,14 @@ describe("AppSidebarNav — collapse state", () => {
   it("toggle button calls onToggle", async () => {
     const user = userEvent.setup()
     const onToggle = vi.fn()
-    render(<AppSidebarNav items={ITEMS} collapsed={false} onToggle={onToggle} />)
+    render(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={false}
+        onToggle={onToggle}
+        initialSettingsExpanded={false}
+      />,
+    )
     const button = screen.getByRole("button", { name: /Collapse navigation/ })
     await user.click(button)
     expect(onToggle).toHaveBeenCalledTimes(1)
@@ -48,10 +73,22 @@ describe("AppSidebarNav — collapse state", () => {
 
   it("toggle button aria-label flips with state", () => {
     const { rerender } = render(
-      <AppSidebarNav items={ITEMS} collapsed={false} onToggle={vi.fn()} />,
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={false}
+        onToggle={vi.fn()}
+        initialSettingsExpanded={false}
+      />,
     )
     expect(screen.getByRole("button", { name: /Collapse navigation/ })).toBeInTheDocument()
-    rerender(<AppSidebarNav items={ITEMS} collapsed={true} onToggle={vi.fn()} />)
+    rerender(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={true}
+        onToggle={vi.fn()}
+        initialSettingsExpanded={false}
+      />,
+    )
     expect(screen.getByRole("button", { name: /Expand navigation/ })).toBeInTheDocument()
   })
 })
@@ -59,7 +96,14 @@ describe("AppSidebarNav — collapse state", () => {
 describe("AppSidebarNav — `[` keyboard shortcut", () => {
   it("toggles when pressed with no input focused", () => {
     const onToggle = vi.fn()
-    render(<AppSidebarNav items={ITEMS} collapsed={false} onToggle={onToggle} />)
+    render(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={false}
+        onToggle={onToggle}
+        initialSettingsExpanded={false}
+      />,
+    )
     fireEvent.keyDown(document, { key: "[" })
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
@@ -69,7 +113,12 @@ describe("AppSidebarNav — `[` keyboard shortcut", () => {
     render(
       <>
         <input data-testid="text-input" />
-        <AppSidebarNav items={ITEMS} collapsed={false} onToggle={onToggle} />
+        <AppSidebarNav
+          items={ITEMS}
+          collapsed={false}
+          onToggle={onToggle}
+          initialSettingsExpanded={false}
+        />
       </>,
     )
     const input = screen.getByTestId("text-input")
@@ -83,7 +132,12 @@ describe("AppSidebarNav — `[` keyboard shortcut", () => {
     render(
       <>
         <textarea data-testid="textarea" />
-        <AppSidebarNav items={ITEMS} collapsed={false} onToggle={onToggle} />
+        <AppSidebarNav
+          items={ITEMS}
+          collapsed={false}
+          onToggle={onToggle}
+          initialSettingsExpanded={false}
+        />
       </>,
     )
     const textarea = screen.getByTestId("textarea")
@@ -94,7 +148,14 @@ describe("AppSidebarNav — `[` keyboard shortcut", () => {
 
   it("does NOT toggle when Cmd/Ctrl+[ is pressed (browser back shortcut)", () => {
     const onToggle = vi.fn()
-    render(<AppSidebarNav items={ITEMS} collapsed={false} onToggle={onToggle} />)
+    render(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={false}
+        onToggle={onToggle}
+        initialSettingsExpanded={false}
+      />,
+    )
     fireEvent.keyDown(document, { key: "[", metaKey: true })
     expect(onToggle).not.toHaveBeenCalled()
     fireEvent.keyDown(document, { key: "[", ctrlKey: true })
@@ -103,7 +164,14 @@ describe("AppSidebarNav — `[` keyboard shortcut", () => {
 
   it("does NOT fire for other keys", () => {
     const onToggle = vi.fn()
-    render(<AppSidebarNav items={ITEMS} collapsed={false} onToggle={onToggle} />)
+    render(
+      <AppSidebarNav
+        items={ITEMS}
+        collapsed={false}
+        onToggle={onToggle}
+        initialSettingsExpanded={false}
+      />,
+    )
     fireEvent.keyDown(document, { key: "]" })
     fireEvent.keyDown(document, { key: "Enter" })
     fireEvent.keyDown(document, { key: " " })

@@ -1,10 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Check, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "../types"
 import { LeadSourceCombobox } from "./lead-source-combobox"
 
@@ -163,37 +165,23 @@ export function ContactsFilterBar(props: FilterBarProps) {
       {/* Filter chips */}
       <div className="flex flex-wrap items-start gap-2">
         <FilterChip label="Contact type" value={activeContactType}>
-          <select
-            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm"
-            value={activeContactType}
-            onChange={(e) => {
-              updateParam("contactType", e.target.value || null)
+          <ChipSearchList
+            items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
+            value={activeContactType || null}
+            onChange={(v) => {
+              updateParam("contactType", v)
             }}
-          >
-            <option value="">— Any —</option>
-            {CONTACT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          />
         </FilterChip>
 
         <FilterChip label="Lifecycle status" value={activeLifecycle}>
-          <select
-            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm"
-            value={activeLifecycle}
-            onChange={(e) => {
-              updateParam("lifecycleStatus", e.target.value || null)
+          <ChipSearchList
+            items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
+            value={activeLifecycle || null}
+            onChange={(v) => {
+              updateParam("lifecycleStatus", v)
             }}
-          >
-            <option value="">— Any —</option>
-            {LIFECYCLE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          />
         </FilterChip>
 
         <FilterChip
@@ -205,26 +193,13 @@ export function ContactsFilterBar(props: FilterBarProps) {
               No tags yet. Add tags on a contact to filter by them.
             </p>
           ) : (
-            <div className="max-h-48 space-y-1 overflow-y-auto">
-              {props.tagOptions.map((tag) => {
-                const checked = activeTags.includes(tag)
-                return (
-                  <label key={tag} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        const next = e.target.checked
-                          ? [...activeTags, tag]
-                          : activeTags.filter((t) => t !== tag)
-                        updateParam("tags", next)
-                      }}
-                    />
-                    {tag}
-                  </label>
-                )
-              })}
-            </div>
+            <ChipSearchMultiList
+              items={props.tagOptions.map((t) => ({ value: t, label: t }))}
+              values={activeTags}
+              onChange={(next) => {
+                updateParam("tags", next)
+              }}
+            />
           )}
         </FilterChip>
 
@@ -236,20 +211,18 @@ export function ContactsFilterBar(props: FilterBarProps) {
             return m?.name ?? m?.email ?? activeOwner
           })()}
         >
-          <select
-            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm"
-            value={activeOwner}
-            onChange={(e) => {
-              updateParam("ownerUserId", e.target.value || null)
+          <ChipSearchList
+            items={props.ownerOptions.map((o) => ({
+              value: o.id,
+              label: o.name ?? o.email,
+              description: o.name ? o.email : undefined,
+            }))}
+            value={activeOwner || null}
+            onChange={(v) => {
+              updateParam("ownerUserId", v)
             }}
-          >
-            <option value="">— Any —</option>
-            {props.ownerOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name ?? o.email}
-              </option>
-            ))}
-          </select>
+            emptyMessage="No team members"
+          />
         </FilterChip>
 
         <FilterChip
@@ -260,20 +233,14 @@ export function ContactsFilterBar(props: FilterBarProps) {
               : ""
           }
         >
-          <select
-            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm"
-            value={activeCompany}
-            onChange={(e) => {
-              updateParam("companyId", e.target.value || null)
+          <ChipSearchList
+            items={props.companyOptions.map((c) => ({ value: c.id, label: c.name }))}
+            value={activeCompany || null}
+            onChange={(v) => {
+              updateParam("companyId", v)
             }}
-          >
-            <option value="">— Any —</option>
-            {props.companyOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            emptyMessage="No companies yet"
+          />
         </FilterChip>
 
         <FilterChip label="Lead source" value={activeLeadSource}>
@@ -357,6 +324,174 @@ export function ContactsFilterBar(props: FilterBarProps) {
         </FilterChip>
         {props.trailingChips}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Push 3 (C3) — inline single-select search list used inside a
+ * FilterChip popover. Unlike SearchableSelect, this renders an
+ * always-visible search input + scrollable list (no nested
+ * click-to-open trigger) — the chip itself is already the popover
+ * trigger, so a second one would be confusing UX.
+ *
+ * Clicking an item:
+ *   - selects it when not already active
+ *   - clears the filter when re-clicking the current value
+ *
+ * "Any" affordance: clearing happens via the toggle behavior + the
+ * filter bar's global "Clear all" button. No explicit "Any" row.
+ */
+function ChipSearchList({
+  items,
+  value,
+  onChange,
+  emptyMessage = "No results",
+}: {
+  items: { value: string; label: string; description?: string }[]
+  value: string | null
+  onChange: (v: string | null) => void
+  emptyMessage?: string
+}) {
+  const [q, setQ] = useState("")
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return items
+    return items.filter(
+      (i) =>
+        i.label.toLowerCase().includes(needle) ||
+        (i.description ?? "").toLowerCase().includes(needle),
+    )
+  }, [items, q])
+
+  return (
+    <div className="w-56 space-y-2">
+      <div className="flex items-center gap-2 rounded-md border border-[var(--color-border)] px-2">
+        <Search className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+        <Input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+          }}
+          placeholder="Search…"
+          aria-label="Search options"
+          className="h-7 border-0 px-0 text-xs shadow-none focus-visible:ring-0"
+        />
+      </div>
+      {visible.length === 0 ? (
+        <p className="px-1 text-xs text-[var(--color-muted-foreground)]">{emptyMessage}</p>
+      ) : (
+        <ul className="max-h-48 overflow-y-auto" role="listbox">
+          {visible.map((item) => {
+            const selected = item.value === value
+            return (
+              <li key={item.value}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    onChange(selected ? null : item.value)
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs",
+                    selected
+                      ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
+                      : "hover:bg-[var(--color-accent)]/50",
+                  )}
+                >
+                  <span className="flex flex-col truncate">
+                    <span className="truncate">{item.label}</span>
+                    {item.description && (
+                      <span className="truncate text-[10px] text-[var(--color-muted-foreground)]">
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                  {selected && <Check className="size-3.5 shrink-0 text-[var(--color-primary)]" />}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Push 3 (C3) — inline multi-select search list for the Tags chip.
+ * Click toggles each value in the values array. Search input filters
+ * the option list.
+ */
+function ChipSearchMultiList({
+  items,
+  values,
+  onChange,
+}: {
+  items: { value: string; label: string }[]
+  values: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [q, setQ] = useState("")
+  const selectedSet = useMemo(() => new Set(values), [values])
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return items
+    return items.filter((i) => i.label.toLowerCase().includes(needle))
+  }, [items, q])
+
+  function toggle(v: string) {
+    if (selectedSet.has(v)) {
+      onChange(values.filter((x) => x !== v))
+    } else {
+      onChange([...values, v])
+    }
+  }
+
+  return (
+    <div className="w-56 space-y-2">
+      <div className="flex items-center gap-2 rounded-md border border-[var(--color-border)] px-2">
+        <Search className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+        <Input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+          }}
+          placeholder="Search tags…"
+          aria-label="Search tags"
+          className="h-7 border-0 px-0 text-xs shadow-none focus-visible:ring-0"
+        />
+      </div>
+      {visible.length === 0 ? (
+        <p className="px-1 text-xs text-[var(--color-muted-foreground)]">No tags match.</p>
+      ) : (
+        <ul className="max-h-48 overflow-y-auto" role="listbox" aria-multiselectable="true">
+          {visible.map((item) => {
+            const selected = selectedSet.has(item.value)
+            return (
+              <li key={item.value}>
+                <label
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs",
+                    "hover:bg-[var(--color-accent)]/50",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => {
+                      toggle(item.value)
+                    }}
+                    aria-label={item.label}
+                  />
+                  <span className="truncate">{item.label}</span>
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }

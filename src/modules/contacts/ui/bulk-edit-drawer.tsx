@@ -15,9 +15,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Drawer } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { SearchableSelect } from "@/components/ui/searchable-select"
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
 import { US_STATE_CODES } from "@/lib/format/us-states"
+import { CompanyPicker } from "@/modules/companies/ui/company-picker"
+import { UserRefPicker } from "@/modules/custom-fields/ui/user-ref-picker"
 import { bulkUpdateContactFields } from "../actions"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES, type BulkFieldUpdate } from "../types"
+import { LeadSourceCombobox } from "./lead-source-combobox"
 
 /**
  * Push 2c.4 part 2 — Bulk edit drawer.
@@ -131,6 +136,10 @@ export interface BulkEditDrawerProps {
   companyOptions: { id: string; name: string }[]
   ownerOptions: { id: string; name: string | null; email: string }[]
   leadSourceOptions: string[]
+  /** P3 (C3) — org-level hidden lead sources, filtered from the bulk
+   *  Lead source picker. Optional with empty-array default so older
+   *  callers (or tests) don't need to pass it. */
+  hiddenLeadSources?: string[]
   tagOptions: string[]
   /** Called after a successful Apply so the host can clear selection. */
   onAfterApply: () => void
@@ -153,6 +162,7 @@ function BulkEditDrawerBody({
   companyOptions,
   ownerOptions,
   leadSourceOptions,
+  hiddenLeadSources = [],
   tagOptions,
   onAfterApply,
 }: BulkEditDrawerProps) {
@@ -385,6 +395,7 @@ function BulkEditDrawerBody({
                               companyOptions={companyOptions}
                               ownerOptions={ownerOptions}
                               leadSourceOptions={leadSourceOptions}
+                              hiddenLeadSources={hiddenLeadSources}
                             />
                             {f.destructive && (
                               <label className="mt-3 flex items-start gap-2 text-xs text-red-700 dark:text-red-400">
@@ -435,6 +446,7 @@ function ValueInput({
   companyOptions,
   ownerOptions,
   leadSourceOptions,
+  hiddenLeadSources,
 }: {
   field: FieldDef
   textValue: string
@@ -445,122 +457,93 @@ function ValueInput({
   companyOptions: { id: string; name: string }[]
   ownerOptions: { id: string; name: string | null; email: string }[]
   leadSourceOptions: string[]
+  hiddenLeadSources: string[]
 }) {
   if (field.input === "tags") {
-    return <TagPicker tags={tagValues} onChange={onTagsChange} existingTags={tagOptions} />
+    return (
+      <SearchableMultiSelect
+        items={tagOptions.map((t) => ({ value: t, label: t }))}
+        values={tagValues}
+        onChange={onTagsChange}
+        placeholder="Add a tag…"
+        allowCreate
+        aria-label="Tags"
+      />
+    )
   }
   if (field.input === "contactType") {
     return (
-      <select
-        value={textValue}
-        onChange={(e) => {
-          onTextChange(e.target.value)
+      <SearchableSelect
+        items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
+        value={textValue || null}
+        onChange={(v) => {
+          onTextChange(v ?? "")
         }}
-        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
+        placeholder="— Select type —"
         aria-label="Contact type"
-      >
-        <option value="">— Select type —</option>
-        {CONTACT_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
+      />
     )
   }
   if (field.input === "lifecycleStatus") {
     return (
-      <select
-        value={textValue}
-        onChange={(e) => {
-          onTextChange(e.target.value)
+      <SearchableSelect
+        items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
+        value={textValue || null}
+        onChange={(v) => {
+          onTextChange(v ?? "")
         }}
-        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
+        placeholder="— Select status —"
         aria-label="Lifecycle status"
-      >
-        <option value="">— Select status —</option>
-        {LIFECYCLE_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+      />
     )
   }
   if (field.input === "leadSource") {
     return (
-      <select
+      <LeadSourceCombobox
         value={textValue}
-        onChange={(e) => {
-          onTextChange(e.target.value)
-        }}
-        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
-        aria-label="Lead source"
-      >
-        <option value="">— Select source —</option>
-        {leadSourceOptions.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+        onChange={onTextChange}
+        existingValues={leadSourceOptions}
+        hiddenSources={hiddenLeadSources}
+      />
     )
   }
   if (field.input === "owner") {
     return (
-      <select
-        value={textValue}
-        onChange={(e) => {
-          onTextChange(e.target.value)
+      <UserRefPicker
+        options={ownerOptions.map((o) => ({
+          id: o.id,
+          name: o.name ?? o.email,
+          email: o.email,
+        }))}
+        value={textValue || null}
+        onChange={(v) => {
+          onTextChange(v ?? "")
         }}
-        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
-        aria-label="Owner"
-      >
-        <option value="">— Select owner —</option>
-        {ownerOptions.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name ?? o.email}
-          </option>
-        ))}
-      </select>
+      />
     )
   }
   if (field.input === "company") {
     return (
-      <select
-        value={textValue}
-        onChange={(e) => {
-          onTextChange(e.target.value)
+      <CompanyPicker
+        options={companyOptions}
+        value={textValue || null}
+        onChange={(v) => {
+          onTextChange(v ?? "")
         }}
-        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
-        aria-label="Company"
-      >
-        <option value="">— Select company —</option>
-        {companyOptions.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      />
     )
   }
   if (field.input === "state") {
     return (
-      <select
-        value={textValue}
-        onChange={(e) => {
-          onTextChange(e.target.value)
+      <SearchableSelect
+        items={US_STATE_CODES.map((s) => ({ value: s, label: s }))}
+        value={textValue || null}
+        onChange={(v) => {
+          onTextChange(v ?? "")
         }}
-        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
+        placeholder="— Select state —"
         aria-label="State"
-      >
-        <option value="">— Select state —</option>
-        {US_STATE_CODES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+      />
     )
   }
   // text / email / phone
@@ -581,84 +564,5 @@ function ValueInput({
       aria-label={field.label}
       maxLength={field.input === "phone" ? 80 : 200}
     />
-  )
-}
-
-function TagPicker({
-  tags,
-  onChange,
-  existingTags,
-}: {
-  tags: string[]
-  onChange: (next: string[]) => void
-  existingTags: string[]
-}) {
-  const [input, setInput] = useState("")
-  function add(value: string) {
-    const t = value.trim()
-    if (!t || t.length > 80) return
-    if (tags.includes(t)) return
-    onChange([...tags, t])
-    setInput("")
-  }
-  function remove(t: string) {
-    onChange(tags.filter((x) => x !== t))
-  }
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1">
-        {tags.length === 0 ? (
-          <span className="text-xs text-[var(--color-muted-foreground)]">No tags yet.</span>
-        ) : (
-          tags.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => {
-                remove(t)
-              }}
-              className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2 py-0.5 text-xs text-[var(--color-primary)] hover:bg-[var(--color-primary)]/25"
-              aria-label={`Remove ${t}`}
-            >
-              {t}
-              <span aria-hidden="true">×</span>
-            </button>
-          ))
-        )}
-      </div>
-      <div className="flex gap-1">
-        <Input
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              add(input)
-            }
-          }}
-          placeholder="Add a tag, press Enter"
-          list="bulk-edit-drawer-tag-options"
-          maxLength={80}
-          className="h-8 flex-1 text-xs"
-        />
-        <datalist id="bulk-edit-drawer-tag-options">
-          {existingTags.map((t) => (
-            <option key={t} value={t} />
-          ))}
-        </datalist>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            add(input)
-          }}
-        >
-          Add
-        </Button>
-      </div>
-    </div>
   )
 }

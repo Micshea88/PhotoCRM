@@ -7,7 +7,10 @@ import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listContactsForOrg } from "@/modules/contacts/queries"
-import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
+import {
+  listDistinctContactLeadSources,
+  listDistinctContactTags,
+} from "@/modules/contacts/filter-spec"
 import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
@@ -22,29 +25,38 @@ export default async function NewContactPage() {
   const baRole = (member?.role ?? "member") as BetterAuthRole
   const tentativeRole = extendedFromBetterAuth(baRole)
 
-  const { companies, contacts, customFields, leadSources, hiddenLeadSources } =
+  const { companies, contacts, customFields, leadSources, hiddenLeadSources, tagOptions } =
     await runWithOrgContext({ orgId, role: tentativeRole, userId: session.user.id }, async () => {
       const extended = (await getExtendedMemberRole(session.user.id)) ?? tentativeRole
       // Re-enter to set the final role for the data fetches.
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
-        const [companiesRows, contactRows, customFieldRows, leadSourceRows, hiddenSources] =
-          await Promise.all([
-            listCompaniesForOrg(),
-            listContactsForOrg(),
-            listActiveFieldDefinitionsForRecordType("contact"),
-            listDistinctContactLeadSources(),
-            listHiddenLeadSources(),
-          ])
+        const [
+          companiesRows,
+          contactRows,
+          customFieldRows,
+          leadSourceRows,
+          hiddenSources,
+          distinctTags,
+        ] = await Promise.all([
+          listCompaniesForOrg(),
+          listContactsForOrg(),
+          listActiveFieldDefinitionsForRecordType("contact"),
+          listDistinctContactLeadSources(),
+          listHiddenLeadSources(),
+          listDistinctContactTags(),
+        ])
         return {
           companies: companiesRows.map((c) => ({ id: c.id, name: c.name })),
           contacts: contactRows.map((c) => ({
             id: c.id,
             firstName: c.firstName,
             lastName: c.lastName,
+            primaryEmail: c.primaryEmail,
           })),
           customFields: customFieldRows,
           leadSources: leadSourceRows,
           hiddenLeadSources: hiddenSources,
+          tagOptions: distinctTags,
         }
       })
     })
@@ -80,6 +92,7 @@ export default async function NewContactPage() {
         customFieldDefinitions={customFields}
         leadSourceValues={leadSources}
         hiddenLeadSources={hiddenLeadSources}
+        tagOptions={tagOptions}
         currentUserId={session.user.id}
       />
     </div>

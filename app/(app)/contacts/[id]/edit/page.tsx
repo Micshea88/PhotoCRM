@@ -11,7 +11,10 @@ import {
   listContactCompanyAssociations,
   listContactsForOrg,
 } from "@/modules/contacts/queries"
-import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
+import {
+  listDistinctContactLeadSources,
+  listDistinctContactTags,
+} from "@/modules/contacts/filter-spec"
 import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
@@ -35,15 +38,23 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
         const row = await getContactForOrg(id)
         if (!row) return null
-        const [associations, customFields, companies, contacts, leadSources, hiddenSources] =
-          await Promise.all([
-            listContactCompanyAssociations(id),
-            listActiveFieldDefinitionsForRecordType("contact"),
-            listCompaniesForOrg(),
-            listContactsForOrg(),
-            listDistinctContactLeadSources(),
-            listHiddenLeadSources(),
-          ])
+        const [
+          associations,
+          customFields,
+          companies,
+          contacts,
+          leadSources,
+          hiddenSources,
+          distinctTags,
+        ] = await Promise.all([
+          listContactCompanyAssociations(id),
+          listActiveFieldDefinitionsForRecordType("contact"),
+          listCompaniesForOrg(),
+          listContactsForOrg(),
+          listDistinctContactLeadSources(),
+          listHiddenLeadSources(),
+          listDistinctContactTags(),
+        ])
         return {
           row,
           associations,
@@ -52,6 +63,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
           contacts,
           leadSources,
           hiddenLeadSources: hiddenSources,
+          tagOptions: distinctTags,
         }
       })
     },
@@ -84,11 +96,17 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         companies={data.companies.map((c) => ({ id: c.id, name: c.name }))}
         referrals={data.contacts
           .filter((c) => c.id !== id)
-          .map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName }))}
+          .map((c) => ({
+            id: c.id,
+            firstName: c.firstName,
+            lastName: c.lastName,
+            primaryEmail: c.primaryEmail,
+          }))}
         owners={owners}
         customFieldDefinitions={data.customFields}
         leadSourceValues={data.leadSources}
         hiddenLeadSources={data.hiddenLeadSources}
+        tagOptions={data.tagOptions}
         currentUserId={session.user.id}
         initialContact={data.row.contact}
         initialAssociations={data.associations.map(({ association }) => ({

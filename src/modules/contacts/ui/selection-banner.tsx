@@ -40,6 +40,7 @@ export function SelectionBanner({
   tagOptions,
   companyOptions = [],
   leadSourceOptions = [],
+  hiddenLeadSources = [],
   onClear,
 }: {
   selectedIds: string[]
@@ -49,6 +50,10 @@ export function SelectionBanner({
    *  to empty arrays so older callers (or tests) don't need to pass them. */
   companyOptions?: { id: string; name: string }[]
   leadSourceOptions?: string[]
+  /** Push 3 (C3) — org-level hidden lead sources, threaded to the Bulk
+   *  Edit drawer's LeadSourceCombobox so admin-hidden sources don't
+   *  appear as bulk-change targets. */
+  hiddenLeadSources?: string[]
   /** Called after a successful bulk action OR when the user clicks Clear / hits Esc. */
   onClear: () => void
 }) {
@@ -321,6 +326,7 @@ export function SelectionBanner({
         companyOptions={companyOptions}
         ownerOptions={ownerOptions}
         leadSourceOptions={leadSourceOptions}
+        hiddenLeadSources={hiddenLeadSources}
         tagOptions={tagOptions}
         onAfterApply={onClear}
       />

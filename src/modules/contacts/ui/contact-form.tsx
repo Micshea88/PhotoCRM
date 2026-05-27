@@ -9,8 +9,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { US_STATE_CODES, US_STATE_LABELS } from "@/lib/format/us-states"
 import { formatPhoneDisplay, parsePhoneInput } from "@/lib/format/phone"
 import { normalizeUrl } from "@/lib/format/url"
+import { SearchableSelect } from "@/components/ui/searchable-select"
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
 import { CompanyPicker, type CompanyOption } from "@/modules/companies/ui/company-picker"
 import { CustomFieldsRenderer } from "@/modules/custom-fields/ui/custom-fields-renderer"
+import { ContactRefPicker } from "@/modules/custom-fields/ui/contact-ref-picker"
+import { UserRefPicker } from "@/modules/custom-fields/ui/user-ref-picker"
 import type { CustomFieldDefinition } from "@/modules/custom-fields/schema"
 import type { Contact } from "../schema"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "../types"
@@ -27,6 +31,7 @@ interface ReferralOption {
   id: string
   firstName: string
   lastName: string
+  primaryEmail?: string | null
 }
 
 interface OwnerOption {
@@ -100,6 +105,7 @@ export function ContactForm({
   customFieldDefinitions,
   leadSourceValues,
   hiddenLeadSources,
+  tagOptions,
   currentUserId,
   initialContact,
   initialAssociations,
@@ -114,6 +120,10 @@ export function ContactForm({
   /** Org-level hidden sources (from org_lead_source_overrides). The
    * combobox filters these out. */
   hiddenLeadSources: string[]
+  /** Distinct tags currently in use across the org. Feeds the Tags
+   * SearchableMultiSelect's suggestion list; new tags can be created
+   * inline via `allowCreate=true`. */
+  tagOptions: string[]
   currentUserId: string
   /** Edit mode. When present, the form pre-fills from this contact
    * and submits via `updateContact`. */
@@ -157,15 +167,20 @@ export function ContactForm({
   const [facebookUrl, setFacebookUrl] = useState(initialContact?.facebookUrl ?? "")
   const [website, setWebsite] = useState(initialContact?.website ?? "")
   const [leadSource, setLeadSource] = useState(initialContact?.leadSource ?? "")
-  const [referredByContactId, setReferredByContactId] = useState(
-    initialContact?.referredByContactId ?? "",
+  const [referredByContactId, setReferredByContactId] = useState<string | null>(
+    initialContact?.referredByContactId ?? null,
   )
-  const [contactType, setContactType] = useState<string>(initialContact?.contactType ?? "")
-  const [lifecycleStatus, setLifecycleStatus] = useState<string>(
-    initialContact?.lifecycleStatus ?? "",
+  const [contactType, setContactType] = useState<string | null>(initialContact?.contactType ?? null)
+  const [lifecycleStatus, setLifecycleStatus] = useState<string | null>(
+    initialContact?.lifecycleStatus ?? null,
   )
-  const [tagsRaw, setTagsRaw] = useState((initialContact?.tags ?? []).join(", "))
-  const [ownerUserId, setOwnerUserId] = useState<string>(
+  // P3 C3 — Tags state migrated from comma-separated string to string[].
+  // Wire format unchanged (createContactInput accepts string[]). New
+  // tags get lowercased+trimmed at the SearchableMultiSelect layer;
+  // legacy mixed-case values in initialContact.tags stay as-is until
+  // the user explicitly removes + re-adds them.
+  const [tags, setTags] = useState<string[]>(initialContact?.tags ?? [])
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(
     initialContact?.ownerUserId ?? currentUserId,
   )
   const [notes, setNotes] = useState(initialContact?.notes ?? "")
@@ -214,11 +229,7 @@ export function ContactForm({
   }
 
   function buildTags(): string[] | undefined {
-    const parts = tagsRaw
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0)
-    return parts.length > 0 ? parts : undefined
+    return tags.length > 0 ? tags : undefined
   }
 
   async function onSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
@@ -252,13 +263,13 @@ export function ContactForm({
       facebookUrl: normalizeUrl(facebookUrl),
       website: normalizeUrl(website),
       leadSource: leadSource.trim() || "",
-      referredByContactId: referredByContactId || null,
+      referredByContactId: referredByContactId,
       contactType: contactType ? (contactType as (typeof CONTACT_TYPES)[number]) : undefined,
       lifecycleStatus: lifecycleStatus
         ? (lifecycleStatus as (typeof LIFECYCLE_STATUSES)[number])
         : undefined,
       tags: buildTags(),
-      ownerUserId: ownerUserId || null,
+      ownerUserId: ownerUserId,
       notes: notes.trim() || "",
       internalNotes: internalNotes.trim() || "",
       customFields: Object.keys(customFieldValues).length > 0 ? customFieldValues : null,
@@ -681,89 +692,69 @@ export function ContactForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="referredByContactId">Referred by</Label>
-            <select
+            <ContactRefPicker
               id="referredByContactId"
-              className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm"
+              options={referrals.map((r) => ({
+                id: r.id,
+                firstName: r.firstName,
+                lastName: r.lastName,
+                primaryEmail: r.primaryEmail ?? null,
+              }))}
               value={referredByContactId}
-              onChange={(e) => {
-                setReferredByContactId(e.target.value)
-              }}
-            >
-              <option value="">— None —</option>
-              {referrals.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.firstName} {r.lastName}
-                </option>
-              ))}
-            </select>
+              onChange={setReferredByContactId}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="contactType">Contact type</Label>
-            <select
+            <SearchableSelect
               id="contactType"
-              className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm"
+              items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
               value={contactType}
-              onChange={(e) => {
-                setContactType(e.target.value)
-              }}
-            >
-              <option value="">— None —</option>
-              {CONTACT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+              onChange={setContactType}
+              placeholder="— None —"
+              allowClear
+              aria-label="Contact type"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="lifecycleStatus">Lifecycle status</Label>
-            <select
+            <SearchableSelect
               id="lifecycleStatus"
-              className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm"
+              items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
               value={lifecycleStatus}
-              onChange={(e) => {
-                setLifecycleStatus(e.target.value)
-              }}
-            >
-              <option value="">— None —</option>
-              {LIFECYCLE_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              onChange={setLifecycleStatus}
+              placeholder="— None —"
+              allowClear
+              aria-label="Lifecycle status"
+            />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="tagsRaw">Tags</Label>
-            <Input
-              id="tagsRaw"
-              value={tagsRaw}
-              placeholder="vip, studio-friend, wedding"
-              onChange={(e) => {
-                setTagsRaw(e.target.value)
-              }}
+            <Label htmlFor="tags">Tags</Label>
+            <SearchableMultiSelect
+              id="tags"
+              items={tagOptions.map((t) => ({ value: t, label: t }))}
+              values={tags}
+              onChange={setTags}
+              placeholder="Add a tag…"
+              allowCreate
+              aria-label="Tags"
             />
             <p className="text-xs text-[var(--color-muted-foreground)]">
-              Comma-separated. Free-form — used in filters and reports.
+              Type to search existing tags or create a new one. New tags are stored lowercase.
             </p>
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="ownerUserId">Owner</Label>
-            <select
+            <UserRefPicker
               id="ownerUserId"
-              className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm"
+              options={owners.map((o) => ({
+                id: o.id,
+                name: o.name ?? o.email,
+                email: o.email,
+              }))}
               value={ownerUserId}
-              onChange={(e) => {
-                setOwnerUserId(e.target.value)
-              }}
-            >
-              <option value="">— Unassigned —</option>
-              {owners.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name ?? o.email}
-                </option>
-              ))}
-            </select>
+              onChange={setOwnerUserId}
+            />
           </div>
         </div>
       </section>

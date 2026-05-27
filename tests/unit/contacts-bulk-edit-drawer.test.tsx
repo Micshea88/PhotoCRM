@@ -36,6 +36,14 @@ vi.mock("@/modules/contacts/actions", () => ({
   bulkUpdateContactFields: (input: unknown) => bulkUpdateMock(input),
 }))
 
+// P3 (C3) — BulkEditDrawer now imports CompanyPicker which transitively
+// pulls in @/modules/companies/actions → @/lib/db. In jsdom there's no
+// Next RSC transform, so the bare import would crash on env access.
+// Stub the server-action surface that the picker calls.
+vi.mock("@/modules/companies/actions", () => ({
+  createCompany: () => Promise.resolve({ data: { id: "stub", name: "Stub" } }),
+}))
+
 beforeEach(() => {
   bulkUpdateMock.mockClear()
   refreshMock.mockClear()
@@ -193,9 +201,10 @@ describe("BulkEditDrawer", () => {
       />,
     )
     await user.click(screen.getByRole("button", { name: /Replace all tags/i }))
-    // Add a tag value first.
+    // P3 (C3) — Tag input is now SearchableMultiSelect with create-new
+    // affordance. Type the value, then click the "Create 'newtag'" row.
     await user.type(screen.getByPlaceholderText(/Add a tag/i), "newtag")
-    await user.click(screen.getByRole("button", { name: "Add" }))
+    await user.click(screen.getByText(/Create "newtag"/))
     // Even with a value, Apply stays disabled because the confirm
     // checkbox isn't checked.
     expect(screen.getByRole("button", { name: /Apply to 3 contacts/i })).toBeDisabled()

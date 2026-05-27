@@ -37,6 +37,14 @@ vi.mock("@/modules/contacts/actions", () => ({
   bulkChangeStatus: vi.fn(),
   bulkDeleteContacts: vi.fn(),
   bulkRemoveTag: vi.fn(),
+  bulkUpdateContactFields: vi.fn(),
+}))
+
+// P3 (C3) — SelectionBanner now imports BulkEditDrawer which imports
+// CompanyPicker, transitively pulling in @/modules/companies/actions
+// → @/lib/db. Stub the server-action surface so the import resolves.
+vi.mock("@/modules/companies/actions", () => ({
+  createCompany: () => Promise.resolve({ data: { id: "stub", name: "Stub" } }),
 }))
 
 // See contacts-actions-dropdown.test.tsx for why we shim these.

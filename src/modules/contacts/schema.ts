@@ -97,6 +97,28 @@ export const contacts = pgTable(
     // applies (deleted_at) — archive is a less-destructive halfway state.
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     archivedBy: text("archived_by").references(() => user.id, { onDelete: "set null" }),
+    // P3 (C6a) — AI cache columns. Per docs/pathway-ai-architecture.md,
+    // the contact-detail Overview tab reads these cached values and
+    // regenerates on demand. All nullable; the AI module owns writes.
+    //   - aiLeadStatus: one of the 19 enum values from
+    //     src/modules/contacts/ai/lead-status-enum.ts (Layer 2
+    //     classifier output). Refreshed every 24h.
+    //   - aiLeadStatusReasoning: free-form why-this-status text for the
+    //     badge tooltip + audit trail.
+    //   - aiSummaryText: Layer 2 client-summary paragraph (7d TTL).
+    //   - aiInsightsJson: Layer 3 actionable insight cards
+    //     (cold-reengage / VIP-detect / referrer-gap). Stale on signal
+    //     change — re-generated on manual refresh OR > 7d old.
+    //   - aiGeneratedAt: most recent AI write across any of the cache
+    //     fields above.
+    //   - aiGenerationModel: model id that produced the cached values
+    //     (forensics + cost analysis).
+    aiLeadStatus: text("ai_lead_status"),
+    aiLeadStatusReasoning: text("ai_lead_status_reasoning"),
+    aiSummaryText: text("ai_summary_text"),
+    aiInsightsJson: jsonb("ai_insights_json").$type<Record<string, unknown>>(),
+    aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
+    aiGenerationModel: text("ai_generation_model"),
   },
   (t) => [
     index("contacts_org_deleted_created_idx").on(t.organizationId, t.deletedAt, t.createdAt.desc()),

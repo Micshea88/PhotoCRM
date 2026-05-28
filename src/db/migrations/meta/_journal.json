@@ -246,6 +246,27 @@
       "when": 1780000000000,
       "tag": "0034_push3_c4_dedup_unique_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780100000000,
+      "tag": "0035_push3_c6a_ai_cache_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780100001000,
+      "tag": "0036_push3_c6a_meetings",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1780100002000,
+      "tag": "0037_push3_c6a_sms_messages",
+      "breakpoints": true
     }
   ]
 }

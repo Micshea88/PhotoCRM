@@ -83,6 +83,21 @@ interface ImportResult {
   successCount: number
   errorCount: number
   errorRows: { rowIndex: number; error: string; raw: string[] }[]
+  /** P3 (C5) — broken out from successCount so the post-import UPLOAD
+   *  COMPLETE screen can show "X created · Y updated · Z skipped". */
+  createdCount: number
+  updatedCount: number
+  skippedCount: number
+  /** P3 (C5) — rows the user explicitly chose to skip, surfaced as a
+   *  list under the summary so they can see WHAT was skipped (most
+   *  often a matched-contact row defaulted to skip per memory #24). */
+  skippedRows: {
+    rowIndex: number
+    name: string
+    email: string | null
+    matchedContactId: string | null
+    reason: string
+  }[]
 }
 
 /**
@@ -249,9 +264,18 @@ export function ContactsImportWizard({
     const dupesMap = findCsvInternalDuplicates(cleaned)
     const previews: PreviewRow[] = (result.data?.rows ?? []).map((r) => {
       const dupOf = dupesMap.get(r.rowIndex) ?? null
-      // Default: duplicates skip, server-matched rows update, otherwise create.
-      let action: "create" | "update" | "skip" = r.proposedAction
-      if (dupOf !== null) action = "skip"
+      // P3 (C5) — Per memory #24, matched rows default to "skip" (not
+      // "update"). Users explicitly opt into Update Contact per row,
+      // which prevents accidental bulk overwrites from CSV re-uploads.
+      // Internal CSV duplicates also default to skip (unchanged).
+      let action: "create" | "update" | "skip"
+      if (dupOf !== null) {
+        action = "skip"
+      } else if (r.matchedContactId) {
+        action = "skip"
+      } else {
+        action = "create"
+      }
       return {
         rowIndex: r.rowIndex,
         matchedContactId: r.matchedContactId,
@@ -349,10 +373,67 @@ export function ContactsImportWizard({
         error: c.errors.join("; "),
         raw: parsed?.rows[c.rowIndex - 1] ?? [],
       }))
+
+    // P3 (C5) — break out create / update / skip counts so the UPLOAD
+    // COMPLETE screen can summarize each path. The server returns per-
+    // row results with an `ok` flag and (for blocked rows) a
+    // `blockedByDedup` flag. Cross-reference with the user's preview
+    // selections to classify accurately.
+    const serverResults = result.data?.results ?? []
+    const byRowIndex = new Map(serverResults.map((r) => [r.rowIndex, r]))
+    const previewByIndex = new Map(previewRows.map((p) => [p.rowIndex, p]))
+    const cleanRowsByIndex = new Map(cleanRows.map((c) => [c.rowIndex, c]))
+    let createdCount = 0
+    let updatedCount = 0
+    let skippedCount = 0
+    const skippedRows: ImportResult["skippedRows"] = []
+    for (const c of cleanRows) {
+      if (c.errors.length > 0) continue // error rows go to errorRows below
+      const preview = previewByIndex.get(c.rowIndex)
+      const server = byRowIndex.get(c.rowIndex)
+      if (!server) continue
+      const rowName =
+        [c.values.firstName, c.values.lastName].filter(Boolean).join(" ").trim() || "(no name)"
+      const rowEmail = c.values.primaryEmail ?? null
+      if (server.ok) {
+        if (preview?.action === "skip") {
+          skippedCount++
+          skippedRows.push({
+            rowIndex: c.rowIndex,
+            name: rowName,
+            email: rowEmail,
+            matchedContactId: preview.matchedContactId,
+            reason:
+              preview.duplicateOfRow !== null ? "Duplicate row in CSV" : "Matched existing contact",
+          })
+        } else if (preview?.action === "update") {
+          updatedCount++
+        } else {
+          createdCount++
+        }
+      } else if (server.blockedByDedup) {
+        // P3 (C4 + C5) — server-side dedup blocked this create. Treat
+        // it as a skip in the summary so the user sees the matched id.
+        skippedCount++
+        skippedRows.push({
+          rowIndex: c.rowIndex,
+          name: rowName,
+          email: rowEmail,
+          matchedContactId: server.blockedByDedupMatchedId ?? null,
+          reason: "Blocked by duplicate detection (already exists)",
+        })
+      }
+    }
+    void cleanRowsByIndex
+
     setImportResult({
       successCount: result.data?.successCount ?? 0,
       errorCount: (result.data?.errorCount ?? 0) + preflightErrors.length,
       errorRows: [...preflightErrors, ...serverErrors],
+      createdCount,
+      updatedCount,
+      skippedCount,
+      skippedRows,
     })
     goToStep("done")
   }
@@ -887,14 +968,30 @@ export function PreviewStep({
           previewRows so they stay locked at "Skip — has errors". */}
       <SetAllRow
         label="Set all matched rows to"
-        defaultAction="update"
+        defaultAction="skip"
+        allowedActions={["skip", "update"]}
         onApply={onSetAllMatchedTo}
       />
       <SetAllRow
         label="Set all unmatched rows to"
         defaultAction="create"
+        allowedActions={["create", "skip"]}
         onApply={onSetAllUnmatchedTo}
       />
+
+      {/* P3 (C5) — red text duplicate warning above the table. Per
+          memory #24 + spec text verbatim. Renders only when there's
+          at least one matched (DB-side) duplicate to warn about;
+          internal CSV duplicates already get their own amber line in
+          the summary banner above. */}
+      {previewRows.some((p) => p.matchedContactId !== null) && (
+        <p className="text-xs text-red-600 dark:text-red-400">
+          There appear to be duplicate contacts in your CSV file that already exists as contacts.
+          These entries can be used to update current contact records but are standardly set to skip
+          on import. If you wish to change this status please change import entry to Update Contact
+          below.
+        </p>
+      )}
 
       {/* Row preview table */}
       <div className="max-h-[440px] overflow-auto rounded-md border border-[var(--color-border)]">
@@ -933,7 +1030,12 @@ export function PreviewStep({
                   ? "bg-amber-500/5"
                   : ""
               return (
-                <tr key={c.rowIndex} className={`border-t border-[var(--color-border)] ${bgClass}`}>
+                <tr
+                  key={c.rowIndex}
+                  className={`border-t border-[var(--color-border)] ${bgClass} ${
+                    preview?.action === "skip" && !hasError ? "opacity-60" : ""
+                  }`}
+                >
                   <td className="px-3 py-2 align-top text-xs text-[var(--color-muted-foreground)]">
                     {c.rowIndex}
                   </td>
@@ -1021,6 +1123,21 @@ export function PreviewStep({
                       >
                         <option value="skip-error">Skip — has errors</option>
                       </select>
+                    ) : preview?.matchedContactId ? (
+                      // P3 (C5) — Matched rows: Skip or Update Contact ONLY.
+                      // Memory #24: never let a CSV import create a duplicate
+                      // contact; the only safe actions for a matched row are
+                      // skip (default) or update the existing record.
+                      <select
+                        value={preview.action === "create" ? "skip" : preview.action}
+                        onChange={(e) => {
+                          onSetAction(c.rowIndex, e.target.value as "update" | "skip")
+                        }}
+                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
+                      >
+                        <option value="skip">Skip</option>
+                        <option value="update">Update Contact</option>
+                      </select>
                     ) : (
                       <select
                         value={preview?.action ?? "create"}
@@ -1030,9 +1147,6 @@ export function PreviewStep({
                         className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
                       >
                         <option value="create">Create new</option>
-                        <option value="update" disabled={!preview?.matchedContactId}>
-                          Update existing
-                        </option>
                         <option value="skip">Skip</option>
                       </select>
                     )}
@@ -1076,10 +1190,16 @@ export function PreviewStep({
 function SetAllRow({
   label,
   defaultAction,
+  allowedActions,
   onApply,
 }: {
   label: string
   defaultAction: "create" | "update" | "skip"
+  /** P3 (C5) — explicit list of allowed actions for this row's
+   *  context. Matched-rows caller passes ["skip", "update"] (no
+   *  Create new — memory #24); unmatched caller passes
+   *  ["create", "skip"]. */
+  allowedActions: ("create" | "update" | "skip")[]
   onApply: (action: "create" | "update" | "skip") => void
 }) {
   const [action, setAction] = useState<"create" | "update" | "skip">(defaultAction)
@@ -1094,9 +1214,9 @@ function SetAllRow({
         className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
         aria-label={label}
       >
-        <option value="create">Create new</option>
-        <option value="update">Update existing</option>
-        <option value="skip">Skip</option>
+        {allowedActions.includes("create") && <option value="create">Create new</option>}
+        {allowedActions.includes("update") && <option value="update">Update Contact</option>}
+        {allowedActions.includes("skip") && <option value="skip">Skip</option>}
       </select>
       <Button
         size="sm"
@@ -1207,16 +1327,53 @@ function DoneStep({
 }) {
   return (
     <div className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
+      {/* P3 (C5) — UPLOAD COMPLETE header per spec. text-2xl
+          font-semibold matches the page title hierarchy. */}
       <div>
-        <h2 className="text-base font-medium">Import complete</h2>
+        <h2 className="text-2xl font-semibold">UPLOAD COMPLETE</h2>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-          {String(result.successCount)} imported · {String(result.errorCount)} skipped or errored.
+          {String(result.createdCount)} contact
+          {result.createdCount === 1 ? "" : "s"} created · {String(result.updatedCount)} contact
+          {result.updatedCount === 1 ? "" : "s"} updated · {String(result.skippedCount)} contact
+          {result.skippedCount === 1 ? "" : "s"} skipped
         </p>
       </div>
-      {/* Push 2c.3 — hoist the errors-CSV download ABOVE the closing
-          action row so users with failed rows see the recovery
-          affordance immediately. Border + bg color now red (was
-          amber) to match the Preview-step error treatment. */}
+
+      {/* P3 (C5) — skipped-rows list. Each row shows name + email
+          + the matched contact link (if dedup) or a plain reason. */}
+      {result.skippedRows.length > 0 && (
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3 text-xs">
+          <p className="mb-2 font-medium">Skipped rows:</p>
+          <ul className="max-h-48 space-y-1 overflow-y-auto pl-1">
+            {result.skippedRows.map((s) => (
+              <li key={s.rowIndex} className="flex items-center gap-2">
+                <span className="text-[var(--color-muted-foreground)]">
+                  Row {String(s.rowIndex)}:
+                </span>
+                <span>{s.name}</span>
+                {s.email && (
+                  <span className="text-[var(--color-muted-foreground)]">({s.email})</span>
+                )}
+                <span className="ml-auto text-[var(--color-muted-foreground)]">
+                  {s.matchedContactId ? (
+                    <Link
+                      href={`/contacts/${s.matchedContactId}`}
+                      className="underline hover:text-[var(--color-foreground)]"
+                    >
+                      {s.reason}
+                    </Link>
+                  ) : (
+                    s.reason
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Push 2c.3 — errors-CSV download for any rows that failed
+          mid-import (validation or DB error, NOT dedup skips). */}
       {result.errorCount > 0 && (
         <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-3 text-sm">
           <p className="mb-2 font-medium text-red-700 dark:text-red-400">

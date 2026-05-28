@@ -238,10 +238,12 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
         onNext={noop}
       />,
     )
-    // The default for matched is "update"; click Apply directly.
+    // P3 (C5) — the default for matched rows is now "skip" (memory #24:
+    // never let CSV import accidentally create duplicates of existing
+    // contacts; matched rows opt-in to Update Contact per row).
     const applyButtons = screen.getAllByRole("button", { name: "Apply" })
     await user.click(applyButtons[0]!)
-    expect(onSetAllMatchedTo).toHaveBeenCalledWith("update")
+    expect(onSetAllMatchedTo).toHaveBeenCalledWith("skip")
   })
 })
 

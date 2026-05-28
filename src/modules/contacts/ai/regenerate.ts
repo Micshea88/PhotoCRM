@@ -237,20 +237,3 @@ export const regenerateContactAi = orgAction
       trace,
     }
   })
-
-/** Re-export the public types so consumers don't need to chase
- *  through the file tree. */
-export type { ContactFacts } from "./lead-status-rules"
-export type { AiInsight } from "./insights-detector"
-
-/**
- * Cache freshness checker for the detail page loader. Returns true
- * when the cached values are stale (> 7d) or missing.
- */
-export function isAiCacheStale(
-  cachedAt: Date | null,
-  staleAfterMs = 7 * 24 * 60 * 60 * 1000,
-): boolean {
-  if (!cachedAt) return true
-  return Date.now() - cachedAt.getTime() > staleAfterMs
-}

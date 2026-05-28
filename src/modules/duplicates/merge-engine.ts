@@ -297,6 +297,22 @@ export async function executeContactMerge(
     },
   )
 
+  // P3 (C4) — soft-delete losers BEFORE updating the winner. The
+  // contacts table has partial unique indexes on (org, LOWER(email))
+  // and (org, normalized phone) restricted to WHERE deleted_at IS
+  // NULL. If we updated the winner first and the user picked a
+  // loser's email/phone via fieldChoices, the active set would
+  // briefly hold both rows with the same email/phone and the index
+  // would reject the UPDATE. Soft-deleting losers first removes them
+  // from the active index, freeing up the value for the winner.
+  //
+  // The audit() call above still fires BEFORE any state change, so
+  // the audit-first invariant is preserved.
+  await db
+    .update(contacts)
+    .set({ deletedAt: new Date(), deletedBy: ctx.userId })
+    .where(and(eq(contacts.organizationId, ctx.organizationId), inArray(contacts.id, loserIds)))
+
   await db
     .update(contacts)
     .set({
@@ -442,11 +458,8 @@ export async function executeContactMerge(
       ),
     )
 
-  await db
-    .update(contacts)
-    .set({ deletedAt: new Date(), deletedBy: ctx.userId })
-    .where(and(eq(contacts.organizationId, ctx.organizationId), inArray(contacts.id, loserIds)))
-
+  // Loser soft-delete already happened above (see P3 C4 comment) so
+  // the winner UPDATE could pass the partial unique constraints.
   return { winnerId, mergedFromIds: loserIds }
 }
 

@@ -15,6 +15,7 @@ import {
 } from "@/modules/custom-fields/host-helpers"
 import type { CustomFieldDefinition } from "@/modules/custom-fields/schema"
 import { contacts } from "./schema"
+import { findDedupConflict } from "./dedup-preflight"
 import {
   CSV_MAX_ROWS,
   IMPORTABLE_FIELDS,
@@ -232,6 +233,12 @@ interface PerRowResult {
   ok: boolean
   contactId?: string
   error?: string
+  /** P3 (C4) — set when a "create" row was rejected by the pre-write
+   *  dedup hard block. The host (CSV import UX) treats this as a
+   *  recoverable skip and surfaces the matched contact id so the
+   *  user can re-run with the row's action flipped to "update". */
+  blockedByDedup?: boolean
+  blockedByDedupMatchedId?: string
 }
 
 function pickValuesCore(rawValues: Record<string, string>): ImportRowValues {
@@ -566,6 +573,30 @@ export const runContactsImport = orgAction
         if (r.action === "create") {
           if (!patch.firstName || !patch.lastName) {
             throw new ActionError("VALIDATION", "Cannot create a contact without a name or email")
+          }
+          // P3 (C4) — final pre-write dedup pre-flight per row. The
+          // preview step's matchedContactId already covered this for
+          // rows that came in via the wizard's UI, but a stale preview
+          // (long pause between steps, or a concurrent create) could
+          // still collide. Catch it here so the partial unique index
+          // never has to do the work and the row reports a friendly
+          // blockedByDedup result the wizard can show.
+          const conflict = await findDedupConflict(ctx.db, ctx.activeOrg.id, {
+            primaryEmail: patch.primaryEmail ?? null,
+            secondaryEmail: patch.secondaryEmail ?? null,
+            primaryPhone: patch.primaryPhone ?? null,
+            secondaryPhone: patch.secondaryPhone ?? null,
+          })
+          if (conflict) {
+            results.push({
+              rowIndex: r.rowIndex,
+              ok: false,
+              blockedByDedup: true,
+              blockedByDedupMatchedId: conflict.matchedContactId,
+              error: "Duplicate of existing contact",
+            })
+            errorCount++
+            continue
           }
           const id = createId()
           await ctx.db.insert(contacts).values({

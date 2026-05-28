@@ -14,6 +14,7 @@ import {
 } from "@/modules/custom-fields/host-helpers"
 import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
+import { findDedupConflict, type DedupMatchField } from "./dedup-preflight"
 import {
   addContactCompanyAssociationInput,
   archiveContactInput,
@@ -72,11 +73,44 @@ async function assertCompanyInOrg(
   }
 }
 
+/**
+ * Push 3 (C4) — pre-write dedup result returned to the contact form.
+ * When createContact / updateContact detects a collision against an
+ * existing non-soft-deleted contact in this org (by normalized
+ * primary/secondary email or phone), the action returns this shape
+ * INSTEAD of throwing — the host renders <DedupBlockModal/> from it.
+ *
+ * Per memory #22 there is NO override path; the user either navigates
+ * to the existing contact or cancels.
+ */
+export interface DedupConflictResult {
+  dedupConflict: {
+    matchedContactId: string
+    matchedField: DedupMatchField
+  }
+}
+
 export const createContact = orgAction
   .metadata({ actionName: "contacts.create" })
   .inputSchema(createContactInput)
-  .action(async ({ parsedInput, ctx }) => {
+  .action(async ({ parsedInput, ctx }): Promise<{ id: string } | DedupConflictResult> => {
     await assertCompanyInOrg(ctx.db, parsedInput.companyId, ctx.activeOrg.id)
+    // P3 C4 pre-flight dedup: check before validating custom fields or
+    // generating the id so we never partially mutate state.
+    const conflict = await findDedupConflict(ctx.db, ctx.activeOrg.id, {
+      primaryEmail: parsedInput.primaryEmail ?? null,
+      secondaryEmail: parsedInput.secondaryEmail ?? null,
+      primaryPhone: parsedInput.primaryPhone ?? null,
+      secondaryPhone: parsedInput.secondaryPhone ?? null,
+    })
+    if (conflict) {
+      return {
+        dedupConflict: {
+          matchedContactId: conflict.matchedContactId,
+          matchedField: conflict.matchedField,
+        },
+      }
+    }
     const { value: validatedCustomFields } = await prepareCustomFieldsForCreate(
       ctx.db,
       CONTACT_RECORD_TYPE,
@@ -138,10 +172,31 @@ export const createContact = orgAction
 export const updateContact = orgAction
   .metadata({ actionName: "contacts.update" })
   .inputSchema(updateContactInput)
-  .action(async ({ parsedInput, ctx }) => {
+  .action(async ({ parsedInput, ctx }): Promise<{ id: string } | DedupConflictResult> => {
     const { id, ...rest } = parsedInput
     if (rest.companyId !== undefined) {
       await assertCompanyInOrg(ctx.db, rest.companyId, ctx.activeOrg.id)
+    }
+    // P3 C4 pre-flight dedup. Skip self-id, so updating a contact without
+    // changing email/phone never falsely conflicts. Email/phone fields
+    // that are omitted from the update payload (undefined in `rest`)
+    // can't introduce a NEW conflict, but we still pass them as null
+    // to be defensive — undefined would be a no-op in findDedupConflict
+    // since lower(undefined) → null.
+    const conflict = await findDedupConflict(ctx.db, ctx.activeOrg.id, {
+      primaryEmail: rest.primaryEmail ?? null,
+      secondaryEmail: rest.secondaryEmail ?? null,
+      primaryPhone: rest.primaryPhone ?? null,
+      secondaryPhone: rest.secondaryPhone ?? null,
+      excludeContactId: id,
+    })
+    if (conflict) {
+      return {
+        dedupConflict: {
+          matchedContactId: conflict.matchedContactId,
+          matchedField: conflict.matchedField,
+        },
+      }
     }
     // Only re-validate when the caller is actually mutating custom_fields.
     // If `customFields` is omitted from the update payload, leave existing

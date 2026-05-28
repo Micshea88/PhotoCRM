@@ -43,6 +43,13 @@ describe("duplicates engine — query loaders", () => {
       })
       const aId = createId()
       const bId = createId()
+      // P3 (C4) — the contacts table now has a partial unique index on
+      // (org, LOWER(primary_email)) WHERE deleted_at IS NULL. Two
+      // active rows with the same primary email is no longer
+      // representable. The dedup ENGINE still flags an email
+      // duplicate when one row's primary matches another's secondary
+      // (cross-field), so we test that path here — the rows differ
+      // on primary_email but A's primary == B's secondary.
       await db.insert(contacts).values([
         {
           id: aId,
@@ -60,7 +67,8 @@ describe("duplicates engine — query loaders", () => {
           firstName: "Ada",
           lastName: "Lovelace",
           companyId,
-          primaryEmail: "SHARED@example.com",
+          primaryEmail: "ada-work@example.com",
+          secondaryEmail: "SHARED@example.com",
           createdBy: userId,
           updatedBy: userId,
         },
@@ -115,7 +123,8 @@ describe("duplicates engine — query loaders", () => {
       const userId = await createUser(db)
       const orgA = await createOrganization(db, userId)
       const orgB = await createOrganization(db, userId)
-      // Org A: a real duplicate pair.
+      // Org A: a real duplicate pair (cross-field email — see C4 note
+      // in the first test above for why we don't use same primary email).
       await setOrgContext(db, orgA, "owner", userId)
       await db.insert(contacts).values([
         {
@@ -132,7 +141,8 @@ describe("duplicates engine — query loaders", () => {
           organizationId: orgA,
           firstName: "Org A2",
           lastName: "Person",
-          primaryEmail: "shared@example.com",
+          primaryEmail: "person-alt@example.com",
+          secondaryEmail: "shared@example.com",
           createdBy: userId,
           updatedBy: userId,
         },

@@ -18,6 +18,8 @@ import { UserRefPicker } from "@/modules/custom-fields/ui/user-ref-picker"
 import type { CustomFieldDefinition } from "@/modules/custom-fields/schema"
 import type { Contact } from "../schema"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "../types"
+import type { DedupMatchField } from "../dedup-types"
+import { DedupBlockModal } from "./dedup-block-modal"
 import {
   addContactCompanyAssociation,
   createContact,
@@ -139,6 +141,12 @@ export function ContactForm({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>(companies)
+  // P3 C4 — dedup modal state. When createContact/updateContact returns
+  // a `dedupConflict` result, this state drives the DedupBlockModal.
+  const [dedupConflict, setDedupConflict] = useState<{
+    matchedContactId: string
+    matchedField: DedupMatchField
+  } | null>(null)
 
   const initialAddress = (initialContact?.mailingAddress ?? {}) as MailingAddressShape
 
@@ -289,6 +297,12 @@ export function ContactForm({
         setSubmitting(false)
         return
       }
+      const data = result.data
+      if (data && "dedupConflict" in data) {
+        setDedupConflict(data.dedupConflict)
+        setSubmitting(false)
+        return
+      }
       contactId = initialContact.id
     } else {
       const result = await createContact(payload)
@@ -302,7 +316,13 @@ export function ContactForm({
         setSubmitting(false)
         return
       }
-      const newId = result.data?.id
+      const data = result.data
+      if (data && "dedupConflict" in data) {
+        setDedupConflict(data.dedupConflict)
+        setSubmitting(false)
+        return
+      }
+      const newId = data?.id
       if (!newId) {
         setError("Unknown error creating contact.")
         setSubmitting(false)
@@ -372,6 +392,18 @@ export function ContactForm({
     router.push(`/contacts/${contactId}`)
     router.refresh()
   }
+
+  // P3 C4 — resolve a friendly label + subtext for the dedup modal
+  // when it's open. Hydrated from the `referrals` prop (which is the
+  // full org-contacts list passed by the page loader); falls back to
+  // the matched id if not found (e.g., referrals filtered out the
+  // current contact in edit mode).
+  const dedupMatched =
+    dedupConflict !== null ? referrals.find((r) => r.id === dedupConflict.matchedContactId) : null
+  const dedupLabel = dedupMatched
+    ? `${dedupMatched.firstName} ${dedupMatched.lastName}`.trim() || "Existing contact"
+    : "Existing contact"
+  const dedupSubtext = dedupMatched?.primaryEmail ?? undefined
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
@@ -831,6 +863,19 @@ export function ContactForm({
               : "Create contact"}
         </Button>
       </div>
+
+      {dedupConflict && (
+        <DedupBlockModal
+          open={true}
+          onClose={() => {
+            setDedupConflict(null)
+          }}
+          matchedContactId={dedupConflict.matchedContactId}
+          matchedContactLabel={dedupLabel}
+          matchedContactSubtext={dedupSubtext}
+          matchedField={dedupConflict.matchedField}
+        />
+      )}
     </form>
   )
 }

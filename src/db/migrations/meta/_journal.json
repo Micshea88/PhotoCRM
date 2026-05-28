@@ -239,6 +239,13 @@
       "when": 1779890707846,
       "tag": "0033_push3_c2_user_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0034_push3_c4_dedup_unique_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -80,7 +80,38 @@ export interface ContactFilterOverrides {
   openTasksFrom?: string
   openTasksTo?: string
   customFields?: CustomFieldFilter[]
+  // P3 (C6c followup) — bi-directional sort. Whitelisted via
+  // SORTABLE_CONTACT_FIELDS below; unknown values fall back to the
+  // default (lastName asc). URL-param-driven on /contacts and
+  // encoded in saved_views.sort jsonb (already supports
+  // { field, direction }).
+  sortBy?: string
+  sortDir?: "asc" | "desc"
 }
+
+/**
+ * Push 3 (C6c followup) — whitelist of sortable contact fields. The
+ * keys are the column ids surfaced in CONTACT_COLUMN_REGISTRY; the
+ * value is the SQL expression to order by. Add a row here when a
+ * new sortable column ships.
+ *
+ * Custom-field columns aren't in this list (yet) — sorting on a
+ * jsonb extracted value needs per-field-type casting (number vs
+ * date vs text). Tracking that as a follow-up.
+ */
+export const SORTABLE_CONTACT_FIELDS = [
+  "firstName",
+  "lastName",
+  "primaryEmail",
+  "primaryPhone",
+  "contactType",
+  "lifecycleStatus",
+  "leadSource",
+  "companyName",
+  "createdAt",
+  "updatedAt",
+] as const
+export type SortableContactField = (typeof SORTABLE_CONTACT_FIELDS)[number]
 
 export interface ListContactsForViewOptions {
   /** 1-indexed page. Defaults to 1. */
@@ -113,47 +144,133 @@ export async function listContactsForView(
   filters: ContactFilterOverrides,
   opts: ListContactsForViewOptions = {},
 ): Promise<ListContactsForViewResult> {
+  return withOrgContext((tx) => listContactsForViewWithDb(tx, filters, opts))
+}
+
+type TxHandle = Parameters<Parameters<typeof withOrgContext>[0]>[0]
+
+/**
+ * Push 3 (C6c followup) — parametric variant for callers that already
+ * own a tx (integration tests on `withTestDb`'s transaction, or
+ * future jobs that manage their own boundaries). The production
+ * `listContactsForView` delegates to this; both code paths share the
+ * WHERE + ORDER BY building so test behavior matches prod.
+ */
+export async function listContactsForViewWithDb(
+  tx: TxHandle,
+  filters: ContactFilterOverrides,
+  opts: ListContactsForViewOptions = {},
+): Promise<ListContactsForViewResult> {
   const pageSize: ContactsPageSize = opts.pageSize ?? CONTACTS_DEFAULT_PAGE_SIZE
   const page = Math.max(1, opts.page ?? 1)
   const offset = (page - 1) * pageSize
+  const conditions = buildContactConditions(filters)
 
-  return withOrgContext(async (tx) => {
-    const conditions = buildContactConditions(filters)
+  // Cap the count at CONTACTS_LIST_HARD_CAP + 1 so we can detect
+  // "exceeded the cap" without scanning the whole table. The +1
+  // sentinel says: there's at least one more row past the cap.
+  const cappedSubquery = sql`(
+    SELECT 1
+    FROM ${contacts}
+    LEFT JOIN ${companies} ON ${contacts.companyId} = ${companies.id} AND ${companies.deletedAt} IS NULL
+    WHERE ${and(...conditions)}
+    LIMIT ${CONTACTS_LIST_HARD_CAP + 1}
+  ) AS capped`
 
-    // Cap the count at CONTACTS_LIST_HARD_CAP + 1 so we can detect
-    // "exceeded the cap" without scanning the whole table. The +1
-    // sentinel says: there's at least one more row past the cap.
-    const cappedSubquery = sql`(
-      SELECT 1
-      FROM ${contacts}
-      LEFT JOIN ${companies} ON ${contacts.companyId} = ${companies.id} AND ${companies.deletedAt} IS NULL
-      WHERE ${and(...conditions)}
-      LIMIT ${CONTACTS_LIST_HARD_CAP + 1}
-    ) AS capped`
+  const countResult = await tx.execute<{ total: number }>(sql`
+    SELECT COUNT(*)::int AS total FROM ${cappedSubquery}
+  `)
+  const countRow = countResult.rows[0]
+  const cappedTotal = countRow?.total ?? 0
+  const cappedOut = cappedTotal > CONTACTS_LIST_HARD_CAP
+  const totalCount = Math.min(cappedTotal, CONTACTS_LIST_HARD_CAP)
 
-    const countResult = await tx.execute<{ total: number }>(sql`
-      SELECT COUNT(*)::int AS total FROM ${cappedSubquery}
-    `)
-    const countRow = countResult.rows[0]
-    const cappedTotal = countRow?.total ?? 0
-    const cappedOut = cappedTotal > CONTACTS_LIST_HARD_CAP
-    const totalCount = Math.min(cappedTotal, CONTACTS_LIST_HARD_CAP)
+  if (cappedOut) {
+    return { rows: [], totalCount, cappedOut }
+  }
 
-    if (cappedOut) {
-      return { rows: [], totalCount, cappedOut }
-    }
+  const orderClauses = buildOrderClauses(filters)
+  const rows = await tx
+    .select({ contact: contacts, company: companies })
+    .from(contacts)
+    .leftJoin(companies, and(eq(contacts.companyId, companies.id), isNull(companies.deletedAt)))
+    .where(and(...conditions))
+    .orderBy(...orderClauses)
+    .limit(pageSize)
+    .offset(offset)
 
-    const rows = await tx
-      .select({ contact: contacts, company: companies })
-      .from(contacts)
-      .leftJoin(companies, and(eq(contacts.companyId, companies.id), isNull(companies.deletedAt)))
-      .where(and(...conditions))
-      .orderBy(contacts.lastName, contacts.firstName)
-      .limit(pageSize)
-      .offset(offset)
+  return { rows, totalCount, cappedOut: false }
+}
 
-    return { rows, totalCount, cappedOut: false }
-  })
+/**
+ * Push 3 (C6c followup) — translate { sortBy, sortDir } from
+ * ContactFilterOverrides into the SQL ORDER BY clauses.
+ *
+ * Whitelisted via SORTABLE_CONTACT_FIELDS; unknown sortBy values fall
+ * back to the default (lastName asc, firstName asc) so URL drift
+ * (typo, deprecated column) can't blow up the list. Direction
+ * defaults to asc when missing.
+ *
+ * Secondary tie-break: when sorting on a column that isn't the name
+ * pair, append (lastName, firstName) so equal-by-primary-sort rows
+ * still come out in a stable alphabetic order.
+ */
+function buildOrderClauses(filters: ContactFilterOverrides): SQL[] {
+  const dir = filters.sortDir === "desc" ? "desc" : "asc"
+  const requested = filters.sortBy
+  const isValid = !!requested && (SORTABLE_CONTACT_FIELDS as readonly string[]).includes(requested)
+  if (!isValid) {
+    return [sql`${contacts.lastName} asc`, sql`${contacts.firstName} asc`]
+  }
+  const dirSql = dir === "desc" ? sql`desc` : sql`asc`
+  const nullsLastTrailer = dir === "desc" ? sql`nulls last` : sql`nulls last`
+  function ordered(col: SQL): SQL {
+    return sql`${col} ${dirSql} ${nullsLastTrailer}`
+  }
+  let primary: SQL
+  switch (requested as SortableContactField) {
+    case "firstName":
+      primary = ordered(sql`${contacts.firstName}`)
+      break
+    case "lastName":
+      primary = ordered(sql`${contacts.lastName}`)
+      break
+    case "primaryEmail":
+      primary = ordered(sql`${contacts.primaryEmail}`)
+      break
+    case "primaryPhone":
+      // Phone sort uses the digits-only normalized form so " (555) "
+      // and "555-" group together.
+      primary = ordered(sql`REGEXP_REPLACE(COALESCE(${contacts.primaryPhone}, ''), '\\D', '', 'g')`)
+      break
+    case "contactType":
+      primary = ordered(sql`${contacts.contactType}`)
+      break
+    case "lifecycleStatus":
+      primary = ordered(sql`${contacts.lifecycleStatus}`)
+      break
+    case "leadSource":
+      primary = ordered(sql`${contacts.leadSource}`)
+      break
+    case "companyName":
+      primary = ordered(sql`${companies.name}`)
+      break
+    case "createdAt":
+      primary = ordered(sql`${contacts.createdAt}`)
+      break
+    case "updatedAt":
+      primary = ordered(sql`${contacts.updatedAt}`)
+      break
+  }
+  // Stable secondary tie-break. Skip when the primary IS the
+  // (lastName, firstName) pair so we don't repeat ourselves.
+  if (requested === "lastName") {
+    return [primary, sql`${contacts.firstName} asc`]
+  }
+  if (requested === "firstName") {
+    return [primary, sql`${contacts.lastName} asc`]
+  }
+  return [primary, sql`${contacts.lastName} asc`, sql`${contacts.firstName} asc`]
 }
 
 // Re-typed helper for the result shape's inference (avoids a circular
@@ -195,6 +312,34 @@ function buildContactConditions(filters: ContactFilterOverrides): SQL[] {
     push(sql`${contacts.createdAt} < (${filters.createdTo}::date + INTERVAL '1 day')`)
   }
   if (filters.q && filters.q.trim().length > 0) {
+    // P3 (C6c followup) — global search across ALL columns + tags +
+    // custom_fields. Per Mike's spec: "search must cover ALL columns
+    // + all custom fields". Implementation notes:
+    //   - Phone fields ILIKE on a digits-only variant so the typed
+    //     term "(555) 123-4567" matches the stored "5551234567" and
+    //     vice versa.
+    //   - tags is text[] — `EXISTS (SELECT 1 FROM unnest(tags) tag
+    //     WHERE tag ILIKE pattern)` works against the GIN index for
+    //     containment and falls back to a small array seq scan
+    //     otherwise. Cheap at V1 scale.
+    //   - custom_fields is jsonb — `custom_fields::text ILIKE`
+    //     casts the whole document to text and substring-matches.
+    //     This won't use the existing GIN-on-jsonb index (that index
+    //     is for @> containment). It WILL force a seq scan against
+    //     the jsonb column. Acceptable because CONTACTS_LIST_HARD_CAP
+    //     (10k) bounds the scan.
+    //
+    // V1.5 root-cause fix (not in this commit — proposed for when
+    // contact volumes outgrow the 10k cap):
+    //   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    //   CREATE INDEX contacts_search_trgm_idx ON contacts
+    //     USING gin ((
+    //       coalesce(first_name,'') || ' ' || coalesce(last_name,'') || ' ' ||
+    //       coalesce(primary_email,'') || ' ' || coalesce(secondary_email,'') || ' ' ||
+    //       coalesce(primary_phone,'') || ' ' || coalesce(secondary_phone,'') || ' ' ||
+    //       coalesce(notes,'') || ' ' || coalesce(custom_fields::text,'')
+    //     ) gin_trgm_ops);
+    // The expression above would let ILIKE %term% use the GIN index.
     const term = filters.q.trim()
     const pattern = `%${term}%`
     const digits = term.replace(/\D/g, "")
@@ -204,8 +349,20 @@ function buildContactConditions(filters: ContactFilterOverrides): SQL[] {
         ilike(contacts.firstName, pattern),
         ilike(contacts.lastName, pattern),
         ilike(contacts.primaryEmail, pattern),
+        ilike(contacts.secondaryEmail, pattern),
         ilike(contacts.primaryPhone, phonePattern),
+        ilike(contacts.secondaryPhone, phonePattern),
+        ilike(contacts.contactType, pattern),
+        ilike(contacts.lifecycleStatus, pattern),
+        ilike(contacts.leadSource, pattern),
+        ilike(contacts.sourceDetail, pattern),
+        ilike(contacts.notes, pattern),
+        ilike(contacts.instagramHandle, pattern),
+        ilike(contacts.facebookUrl, pattern),
+        ilike(contacts.website, pattern),
         ilike(companies.name, pattern),
+        sql`EXISTS (SELECT 1 FROM unnest(${contacts.tags}) tag WHERE tag ILIKE ${pattern})`,
+        sql`${contacts.customFields}::text ILIKE ${pattern}`,
       ),
     )
   }

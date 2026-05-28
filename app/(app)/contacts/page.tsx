@@ -66,11 +66,40 @@ function parseUrlOverrides(
     openTasksFrom: pick("openTasksFrom"),
     openTasksTo: pick("openTasksTo"),
     customFields: customFields.length > 0 ? customFields : undefined,
+    // P3 (C6c followup) — bi-directional sort. Reads sortBy + sortDir
+    // straight from the URL. The list query whitelists sortBy against
+    // SORTABLE_CONTACT_FIELDS internally; an unknown value falls back
+    // to the default (lastName asc) so URL drift can't break the list.
+    sortBy: pick("sortBy"),
+    sortDir: pick("sortDir") === "desc" ? "desc" : pick("sortDir") === "asc" ? "asc" : undefined,
   }
 }
 
 function isCustomFieldOp(op: string): op is CustomFieldFilter["op"] {
   return ["contains", "eq", "in", "min", "max", "from", "to"].includes(op)
+}
+
+/**
+ * P3 (C6c followup) — apply a saved view's stored `sort` jsonb on
+ * top of URL overrides. URL params win — `sortBy` / `sortDir` from
+ * the URL take precedence over the view's persisted sort. The
+ * `sortJsonSchema` (saved-views/types.ts) accepts either a single
+ * `{ field, direction }` or an array; we honor the first entry of
+ * the array form for V1 (multi-key sort isn't surfaced through the
+ * URL today).
+ */
+function mergeViewSortIntoOverrides(
+  overrides: ContactFilterOverrides,
+  storedSort: unknown,
+): ContactFilterOverrides {
+  if (overrides.sortBy) return overrides
+  if (!storedSort || typeof storedSort !== "object") return overrides
+  const first: unknown = Array.isArray(storedSort) ? storedSort[0] : storedSort
+  if (!first || typeof first !== "object") return overrides
+  const s = first as { field?: unknown; direction?: unknown }
+  if (typeof s.field !== "string") return overrides
+  const dir: "asc" | "desc" = s.direction === "desc" ? "desc" : "asc"
+  return { ...overrides, sortBy: s.field, sortDir: dir }
 }
 
 /**
@@ -240,11 +269,16 @@ export default async function ContactsPage({
 
         // Merge view-stored filters with URL overrides (URL wins).
         const cfDefsByFieldId = new Map(cfDefs.map((d) => [d.id, { fieldType: d.fieldType }]))
-        const appliedFilters = mergeViewFiltersIntoOverrides(
+        const mergedFilters = mergeViewFiltersIntoOverrides(
           urlOverrides,
           (activeView?.filters as unknown[] | null) ?? null,
           cfDefsByFieldId,
         )
+        // P3 (C6c followup) — merge the saved view's `sort` jsonb into
+        // the query overrides. URL params win — `sortBy`/`sortDir` on
+        // the URL override the view's persisted sort. When neither is
+        // set, the list query falls back to its default (lastName asc).
+        const appliedFilters = mergeViewSortIntoOverrides(mergedFilters, activeView?.sort)
 
         // Pagination — page + pageSize resolved from URL with prefs fallback.
         const requestedPage =

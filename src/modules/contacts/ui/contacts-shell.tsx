@@ -295,6 +295,18 @@ export function ContactsShell({
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
             customFieldDefs={customFieldDefs}
+            sortField={params.get("sortBy")}
+            sortDir={params.get("sortDir") === "desc" ? "desc" : "asc"}
+            onSortChange={(next) => {
+              // P3 (C6c followup) — push sort into the URL so the server
+              // re-renders with the new sort applied. Page resets to 1
+              // since sort changes the row order.
+              const url = new URLSearchParams(params)
+              url.set("sortBy", next.field)
+              url.set("sortDir", next.direction)
+              url.delete("page")
+              router.push(`${pathname}?${url.toString()}`)
+            }}
           />
           <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
         </>

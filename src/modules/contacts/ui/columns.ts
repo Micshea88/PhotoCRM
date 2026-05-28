@@ -70,6 +70,15 @@ export interface ContactColumnDef {
    * JSX with icons; measureText returns just the words).
    */
   measureText: (row: ContactRow) => string
+  /**
+   * P3 (C6c followup) — when set, the column header is clickable +
+   * sorts the list by this field. The value MUST be a member of
+   * SORTABLE_CONTACT_FIELDS (filter-spec.ts) — that whitelist is the
+   * SQL source of truth. Columns without sortField stay un-clickable.
+   * Custom-field columns aren't sortable in V1 (per-type cast handling
+   * is a follow-up).
+   */
+  sortField?: string
 }
 
 // Push 2c.1.1 — each entry's measureText returns the EXACT visible
@@ -118,6 +127,9 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 280,
     render: displayLabelText,
     measureText: displayLabelText,
+    // P3 (C6c followup) — clicking Name sorts on lastName (matches the
+    // default order; first name is the secondary tie-break).
+    sortField: "lastName",
   },
   // Push 2c.1 — first name and last name as their own togglable columns.
   // Default-hidden (resolveContactColumns adds missing registry ids as
@@ -129,6 +141,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => row.firstName,
     measureText: (row) => row.firstName,
+    sortField: "firstName",
   },
   lastName: {
     id: "lastName",
@@ -136,6 +149,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => row.lastName,
     measureText: (row) => row.lastName,
+    sortField: "lastName",
   },
   primaryEmail: {
     id: "primaryEmail",
@@ -143,6 +157,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 240,
     render: (row) => row.primaryEmail ?? "",
     measureText: (row) => row.primaryEmail ?? "",
+    sortField: "primaryEmail",
   },
   primaryPhone: {
     id: "primaryPhone",
@@ -150,6 +165,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 160,
     render: (row) => formatPhoneDisplay(row.primaryPhone),
     measureText: (row) => formatPhoneDisplay(row.primaryPhone),
+    sortField: "primaryPhone",
   },
   contactType: {
     id: "contactType",
@@ -157,6 +173,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => row.contactType ?? "",
     measureText: (row) => row.contactType ?? "",
+    sortField: "contactType",
   },
   lifecycleStatus: {
     id: "lifecycleStatus",
@@ -164,6 +181,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => row.lifecycleStatus ?? "",
     measureText: (row) => row.lifecycleStatus ?? "",
+    sortField: "lifecycleStatus",
   },
   tags: {
     id: "tags",
@@ -178,6 +196,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 220,
     render: (row) => row.companyName ?? "",
     measureText: (row) => row.companyName ?? "",
+    sortField: "companyName",
   },
   createdAt: {
     id: "createdAt",
@@ -185,6 +204,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => row.createdAt.slice(0, 10),
     measureText: (row) => row.createdAt.slice(0, 10),
+    sortField: "createdAt",
   },
   // ── Push 2c.6 expansion ────────────────────────────────────────
   // Each new column id is stable + immutable once shipped. Defaults
@@ -270,6 +290,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 160,
     render: (row) => row.leadSource ?? "",
     measureText: (row) => row.leadSource ?? "",
+    sortField: "leadSource",
   },
   sourceDetail: {
     id: "sourceDetail",
@@ -295,6 +316,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     defaultWidth: 140,
     render: (row) => (row.updatedAt ? row.updatedAt.slice(0, 10) : ""),
     measureText: (row) => (row.updatedAt ? row.updatedAt.slice(0, 10) : ""),
+    sortField: "updatedAt",
   },
   notes: {
     id: "notes",

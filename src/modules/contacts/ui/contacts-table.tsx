@@ -44,6 +44,15 @@ interface ContactsTableProps {
   /** Push 4 (A4) — per-org custom field definitions. Merged into the
    * column registry at render time so cf:* column ids resolve. */
   customFieldDefs?: ListCustomFieldDef[]
+  /** P3 (C6c followup) — current sort field + direction, surfaced
+   *  on column headers as an asc/desc arrow indicator. Null when no
+   *  explicit sort is active (header still clickable to apply one). */
+  sortField?: string | null
+  sortDir?: "asc" | "desc"
+  /** P3 (C6c followup) — callback when the user clicks a sortable
+   *  column header. Host wires this to a URL push so the next render
+   *  re-issues the list query with new sort params. */
+  onSortChange?: (next: { field: string; direction: "asc" | "desc" }) => void
 }
 
 export type { ContactRow }
@@ -73,6 +82,9 @@ export function ContactsTable({
   selectedIds,
   onSelectedIdsChange,
   customFieldDefs,
+  sortField,
+  sortDir,
+  onSortChange,
 }: ContactsTableProps) {
   // Header checkbox tri-state: all visible selected / partial / none.
   const allOnPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
@@ -283,6 +295,8 @@ export function ContactsTable({
                 <SortableContext items={visibleIds} strategy={horizontalListSortingStrategy}>
                   {resolved.visible.map((col) => {
                     const cfg = resolved.all.find((c) => c.id === col.id)
+                    const sortableOn = col.sortField ?? null
+                    const isActiveSort = !!sortableOn && !!sortField && sortField === sortableOn
                     return (
                       <SortableHeaderCell
                         key={col.id}
@@ -295,6 +309,10 @@ export function ContactsTable({
                         onAutoFit={(hostEl) => {
                           autoFitColumn(col.id, hostEl)
                         }}
+                        sortableField={sortableOn}
+                        sortActive={isActiveSort}
+                        sortDir={isActiveSort ? (sortDir ?? "asc") : null}
+                        onSortChange={onSortChange}
                       />
                     )
                   })}
@@ -440,6 +458,10 @@ function SortableHeaderCell({
   width,
   onResizeStart,
   onAutoFit,
+  sortableField,
+  sortActive,
+  sortDir,
+  onSortChange,
 }: {
   id: string
   label: string
@@ -447,6 +469,12 @@ function SortableHeaderCell({
   onResizeStart: (startX: number, startWidth: number) => void
   /** Push 2c.1 — receives the header <th> so autofit can read its font. */
   onAutoFit: (hostEl: Element) => void
+  /** P3 (C6c followup) — when non-null, the label becomes a sort
+   *  trigger. Clicking cycles asc → desc (then back to asc). */
+  sortableField?: string | null
+  sortActive?: boolean
+  sortDir?: "asc" | "desc" | null
+  onSortChange?: (next: { field: string; direction: "asc" | "desc" }) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -460,14 +488,42 @@ function SortableHeaderCell({
   // The drag listeners attach to the header BODY, not the resize handle —
   // so the right-edge cursor:col-resize region remains independently
   // mouse-down-grabbable for width.
+  // P3 (C6c followup) — clicking the label sorts when the column has
+  // a sortField. Cycle: asc → desc → asc. The dnd-kit drag listeners
+  // hang off the label too, so we use onClick (single tap) for sort
+  // and rely on the @dnd-kit drag-threshold to disambiguate drag from
+  // click — a drag must move >0px before dnd activates. A click that
+  // doesn't move is treated as a sort intent.
+  function handleSortClick(e: React.MouseEvent) {
+    if (!sortableField || !onSortChange) return
+    // Ignore right-click + modifier-clicks.
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    const nextDir: "asc" | "desc" = sortActive && sortDir === "asc" ? "desc" : "asc"
+    onSortChange({ field: sortableField, direction: nextDir })
+  }
+  const sortArrow = sortActive ? (sortDir === "desc" ? " ↓" : " ↑") : ""
   return (
     <th
       ref={setNodeRef}
       style={style}
       className="relative border-r border-b border-[var(--color-border)] px-4 py-2"
+      aria-sort={sortActive ? (sortDir === "desc" ? "descending" : "ascending") : undefined}
     >
-      <span {...attributes} {...listeners} className="cursor-grab select-none">
+      <span
+        {...attributes}
+        {...listeners}
+        onClick={handleSortClick}
+        className={
+          sortableField
+            ? "cursor-pointer select-none hover:text-[var(--color-foreground)]"
+            : "cursor-grab select-none"
+        }
+        data-testid={sortableField ? `contacts-th-sortable-${sortableField}` : undefined}
+      >
         {label}
+        {sortArrow && (
+          <span className="ml-1 text-[10px] text-[var(--color-primary)]">{sortArrow}</span>
+        )}
       </span>
       <span
         role="separator"

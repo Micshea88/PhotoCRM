@@ -267,6 +267,13 @@
       "when": 1780100002000,
       "tag": "0037_push3_c6a_sms_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0038_push3_c6b_ai_usage_log",
+      "breakpoints": true
     }
   ]
 }

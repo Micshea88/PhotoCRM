@@ -16,6 +16,17 @@ surface the conflict** — don't quietly walk back a locked decision.
   improvements (collapsible nav, searchable dropdowns, pre-write dedup,
   CSV import duplicate UX, contact detail rebuild, merge UI rebuild):
   **CURRENT** — C1 (audit doc, this file's birth) → C7
+- **Push 3.5 — CSV Import V2** (NEW SLOT, inserted between Push 3 and
+  Push 5): rebuild `/contacts/import` to HubSpot parity + improvements.
+  Searchable property picker (reuses SearchableSelect from C3), inline
+  custom field creation from the mapping dropdown, AI-assisted column
+  scanning to auto-detect field type (uses the C6b AI engine),
+  property-details-on-hover, suggested-properties-at-top. Pathway-
+  beyond-HubSpot moves: inline VALUE editing in the preview step, AI
+  flagging likely data-quality issues row-by-row, predictive search
+  across both existing properties AND in-CSV column names. Must be
+  visually clean / polished. Dependencies (custom-fields engine P4,
+  AI infra C6b) are satisfied. **Required in V1.**
 - **Push 5** — Pipeline UI
 - **Push 6** — Events CORE (list / detail / form / sub-events /
   photographers + placeholder tabs for later modules)
@@ -280,6 +291,35 @@ focused prompt.
 Note: Referral Source category is volume-based. Conversion gap is a
 **separate Layer 3 agentic insight**, not a status downgrade. Top
 Referral Source = 5+ referrals **regardless of conversion**.
+
+---
+
+## Captured upcoming scope (scheduled, not built yet)
+
+Recorded during P3 C6b for future commits. Each item lists its target
+slot.
+
+- **C6c** — Contacts global search must cover ALL columns + all custom
+  fields (existing and newly created), not just a fixed subset. The
+  search box on `/contacts` should match across firstName, lastName,
+  primaryEmail, primaryPhone, company name, tags, AND every custom
+  field's value (jsonb-aware).
+- **C6c** — All sortable fields on the contacts list get ascending +
+  descending sort (HubSpot parity). The current list supports
+  sort-by-one-direction-per-column; expand to toggle bi-directional.
+- **P11 (with Finance)** — Notifications center: filterable + searchable
+  BY category (new leads vs. payments vs. guide-downloads etc.) with
+  predictive text. Must let users view all new leads grouped together
+  (fixes HoneyBook's lumped-notifications problem where every category
+  shares one feed).
+- **After P5 Pipeline + P6 Events + P9 Companies** — Lead form (public-
+  facing capture form). Captures name / email / phone / project date /
+  venue / event type / planner / vision / referral source. Auto-sends
+  text + email on submit. Inquiries flow into real event / company /
+  pipeline records — feeds the AI summary generator's richest signals
+  (project date, value, event type, venue, referral context).
+- **Push 3.5 — CSV Import V2** (slotted between Push 3 and Push 5; see
+  Push Sequence above for the full description).
 
 ---
 

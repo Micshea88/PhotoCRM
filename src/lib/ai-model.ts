@@ -25,6 +25,19 @@ import { env } from "@/lib/env"
 export interface CallAiModelArgs {
   systemPrompt: string
   userPrompt: string
+  /**
+   * P3 (C6b) — optional per-call model override. When omitted, falls
+   * back to `env.AI_WORKFLOW_BUILDER_MODEL` (the original behavior).
+   *
+   * Lets the contacts AI engine pick Haiku for classifier + summary
+   * (cheap, fast) without locking the whole codebase to one model.
+   * Single-importer rule preserved — this file is still the only
+   * `@anthropic-ai/sdk` consumer, and the ESLint allowlist is
+   * unchanged.
+   */
+  model?: string
+  /** Optional max tokens override. Defaults to DEFAULT_MAX_TOKENS. */
+  maxTokens?: number
 }
 
 export interface CallAiModelResult {
@@ -47,10 +60,10 @@ export async function callAiModel(args: CallAiModelArgs): Promise<CallAiModelRes
     throw new Error(NOT_CONFIGURED_MESSAGE)
   }
   const client = new Anthropic({ apiKey })
-  const model = env.AI_WORKFLOW_BUILDER_MODEL
+  const model = args.model ?? env.AI_WORKFLOW_BUILDER_MODEL
   const response = await client.messages.create({
     model,
-    max_tokens: DEFAULT_MAX_TOKENS,
+    max_tokens: args.maxTokens ?? DEFAULT_MAX_TOKENS,
     system: args.systemPrompt,
     messages: [{ role: "user", content: args.userPrompt }],
   })

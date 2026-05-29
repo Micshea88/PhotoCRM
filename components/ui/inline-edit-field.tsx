@@ -1,102 +1,140 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Check, Pencil, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Input } from "./input"
 
 /**
- * Push 3 (C6c) — inline edit primitive.
+ * Push 3 (C6c polish) — inline edit primitive, autosave variant.
  *
- * HubSpot-style click-to-edit field. Renders a value with a subtle
- * hover affordance; clicking enters edit mode (text input + save /
- * cancel buttons + Enter/Esc keyboard handlers). The host owns the
- * server action via `onSave` — this primitive is purely UI.
+ * Click the value to enter edit mode → input shows beneath a thin
+ * underline (HubSpot pattern). On blur OR Enter the value is saved
+ * automatically; Esc reverts. There are NO Save / Cancel buttons —
+ * the lifecycle is purely keyboard + focus driven, which feels
+ * faster + closer to the surfaces Mike's users are coming from.
  *
- * Wired conservatively for V1: a handful of representative fields on
- * the contact detail page (name, email, phone). Wider adoption lands
- * once the pattern feels right after smoke-testing.
+ * Display / edit / save can each carry a different shape — useful
+ * for phone fields where:
+ *   - the stored canonical value is digits-only ("5551234567")
+ *   - the display is formatted "(555) 123-4567"
+ *   - the user can type any variant ("(555) 123-4567", "555-123-4567",
+ *     "5551234567"), and `normalizeOnSave` collapses it back to digits
+ *     before the action call.
  *
- * Behavior:
- *   - onSave returns a Promise. While pending, the input is disabled
- *     + a small "Saving…" hint shows.
- *   - onSave throws or returns a string error → primitive surfaces the
- *     error inline + stays in edit mode so the user can retry.
- *   - Successful save closes edit mode + the parent re-renders with
- *     the new value via revalidatePath / router.refresh.
+ * Validation: `validateBeforeSave` runs after `normalizeOnSave`. Any
+ * non-null return is rendered as an inline error and the field stays
+ * in edit mode. The action layer is the final gate (dedup conflict
+ * surfaces via the onSave promise's resolved `{ error }`).
  *
- * Read-only fallback: pass `disabled={true}` to render the value
- * without the click-to-edit affordance.
+ * Error path: when onSave returns `{ error }` OR throws, the error is
+ * rendered inline and the field stays in edit mode so the user can
+ * retry without re-clicking. Successful save closes edit mode.
  */
-export function InlineEditField({
-  value,
-  onSave,
-  placeholder = "—",
-  type = "text",
-  ariaLabel,
-  disabled = false,
-  className,
-}: {
+export interface InlineEditFieldProps {
+  /** Canonical stored value (e.g. raw digits for phone). */
   value: string | null
-  /** Returns Promise. Resolve = success. Reject (or { error } payload) = display the error inline. */
+  /** Formatted display text. Defaults to `value`. */
+  displayValue?: string | null
+  /** Optional override for the initial edit-mode value. Defaults to
+   *  `displayValue ?? value`. */
+  editValue?: string | null
+  /** Server-action wrapper. Resolve = success. `{ error }` = display
+   *  inline + stay in edit mode. Throwing also stays in edit mode. */
   onSave: (next: string) => Promise<{ error?: string } | undefined>
+  /** Optional pre-save normalizer (e.g. parsePhoneInput → digits-only).
+   *  Runs on the raw input before validateBeforeSave / onSave. */
+  normalizeOnSave?: (raw: string) => string
+  /** Optional pre-save validator. Return a message string to reject,
+   *  null/undefined to pass. */
+  validateBeforeSave?: (normalized: string) => string | null | undefined
   placeholder?: string
   type?: "text" | "email" | "tel"
   ariaLabel?: string
   disabled?: boolean
   className?: string
-}) {
+}
+
+export function InlineEditField({
+  value,
+  displayValue,
+  editValue,
+  onSave,
+  normalizeOnSave,
+  validateBeforeSave,
+  placeholder = "—",
+  type = "text",
+  ariaLabel,
+  disabled = false,
+  className,
+}: InlineEditFieldProps) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value ?? "")
+  const [draft, setDraft] = useState<string>(editValue ?? displayValue ?? value ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  // Tracks whether a commit is in flight from blur OR Enter — guards
+  // against the blur handler double-firing after Enter already triggered
+  // the save (Enter blurs the input via .blur() to dismiss the keyboard
+  // on mobile).
+  const commitInFlightRef = useRef(false)
 
-  // Hydrate draft from value on enter-edit and on external value
-  // changes (e.g., a sibling field's save triggered router.refresh).
-  // Uses the React compare-prev-state-during-render pattern instead
-  // of useEffect to satisfy the lint rule against setState-in-effect.
+  const displayText = displayValue ?? value ?? ""
+
+  // Sync prevValue / prevEditing during render to seed the draft when
+  // re-entering edit mode OR when the host swaps the value out from
+  // under us (e.g. router.refresh after a sibling save).
   const [prevValue, setPrevValue] = useState(value)
   const [prevEditing, setPrevEditing] = useState(editing)
   if (prevValue !== value || prevEditing !== editing) {
     setPrevValue(value)
     setPrevEditing(editing)
-    if (!editing) setDraft(value ?? "")
+    if (!editing) setDraft(editValue ?? displayValue ?? value ?? "")
   }
 
-  // Focus the input on enter-edit.
   useEffect(() => {
     if (editing) queueMicrotask(() => inputRef.current?.focus())
   }, [editing])
 
   async function commit() {
-    if (saving) return
-    const next = draft.trim()
-    // No-op when unchanged.
-    if (next === (value ?? "")) {
+    if (saving || commitInFlightRef.current) return
+    const raw = draft
+    const normalized = normalizeOnSave ? normalizeOnSave(raw) : raw.trim()
+    // No-op when the user didn't change anything meaningful.
+    if (normalized === (value ?? "")) {
       setEditing(false)
+      setError(null)
       return
     }
+    if (validateBeforeSave) {
+      const v = validateBeforeSave(normalized)
+      if (typeof v === "string" && v) {
+        setError(v)
+        return
+      }
+    }
+    commitInFlightRef.current = true
     setSaving(true)
     setError(null)
     try {
-      const result = await onSave(next)
+      const result = await onSave(normalized)
       if (result && typeof result === "object" && "error" in result && result.error) {
         setError(result.error)
         setSaving(false)
+        commitInFlightRef.current = false
         return
       }
       setSaving(false)
+      commitInFlightRef.current = false
       setEditing(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed")
       setSaving(false)
+      commitInFlightRef.current = false
     }
   }
 
-  function cancel() {
+  function revert() {
     if (saving) return
-    setDraft(value ?? "")
+    setDraft(editValue ?? displayValue ?? value ?? "")
     setError(null)
     setEditing(false)
   }
@@ -117,63 +155,56 @@ export function InlineEditField({
           className,
         )}
       >
-        <span className={cn("flex-1 truncate", !value && "text-[var(--color-muted-foreground)]")}>
-          {value ?? placeholder}
+        <span
+          className={cn("flex-1 truncate", !displayText && "text-[var(--color-muted-foreground)]")}
+        >
+          {displayText || placeholder}
         </span>
-        {!disabled && (
-          <Pencil
-            className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60"
-            aria-hidden="true"
-          />
-        )}
       </button>
     )
   }
 
   return (
-    <div className={cn("space-y-1", className)}>
-      <div className="flex items-center gap-1">
-        <Input
-          ref={inputRef}
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              void commit()
-            } else if (e.key === "Escape") {
-              e.preventDefault()
-              cancel()
-            }
-          }}
-          type={type}
-          disabled={saving}
-          aria-label={ariaLabel ?? "Edit field"}
-          className="h-7 text-sm"
-        />
-        <button
-          type="button"
-          onClick={() => {
+    <div className={cn("space-y-0.5", className)}>
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          if (error) setError(null)
+        }}
+        onBlur={() => {
+          // Autosave on blur. Esc handler sets commitInFlightRef so
+          // the Esc-induced blur doesn't trigger a stale save.
+          void commit()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            // Blur to dismiss soft keyboard; the blur handler runs commit.
+            // Guard via commitInFlightRef so commit only fires once.
             void commit()
-          }}
-          disabled={saving}
-          aria-label="Save"
-          className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-primary)] hover:bg-[var(--color-accent)] disabled:opacity-50"
-        >
-          <Check className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={cancel}
-          disabled={saving}
-          aria-label="Cancel"
-          className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-50"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
+          } else if (e.key === "Escape") {
+            e.preventDefault()
+            // Mark commit in-flight so the impending blur doesn't double
+            // up — but immediately release after the synchronous revert
+            // (revert is sync — the input gets unmounted on setEditing(false)).
+            commitInFlightRef.current = true
+            revert()
+            // Schedule the release after the blur microtask.
+            queueMicrotask(() => {
+              commitInFlightRef.current = false
+            })
+          }
+        }}
+        type={type}
+        disabled={saving}
+        aria-label={ariaLabel ?? "Edit field"}
+        className={cn(
+          "block w-full bg-transparent text-sm focus:outline-none",
+          "border-0 border-b border-[var(--color-primary)] px-0 py-0.5",
+        )}
+      />
       {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
       {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
     </div>

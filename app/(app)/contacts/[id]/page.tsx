@@ -8,6 +8,9 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { getContactForOrg, listContactCompanyAssociations } from "@/modules/contacts/queries"
 import { contactLabel } from "@/modules/contacts/display"
 import { loadContactActivity } from "@/modules/contacts/activity-loader"
+import { listCompaniesForOrg } from "@/modules/companies/queries"
+import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
+import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { Button } from "@/components/ui/button"
 import { DeleteContactButton } from "@/modules/contacts/ui/delete-contact-button"
 import { ArchiveContactButton } from "@/modules/contacts/ui/archive-contact-button"
@@ -76,22 +79,40 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
         const row = await getContactForOrg(id)
         if (!row) return null
-        const [associations, activity] = await Promise.all([
-          listContactCompanyAssociations(id),
-          loadContactActivity(orgId, id),
-        ])
-        return { row, associations, activity }
+        const [associations, activity, companiesRows, leadSources, hiddenSources] =
+          await Promise.all([
+            listContactCompanyAssociations(id),
+            loadContactActivity(orgId, id),
+            listCompaniesForOrg(),
+            listDistinctContactLeadSources(),
+            listHiddenLeadSources(),
+          ])
+        return {
+          row,
+          associations,
+          activity,
+          companyOptions: companiesRows.map((c) => ({ id: c.id, name: c.name })),
+          leadSourceValues: leadSources,
+          hiddenLeadSources: hiddenSources,
+        }
       })
     },
   )
 
   if (!data) notFound()
-  const { row, associations, activity } = data
+  const { row, associations, activity, companyOptions, leadSourceValues, hiddenLeadSources } = data
   const { contact, company } = row
 
   const orgMembers = await getOrganizationMembers(orgId)
   const owner = orgMembers.find((m) => m.user.id === contact.ownerUserId)?.user
   const ownerView = owner ? { name: owner.name, email: owner.email } : null
+  // P3 (C6c polish) — UserRefPicker requires `name: string`. Fall
+  // back to the email when the user row has a null display name.
+  const ownerOptions = orgMembers.map((m) => ({
+    id: m.user.id,
+    name: m.user.name || m.user.email,
+    email: m.user.email,
+  }))
 
   const insights = readCachedInsights(contact.aiInsightsJson)
   const associationsView = associations.map(({ company: c, association }) => ({
@@ -153,9 +174,15 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             contactType: contact.contactType,
             lifecycleStatus: contact.lifecycleStatus,
             leadSource: contact.leadSource,
+            ownerUserId: contact.ownerUserId,
+            companyId: contact.companyId,
           }}
           owner={ownerView}
           companyName={company?.name ?? null}
+          ownerOptions={ownerOptions}
+          companyOptions={companyOptions}
+          leadSourceValues={leadSourceValues}
+          hiddenLeadSources={hiddenLeadSources}
         />
 
         <ContactDetailCenter

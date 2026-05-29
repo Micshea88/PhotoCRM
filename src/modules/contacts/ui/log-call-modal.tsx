@@ -4,43 +4,52 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Modal } from "@/components/ui/modal"
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import {
+  ActivityModalChrome,
+  AssociationsSection,
+  ContactPill,
+  FollowUpTaskAffordance,
+} from "@/components/ui/activity-modal-chrome"
 import { logCall } from "@/modules/calls/actions"
 import type { CallDirection } from "@/modules/calls/types"
 
 /**
- * Push 3 (C6c) — Log Call modal.
+ * Push 3 (C6c polish #4) — Log Call modal redesign (HubSpot pattern).
  *
- * Wires to the existing `logCall` orgAction. The schema (callLog
- * table) has direction + notes + duration but NO dedicated outcome
- * column. Per autonomous default C the modal exposes 4 outcome
- * options ("No answer" / "Voicemail" / "Connected" / "Wrong
- * number") — we prepend the chosen outcome to the notes field as
- * "Outcome: X\n[free-form notes]" so the activity feed renders it.
- * Adding a real outcome column is a small follow-up if the format
- * proves too fragile in practice.
+ * Uses the shared ActivityModalChrome. Body sections:
+ *   1. For: [Contact pill]
+ *   2. Outcome dropdown (5 options per the locked spec)
+ *   3. Direction (incoming / outgoing / missed)
+ *   4. Duration (minutes, optional)
+ *   5. Notes textarea ("What did you discuss?")
+ *   6. AssociationsSection (read-only single-contact)
+ *   7. FollowUpTaskAffordance (disabled stub)
+ *   8. Create button
  *
- * Required fields: direction (incoming/outgoing/missed) + outcome.
- * Optional: duration in minutes + free-form notes.
+ * The outcome is prepended to the notes field as "Outcome: X" since
+ * call_log has no dedicated outcome column. Adding a real column is
+ * a small follow-up once the format proves out at smoke.
  */
+const OUTCOMES = ["Connected", "Voicemail", "No answer", "Busy", "Wrong number"] as const
+type Outcome = (typeof OUTCOMES)[number]
+
 const DIRECTIONS: { value: CallDirection; label: string }[] = [
   { value: "outgoing", label: "Outgoing" },
   { value: "incoming", label: "Incoming" },
   { value: "missed", label: "Missed" },
 ]
 
-const OUTCOMES = ["Connected", "No answer", "Voicemail", "Wrong number"] as const
-type Outcome = (typeof OUTCOMES)[number]
-
 export function LogCallModal({
   open,
   onClose,
   contactId,
+  contactLabel,
 }: {
   open: boolean
   onClose: () => void
   contactId: string
+  contactLabel?: string
 }) {
   const router = useRouter()
   const [direction, setDirection] = useState<CallDirection | null>("outgoing")
@@ -50,14 +59,19 @@ export function LogCallModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const label = contactLabel ?? "this contact"
 
-  function handleClose() {
-    if (busy) return
+  function reset() {
     setDirection("outgoing")
     setOutcome("Connected")
     setDurationMin("")
     setNotes("")
     setError(null)
+  }
+
+  function handleClose() {
+    if (busy) return
+    reset()
     onClose()
   }
 
@@ -100,23 +114,46 @@ export function LogCallModal({
     })
   }
 
+  function hasUnsavedChanges(): boolean {
+    return notes.trim().length > 0 || durationMin.trim().length > 0
+  }
+
   return (
-    <Modal open={open} onClose={handleClose} title="Log call">
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
-            Direction
-          </label>
-          <SearchableSelect
-            items={DIRECTIONS}
-            value={direction}
-            onChange={(v) => {
-              setDirection(v as CallDirection | null)
+    <ActivityModalChrome
+      open={open}
+      onClose={handleClose}
+      title="Log call"
+      onBeforeClose={() => {
+        if (!hasUnsavedChanges()) return true
+        return window.confirm("Discard this call log?")
+      }}
+      footer={
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          {error ? (
+            <span className="text-red-600 dark:text-red-400">{error}</span>
+          ) : (
+            <span className="text-[var(--color-muted-foreground)]">
+              Saved to this contact&apos;s activity feed.
+            </span>
+          )}
+          <Button
+            type="button"
+            onClick={() => {
+              void submit()
             }}
-            placeholder="Pick direction"
-            aria-label="Direction"
-          />
+            disabled={busy}
+            data-testid="log-call-submit"
+          >
+            {busy ? "Saving…" : "Create"}
+          </Button>
         </div>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-xs text-[var(--color-muted-foreground)]">
+          For: <ContactPill contactId={contactId} label={label} />
+        </p>
+
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
             Outcome
@@ -131,6 +168,22 @@ export function LogCallModal({
             aria-label="Outcome"
           />
         </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
+            Direction
+          </label>
+          <SearchableSelect
+            items={DIRECTIONS}
+            value={direction}
+            onChange={(v) => {
+              setDirection(v as CallDirection | null)
+            }}
+            placeholder="Pick direction"
+            aria-label="Direction"
+          />
+        </div>
+
         <div className="space-y-1.5">
           <label
             className="text-xs font-medium text-[var(--color-muted-foreground)]"
@@ -150,14 +203,16 @@ export function LogCallModal({
             }}
             disabled={busy}
             placeholder="e.g. 5"
+            className="h-8"
           />
         </div>
+
         <div className="space-y-1.5">
           <label
             className="text-xs font-medium text-[var(--color-muted-foreground)]"
             htmlFor="log-call-notes"
           >
-            Notes (optional)
+            What did you discuss?
           </label>
           <textarea
             id="log-call-notes"
@@ -168,28 +223,15 @@ export function LogCallModal({
             rows={4}
             maxLength={10_000}
             disabled={busy}
-            placeholder="What did you talk about?"
+            placeholder="Notes about the call"
             data-testid="log-call-notes"
             className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
           />
         </div>
-        {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-        <div className="flex flex-row-reverse gap-2">
-          <Button
-            type="button"
-            onClick={() => {
-              void submit()
-            }}
-            disabled={busy}
-            data-testid="log-call-submit"
-          >
-            {busy ? "Saving…" : "Log call"}
-          </Button>
-          <Button type="button" variant="outline" onClick={handleClose} disabled={busy}>
-            Cancel
-          </Button>
-        </div>
+
+        <AssociationsSection contactId={contactId} contactLabel={label} />
+        <FollowUpTaskAffordance />
       </div>
-    </Modal>
+    </ActivityModalChrome>
   )
 }

@@ -71,6 +71,20 @@ Concretely:
 The closed-box-then-second-click flow is a smoke-blocking bug. Any
 new primitive that fails this rule should be fixed before merge.
 
+> **Every picker primitive used inside `InlineEditSelect` MUST
+> support `inlineMode`.** No borders on the trigger or search input.
+> No shadows. No closed-state pseudo-select elements. No "— None —"
+> indicators. Use `border-b` for the input edge and render results
+> as a floating popover below. Adding a picker via `renderPicker`
+> without `inlineMode` support is a smoke-blocking bug — fix the
+> picker, don't paper over it in the wrapper.
+
+Pickers shipping `inlineMode` today: `SearchableSelect`,
+`SearchableMultiSelect`, `ContactRefPicker`, `UserRefPicker`,
+`CompanyPicker`, `LeadSourceCombobox`. Each inline mode also
+accepts an `onDismiss` callback so the host wrapper can autosave on
+click-outside / Esc.
+
 ---
 
 ## 2. "Everything intentional" principle
@@ -146,13 +160,16 @@ ship):
 | 5   | Calendar       | Disabled — tooltip "Meetings ship in Push 6"                     |
 | 6   | MoreHorizontal | Dropdown — see below                                             |
 
-**More dropdown items:**
+**More dropdown items** (no "past" prefix — "Log" already implies a
+past event being recorded). Polish #4 dropped "Log note" (redundant
+with the Note icon above) and added Upload file at the bottom:
 
-- **Log past Note** → opens `AddNoteModal` (existing wiring)
-- **Log past Call** → opens `LogCallModal` (existing wiring)
-- **Log past Email** → placeholder modal "ships P5+"
-- **Log past Meeting** → placeholder modal "ships P6"
-- **Log past SMS** → placeholder modal "ships P5+"
+- **Log call** → opens `LogCallModal` (existing wiring via `logCall`)
+- **Log email** → placeholder modal "ships P5+"
+- **Log meeting** → placeholder modal "ships P6"
+- **Log SMS** → placeholder modal "ships P5+"
+- _(divider)_
+- **Upload file** → placeholder modal "ships P11" (Files surface)
 
 All styling complete NOW. When modules ship, the placeholder modals
 get rewired without any visual rework.
@@ -181,6 +198,18 @@ single `[Actions ▼]` dropdown. Items in this exact order:
 
 Placeholder modals follow the "Everything intentional" principle
 (§2). Each ships with a short title + ship-target body.
+
+### Placement (LOCKED)
+
+The Actions dropdown sits **adjacent to the back breadcrumb on the
+LEFT side of the page header** (HubSpot pattern), NOT at the
+top-right corner. Header layout:
+
+```
+Row 1: [< Back link]  [Actions ▼]    (left-aligned, gap-3)
+Row 2: H1 page title  +  AI status badge
+Row 3 (when present): "Archived" pill
+```
 
 ---
 
@@ -235,6 +264,60 @@ Raw renders are a bug.
 
 ---
 
+## 9. Activity logging modals
+
+Every Log X / Add Note modal renders the shared HubSpot chrome
+provided by `components/ui/activity-modal-chrome.tsx`.
+
+**Chrome controls** (left to right, header row):
+
+- **Collapse chevron** — minimizes to a floating pill at the
+  bottom-right of the viewport. Body hidden; clicking restores. Lets
+  the user navigate elsewhere without losing draft state. (HubSpot
+  pattern: long notes coexist with other work.)
+- **Title**.
+- **Drag grip** — visual affordance only in V1. Full drag-to-move
+  ships in V1.5 polish.
+- **Expand / Restore** — toggles a wider variant
+  (`w-[min(960px,95vw)]` vs default `w-[min(560px,95vw)]`).
+- **Close X** — `onClose`. The host owns the unsaved-changes confirm
+  via the `onBeforeClose` prop.
+
+**Standard body sections** (in order, omit per-modal where not
+applicable):
+
+1. **For: [Contact pill]** — clickable pill linking to the contact.
+2. **Body** — modal-specific fields.
+3. **Formatting toolbar** (Note only) — Bold / Italic / Underline /
+   Strike / Attach / Sparkle. Display-only in V1 (rich-text pipeline
+   ships in a later polish push). Per the "Everything intentional"
+   rule (§2) the toolbar renders visually complete.
+4. **`AssociationsSection`** — "Associated with N record(s)"
+   expandable. V1 ships read-only single-contact display because
+   `contact_notes` + `call_log` schemas don't have multi-association
+   tables. Inline note explains multi-record associations land in
+   Push 3.5+.
+5. **`FollowUpTaskAffordance`** — disabled checkbox + date dropdown.
+   Tasks are project-scoped today; contact-only tasks ship with
+   Push 7.
+6. **Create button** in the footer.
+
+**Modal shapes that ship now**:
+
+| Modal       | Backend                                 | V1 status                               |
+| ----------- | --------------------------------------- | --------------------------------------- |
+| Note        | `createContactNote`                     | Functional                              |
+| Log Call    | `logCall`                               | Functional (outcome prepended to notes) |
+| Log Email   | (none)                                  | Chrome-only placeholder, ships P5+      |
+| Log Meeting | (meetings table exists, no action)      | Chrome-only placeholder, ships P6       |
+| Log SMS     | (sms_messages table exists, no action)  | Chrome-only placeholder, ships P5+      |
+| Upload File | (`files` table exists, no contact join) | Chrome-only placeholder, ships P11      |
+
+The chrome design landing now means when the underlying modules
+ship, the modal bodies wire up without any visual rework.
+
+---
+
 ## 8. Captured upcoming scope
 
 Recorded design decisions that aren't built yet. Each item lists
@@ -264,3 +347,23 @@ its target slot or trigger.
   per-field "show on card" toggle. Persists the visible-field set
   per user. The placeholder modal that ships now is the entry-point
   for this feature.
+- **Multi-record associations on activities** → Push 3.5+. Schema +
+  UI to associate a single note / call / email / meeting / SMS with
+  multiple contacts, companies, and events. V1 ships with the
+  single-contact display because `contact_notes` + `call_log` don't
+  have a `*_associations` join table yet. The `AssociationsSection`
+  surface that ships now is the entry-point.
+- **Files attach to contact** → Push 11 (with the Files surface).
+  The `files` table exists today but has no `file_contact_links`
+  join. The blob upload pipeline (`/api/blob/upload`) is reused
+  once the join lands. The Upload file placeholder modal in the
+  action row's More dropdown is the entry-point.
+- **Follow-up task creation from activity modals** → ships when
+  Push 7 lands contact-scoped tasks. Today `tasks` is project-scoped
+  (`project_id NOT NULL`), so the `FollowUpTaskAffordance` ships
+  disabled with the ship-target tooltip. When P7 lands the check-
+  box + date dropdown wire up without UI rework.
+- **Rich-text formatting in Note modal** → ships in V1.5 polish.
+  The toolbar buttons (Bold / Italic / Underline / Strike / Attach /
+  Sparkle) render visually complete now per the "Everything
+  intentional" rule; the contenteditable pipeline lands later.

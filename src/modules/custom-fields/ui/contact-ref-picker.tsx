@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 export interface ContactOption {
   id: string
@@ -13,15 +14,16 @@ export interface ContactOption {
 /**
  * Push 4 (A3) — single-select picker for contact_ref custom fields.
  *
- * Built but NOT yet consumed by any host form. The CustomFieldsRenderer's
- * contact_ref case wires it in via the optional `contactOptions` prop;
- * until that prop is supplied the renderer falls back to its legacy
- * paste-an-id text input.
+ * Two render modes:
  *
- * UX: lightweight client-side filter input above a native `<select>`,
- * matching UserRefPicker. Server-side debounced search lands when the
- * contact list outgrows in-memory render (sub-1k contacts handles fine
- * via this path).
+ *   • Default (`inlineMode=false`) — bordered Input + native `<select>`
+ *     with a "— None —" sentinel. Used by the contact form and the
+ *     custom-fields renderer.
+ *
+ *   • Inline (`inlineMode=true`) — delegates to SearchableSelect with
+ *     `defaultOpen` + `inlineMode`. Matches the C6c design-system
+ *     "no box, underline only" rule for inline-edit surfaces (see
+ *     docs/pathway-design-system.md §1 callout).
  */
 export function ContactRefPicker({
   id,
@@ -29,14 +31,25 @@ export function ContactRefPicker({
   value,
   onChange,
   disabled,
+  inlineMode = false,
+  onDismiss,
 }: {
   id?: string
   options: ContactOption[]
   value: string | null
   onChange: (id: string | null) => void
   disabled?: boolean
+  /** P3 (C6c polish #3) — render as a SearchableSelect with
+   *  defaultOpen + inlineMode so the picker sits inside an
+   *  InlineEditSelect without bordered chrome. */
+  inlineMode?: boolean
+  /** Forwarded to SearchableSelect.onDismiss in inlineMode. Lets
+   *  InlineEditSelect autosave the current draft on click-outside /
+   *  Esc. */
+  onDismiss?: () => void
 }) {
   const [query, setQuery] = useState("")
+
   const sorted = useMemo(() => {
     return [...options].sort((a, b) => {
       const an = `${a.firstName} ${a.lastName}`
@@ -44,7 +57,33 @@ export function ContactRefPicker({
       return an.localeCompare(bn)
     })
   }, [options])
-  const visible = useMemo(() => {
+
+  if (inlineMode) {
+    const items = sorted.map((c) => {
+      const name = `${c.firstName} ${c.lastName}`.trim()
+      return {
+        value: c.id,
+        label: name || "(no name)",
+        description: c.primaryEmail ?? undefined,
+      }
+    })
+    return (
+      <SearchableSelect
+        id={id}
+        items={items}
+        value={value}
+        onChange={onChange}
+        placeholder="Search contacts…"
+        aria-label="Search contacts"
+        defaultOpen
+        inlineMode
+        onDismiss={onDismiss}
+        disabled={disabled}
+      />
+    )
+  }
+
+  const visible = (() => {
     const q = query.trim().toLowerCase()
     if (q.length === 0) return sorted
     return sorted.filter((c) => {
@@ -52,7 +91,7 @@ export function ContactRefPicker({
       const email = (c.primaryEmail ?? "").toLowerCase()
       return name.includes(q) || email.includes(q)
     })
-  }, [sorted, query])
+  })()
 
   return (
     <div className="space-y-2">

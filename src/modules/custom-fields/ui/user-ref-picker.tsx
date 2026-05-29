@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 export interface UserOption {
   id: string
@@ -12,17 +13,11 @@ export interface UserOption {
 /**
  * Push 4 (A3) — single-select picker for user_ref custom fields.
  *
- * Built but NOT yet consumed by any host form. The CustomFieldsRenderer's
- * user_ref case wires it in via the optional `userOptions` prop; until
- * that prop is supplied (e.g., from Company / Opportunity / Project
- * forms in their respective UI pushes) the renderer falls back to its
- * legacy paste-an-id text input.
+ * Two render modes (mirrors ContactRefPicker):
  *
- * UX: lightweight client-side filter input above a native `<select>`.
- * No server-side debounced search yet — the org-member list is bounded
- * (V1: ~10 members per org). When that ceiling becomes a real constraint
- * swap the select for a server-side typeahead the same way contacts/
- * pickers will when the contact list outgrows in-memory.
+ *   • Default — bordered Input + native `<select>` with "— None —".
+ *   • Inline (`inlineMode=true`) — delegates to SearchableSelect with
+ *     defaultOpen + inlineMode for the design-system inline-edit rule.
  */
 export function UserRefPicker({
   id,
@@ -30,22 +25,49 @@ export function UserRefPicker({
   value,
   onChange,
   disabled,
+  inlineMode = false,
+  onDismiss,
 }: {
   id?: string
   options: UserOption[]
   value: string | null
   onChange: (id: string | null) => void
   disabled?: boolean
+  inlineMode?: boolean
+  onDismiss?: () => void
 }) {
   const [query, setQuery] = useState("")
   const sorted = useMemo(() => [...options].sort((a, b) => a.name.localeCompare(b.name)), [options])
-  const visible = useMemo(() => {
+
+  if (inlineMode) {
+    const items = sorted.map((u) => ({
+      value: u.id,
+      label: u.name,
+      description: u.email,
+    }))
+    return (
+      <SearchableSelect
+        id={id}
+        items={items}
+        value={value}
+        onChange={onChange}
+        placeholder="Search team members…"
+        aria-label="Search team members"
+        defaultOpen
+        inlineMode
+        onDismiss={onDismiss}
+        disabled={disabled}
+      />
+    )
+  }
+
+  const visible = (() => {
     const q = query.trim().toLowerCase()
     if (q.length === 0) return sorted
     return sorted.filter(
       (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
     )
-  }, [sorted, query])
+  })()
 
   return (
     <div className="space-y-2">

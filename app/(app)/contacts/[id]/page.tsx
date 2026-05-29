@@ -164,37 +164,38 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     // its 6th slot. Drop the cap; columns flex with soft min/max
     // bounds so the center fills any extra space.
     <div className="space-y-6 px-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
+      {/* P3 (C6c polish #3) — Actions dropdown sits adjacent to the
+          back breadcrumb on the LEFT (HubSpot pattern). Row 1:
+          [← Contacts] [Actions ▼]. Row 2: H1 title + lead status
+          badge. See docs/pathway-design-system.md §4b. */}
+      <header className="space-y-2">
+        <div className="flex items-center gap-3">
           <Link
             href="/contacts"
             className="text-xs text-[var(--color-muted-foreground)] hover:underline"
           >
             ← Contacts
           </Link>
-          <div className="mt-1 flex items-center gap-2">
-            <h1 className="text-2xl font-semibold">
-              {contactLabel(
-                {
-                  firstName: contact.firstName,
-                  lastName: contact.lastName,
-                  primaryEmail: contact.primaryEmail,
-                },
-                company?.name,
-              )}
-            </h1>
-            <AiStatusBadge
-              status={contact.aiLeadStatus}
-              reasoning={contact.aiLeadStatusReasoning}
-            />
-          </div>
-          {contact.archivedAt && (
-            <span className="mt-2 inline-block rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs text-[var(--color-muted-foreground)]">
-              Archived
-            </span>
-          )}
+          <ContactActionsDropdown contactId={contact.id} archived={!!contact.archivedAt} />
         </div>
-        <ContactActionsDropdown contactId={contact.id} archived={!!contact.archivedAt} />
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold">
+            {contactLabel(
+              {
+                firstName: contact.firstName,
+                lastName: contact.lastName,
+                primaryEmail: contact.primaryEmail,
+              },
+              company?.name,
+            )}
+          </h1>
+          <AiStatusBadge status={contact.aiLeadStatus} reasoning={contact.aiLeadStatusReasoning} />
+        </div>
+        {contact.archivedAt && (
+          <span className="inline-block rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs text-[var(--color-muted-foreground)]">
+            Archived
+          </span>
+        )}
       </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">

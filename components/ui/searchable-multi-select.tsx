@@ -49,6 +49,9 @@ export function SearchableMultiSelect({
   onCreate,
   emptyMessage = "No results",
   normalize = (s) => s.toLowerCase().trim(),
+  defaultOpen = false,
+  inlineMode = false,
+  onDismiss,
 }: {
   items: SearchableMultiSelectItem[]
   values: string[]
@@ -66,11 +69,21 @@ export function SearchableMultiSelect({
    * lowercase+trim for tag-style usage. Pass a no-op `(s) => s.trim()`
    * if you need case-preserving multi-select. */
   normalize?: (s: string) => string
+  /** P3 (C6c polish #3) — start the panel open on mount. Used by
+   *  InlineEditTags so the picker is immediately interactive. */
+  defaultOpen?: boolean
+  /** P3 (C6c polish #3) — strip the bordered chip-input container
+   *  (no border, no shadow). The chip row sits over a border-b
+   *  underline matching InlineEditField. */
+  inlineMode?: boolean
+  /** Fires when the user dismisses the panel (Esc / click outside)
+   *  without selecting. The host autosaves the current values. */
+  onDismiss?: () => void
 }) {
   const autoId = useId()
   const id = propId ?? autoId
   const listboxId = `${id}-listbox`
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -122,7 +135,9 @@ export function SearchableMultiSelect({
     queueMicrotask(() => inputRef.current?.focus())
   }, [open])
 
-  // Click outside + Esc closes.
+  // Click outside + Esc closes. P3 (C6c polish #3) — onDismiss fires
+  // so InlineEditTags / InlineEditSelect can autosave the current
+  // selection on blur.
   useEffect(() => {
     if (!open) return
     function onPointer(e: MouseEvent) {
@@ -130,9 +145,13 @@ export function SearchableMultiSelect({
       if (!t) return
       if (wrapperRef.current?.contains(t)) return
       setOpen(false)
+      onDismiss?.()
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false)
+      if (e.key === "Escape") {
+        setOpen(false)
+        onDismiss?.()
+      }
     }
     document.addEventListener("mousedown", onPointer)
     document.addEventListener("keydown", onKey)
@@ -140,7 +159,7 @@ export function SearchableMultiSelect({
       document.removeEventListener("mousedown", onPointer)
       document.removeEventListener("keydown", onKey)
     }
-  }, [open])
+  }, [open, onDismiss])
 
   // Scroll active row into view.
   useEffect(() => {
@@ -209,8 +228,10 @@ export function SearchableMultiSelect({
     <div ref={wrapperRef} className="relative w-full">
       <div
         className={cn(
-          "flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border border-[var(--color-input)] bg-transparent px-2 py-1 text-sm shadow-sm",
-          "focus-within:ring-2 focus-within:ring-[var(--color-ring)]",
+          "flex min-h-7 w-full flex-wrap items-center gap-1 bg-transparent text-sm",
+          inlineMode
+            ? "border-0 border-b border-[var(--color-primary)] px-0 py-0.5"
+            : "min-h-9 rounded-md border border-[var(--color-input)] px-2 py-1 shadow-sm focus-within:ring-2 focus-within:ring-[var(--color-ring)]",
           disabled && "cursor-not-allowed opacity-50",
         )}
         onClick={() => {

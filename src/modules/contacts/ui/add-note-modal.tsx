@@ -2,48 +2,69 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { Bold, Italic, Paperclip, Sparkles, Strikethrough, Underline } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Modal } from "@/components/ui/modal"
+import {
+  ActivityModalChrome,
+  AssociationsSection,
+  ContactPill,
+  FollowUpTaskAffordance,
+} from "@/components/ui/activity-modal-chrome"
 import { createContactNote } from "@/modules/contacts/actions"
 
 /**
- * Push 3 (C6c) — Add Note modal.
+ * Push 3 (C6c polish #4) — Note modal redesign (HubSpot pattern).
  *
- * Plain textarea per autonomous default C — no markdown rendering in
- * V1. Submit calls the existing createContactNote action (shipped
- * earlier). On success, closes + refreshes the route so the new note
- * appears in the activity feed.
+ * Replaces the C6c modal-on-Modal-primitive shape. Uses the shared
+ * ActivityModalChrome (collapse / title / grip / expand / close).
  *
- * Body cap: 10,000 chars (matches the createContactNoteInput Zod
- * schema). The form surfaces the count once the user gets close.
+ * Body sections, in order:
+ *   1. For: [Contact pill]
+ *   2. Body textarea — auto-grows
+ *   3. Formatting toolbar (display-only V1 — buttons render but the
+ *      contenteditable rich-text pipeline lands in a later polish
+ *      push). Per the design-system "Everything intentional" rule we
+ *      ship the toolbar visually complete so the surface doesn't
+ *      look unfinished.
+ *   4. AssociationsSection (read-only single-contact; multi-record
+ *      lands in Push 3.5+).
+ *   5. FollowUpTaskAffordance (disabled stub; Tasks module is P7).
+ *   6. Create button.
  */
 const MAX_BODY = 10_000
-const WARN_THRESHOLD = MAX_BODY - 500
 
 export function AddNoteModal({
   open,
   onClose,
   contactId,
+  contactLabel,
 }: {
   open: boolean
   onClose: () => void
   contactId: string
+  /** Display name for the For pill. Falls back to "this contact"
+   *  when the host doesn't have a name handy. */
+  contactLabel?: string
 }) {
   const router = useRouter()
   const [body, setBody] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const label = contactLabel ?? "this contact"
+
+  function handleClose() {
+    if (busy) return
+    setBody("")
+    setError(null)
+    onClose()
+  }
 
   async function submit() {
     if (busy) return
     const trimmed = body.trim()
     if (!trimmed) {
       setError("Note can't be empty.")
-      return
-    }
-    if (trimmed.length > MAX_BODY) {
-      setError(`Note is too long (max ${String(MAX_BODY)} chars).`)
       return
     }
     setBusy(true)
@@ -61,44 +82,26 @@ export function AddNoteModal({
     })
   }
 
-  function handleClose() {
-    if (busy) return
-    setBody("")
-    setError(null)
-    onClose()
-  }
-
-  const remaining = MAX_BODY - body.length
-
   return (
-    <Modal open={open} onClose={handleClose} title="Add note">
-      <div className="space-y-3">
-        <textarea
-          value={body}
-          onChange={(e) => {
-            setBody(e.target.value)
-          }}
-          placeholder="Type a note. Plain text; markdown formatting comes in a later push."
-          rows={8}
-          maxLength={MAX_BODY}
-          disabled={busy}
-          aria-label="Note body"
-          data-testid="add-note-body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
-        />
-        <div className="flex items-center justify-between text-[11px]">
-          <span
-            className={
-              body.length >= WARN_THRESHOLD
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-[var(--color-muted-foreground)]"
-            }
-          >
-            {String(remaining)} characters left
-          </span>
-          {error && <span className="text-red-600 dark:text-red-400">{error}</span>}
-        </div>
-        <div className="flex flex-row-reverse gap-2">
+    <ActivityModalChrome
+      open={open}
+      onClose={handleClose}
+      title="Note"
+      onBeforeClose={() => {
+        // Unsaved-changes confirm. If body is empty there's nothing
+        // to lose; otherwise prompt.
+        if (body.trim().length === 0) return true
+        return window.confirm("Discard this note?")
+      }}
+      footer={
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          {error ? (
+            <span className="text-red-600 dark:text-red-400">{error}</span>
+          ) : (
+            <span className="text-[var(--color-muted-foreground)]">
+              {String(MAX_BODY - body.length)} characters left
+            </span>
+          )}
           <Button
             type="button"
             onClick={() => {
@@ -107,13 +110,77 @@ export function AddNoteModal({
             disabled={busy || body.trim().length === 0}
             data-testid="add-note-submit"
           >
-            {busy ? "Saving…" : "Add note"}
-          </Button>
-          <Button type="button" variant="outline" onClick={handleClose} disabled={busy}>
-            Cancel
+            {busy ? "Saving…" : "Create"}
           </Button>
         </div>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-xs text-[var(--color-muted-foreground)]">
+          For: <ContactPill contactId={contactId} label={label} />
+        </p>
+
+        <textarea
+          value={body}
+          onChange={(e) => {
+            setBody(e.target.value)
+            if (error) setError(null)
+          }}
+          placeholder="Start typing to leave a note…"
+          rows={6}
+          maxLength={MAX_BODY}
+          disabled={busy}
+          aria-label="Note body"
+          data-testid="add-note-body"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+        />
+
+        {/* Formatting toolbar — display-only V1 (rich-text pipeline
+            lands in a later polish push). Per the "Everything
+            intentional" rule (design-system §2) the surface ships
+            visually complete so it doesn't feel half-built. */}
+        <div
+          className="flex items-center gap-1 border-t border-[var(--color-border)] pt-2 text-[var(--color-muted-foreground)]"
+          aria-label="Formatting toolbar"
+        >
+          <ToolbarIcon icon={<Bold className="size-3.5" aria-hidden="true" />} label="Bold" />
+          <ToolbarIcon icon={<Italic className="size-3.5" aria-hidden="true" />} label="Italic" />
+          <ToolbarIcon
+            icon={<Underline className="size-3.5" aria-hidden="true" />}
+            label="Underline"
+          />
+          <ToolbarIcon
+            icon={<Strikethrough className="size-3.5" aria-hidden="true" />}
+            label="Strikethrough"
+          />
+          <span className="mx-1 h-4 border-l border-[var(--color-border)]" />
+          <ToolbarIcon
+            icon={<Paperclip className="size-3.5" aria-hidden="true" />}
+            label="Attach file"
+          />
+          <ToolbarIcon
+            icon={<Sparkles className="size-3.5" aria-hidden="true" />}
+            label="AI assistance"
+          />
+        </div>
+
+        <AssociationsSection contactId={contactId} contactLabel={label} />
+        <FollowUpTaskAffordance />
       </div>
-    </Modal>
+    </ActivityModalChrome>
+  )
+}
+
+function ToolbarIcon({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      type="button"
+      title={`${label} (ships in V1.5 rich-text polish)`}
+      disabled
+      aria-label={label}
+      className="inline-flex size-7 cursor-not-allowed items-center justify-center rounded opacity-60"
+    >
+      {icon}
+    </button>
   )
 }

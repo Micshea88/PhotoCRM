@@ -2,49 +2,55 @@
 
 import { useState, type ReactNode } from "react"
 import { Calendar, CheckSquare, Mail, MoreHorizontal, Phone, StickyNote } from "lucide-react"
-import { Modal } from "@/components/ui/modal"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { AddNoteModal } from "./add-note-modal"
 import { LogCallModal } from "./log-call-modal"
+import {
+  LogEmailModal,
+  LogMeetingModal,
+  LogSmsModal,
+  UploadFileModal,
+} from "./log-placeholder-modals"
 
 /**
- * Push 3 (C6c polish) — 6-button action icon row.
+ * Push 3 (C6c polish #4) — action icon row with the new More dropdown.
  *
- * Replaces the C6c text buttons (Add note / Log call) with HubSpot's
- * circular icon affordances. Six entries, in order:
- *   1. Note      → opens AddNoteModal
- *   2. Email     → mailto:${primaryEmail} (cheap real outbound)
+ * Six circular icon buttons, in this order:
+ *   1. Note      → opens AddNoteModal (HubSpot-style redesign)
+ *   2. Email     → mailto:${primaryEmail} (real outbound)
  *   3. Call      → tel:${primaryPhone}
  *   4. Task      → disabled, tooltip "Tasks ship in Push 7"
  *   5. Meeting   → disabled, tooltip "Meetings ship in Push 6"
- *   6. More      → dropdown with "Log past Note", "Log past Call",
- *                  and placeholders for Email / Meeting / SMS
+ *   6. More      → dropdown
  *
- * Per memory #29 the design IS the long-term design — when later
- * modules ship (Push 6 Events, Push 7 Tasks, etc.) the disabled /
- * placeholder rows get un-wired without a visual rework.
- *
- * Note: tooltips use the native `title` attribute for V1 simplicity.
- * A styled tooltip primitive arrives in a later polish push.
+ * More dropdown (polish #4 — "Log note" removed; redundant with the
+ * Note icon. Upload file added at the bottom.):
+ *   - Log call → opens LogCallModal
+ *   - Log email → placeholder LogEmailModal
+ *   - Log meeting → placeholder LogMeetingModal
+ *   - Log SMS → placeholder LogSmsModal
+ *   - --- divider ---
+ *   - Upload file → placeholder UploadFileModal
  */
 export function ActionIconRow({
   contactId,
+  contactLabel,
   primaryEmail,
   primaryPhone,
 }: {
   contactId: string
+  /** Display name surfaced as the "For" pill across every activity modal. */
+  contactLabel: string
   primaryEmail: string | null
   primaryPhone: string | null
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [callOpen, setCallOpen] = useState(false)
-  const [pastNoteOpen, setPastNoteOpen] = useState(false)
-  const [pastCallOpen, setPastCallOpen] = useState(false)
-  const [placeholderOpen, setPlaceholderOpen] = useState<null | {
-    title: string
-    text: string
-  }>(null)
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [meetingOpen, setMeetingOpen] = useState(false)
+  const [smsOpen, setSmsOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
 
   const canEmail = !!primaryEmail && primaryEmail.length > 0
   const canCall = !!primaryPhone && primaryPhone.length > 0
@@ -85,7 +91,6 @@ export function ActionIconRow({
         disabled
       />
 
-      {/* More dropdown */}
       <Popover
         align="end"
         trigger={({ toggle }) => (
@@ -98,76 +103,92 @@ export function ActionIconRow({
         )}
       >
         <ul className="min-w-[200px] space-y-0.5 text-sm" role="menu">
+          {/* P3 (C6c polish #4) — "Log note" removed (redundant with
+              the Note icon above). Items grouped as: Log X stack /
+              divider / Upload file. */}
           <MoreItem
-            label="Log past Note"
+            label="Log call"
             onClick={() => {
-              setPastNoteOpen(true)
+              setCallOpen(true)
             }}
           />
           <MoreItem
-            label="Log past Call"
+            label="Log email"
             onClick={() => {
-              setPastCallOpen(true)
+              setEmailOpen(true)
             }}
           />
           <MoreItem
-            label="Log past Email"
+            label="Log meeting"
             onClick={() => {
-              setPlaceholderOpen({
-                title: "Log past Email",
-                text: "Logging past emails ships with the email module in Push 5+.",
-              })
+              setMeetingOpen(true)
             }}
           />
           <MoreItem
-            label="Log past Meeting"
+            label="Log SMS"
             onClick={() => {
-              setPlaceholderOpen({
-                title: "Log past Meeting",
-                text: "Logging past meetings ships with the Events module in Push 6.",
-              })
+              setSmsOpen(true)
             }}
           />
+          <li className="my-1 border-t border-[var(--color-border)]" aria-hidden="true" />
           <MoreItem
-            label="Log past SMS"
+            label="Upload file"
             onClick={() => {
-              setPlaceholderOpen({
-                title: "Log past SMS",
-                text: "Logging past SMS ships with the SMS provider integration in Push 5+.",
-              })
+              setUploadOpen(true)
             }}
           />
         </ul>
       </Popover>
 
       <AddNoteModal
-        open={noteOpen || pastNoteOpen}
+        open={noteOpen}
         onClose={() => {
           setNoteOpen(false)
-          setPastNoteOpen(false)
         }}
         contactId={contactId}
+        contactLabel={contactLabel}
       />
       <LogCallModal
-        open={callOpen || pastCallOpen}
+        open={callOpen}
         onClose={() => {
           setCallOpen(false)
-          setPastCallOpen(false)
         }}
         contactId={contactId}
+        contactLabel={contactLabel}
       />
-
-      {placeholderOpen && (
-        <Modal
-          open={true}
-          onClose={() => {
-            setPlaceholderOpen(null)
-          }}
-          title={placeholderOpen.title}
-        >
-          <p className="text-sm text-[var(--color-muted-foreground)]">{placeholderOpen.text}</p>
-        </Modal>
-      )}
+      <LogEmailModal
+        open={emailOpen}
+        onClose={() => {
+          setEmailOpen(false)
+        }}
+        contactId={contactId}
+        contactLabel={contactLabel}
+        fromLabel="(current user)"
+      />
+      <LogMeetingModal
+        open={meetingOpen}
+        onClose={() => {
+          setMeetingOpen(false)
+        }}
+        contactId={contactId}
+        contactLabel={contactLabel}
+      />
+      <LogSmsModal
+        open={smsOpen}
+        onClose={() => {
+          setSmsOpen(false)
+        }}
+        contactId={contactId}
+        contactLabel={contactLabel}
+      />
+      <UploadFileModal
+        open={uploadOpen}
+        onClose={() => {
+          setUploadOpen(false)
+        }}
+        contactId={contactId}
+        contactLabel={contactLabel}
+      />
     </div>
   )
 }

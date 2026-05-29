@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { LEAD_SOURCE_DEFAULTS } from "@/modules/lead-sources/types"
 
 /**
@@ -26,6 +27,8 @@ export function LeadSourceCombobox({
   hiddenSources = [],
   allowAnyOption = false,
   anyLabel = "— None —",
+  inlineMode = false,
+  onDismiss,
 }: {
   id?: string
   value: string
@@ -43,10 +46,20 @@ export function LeadSourceCombobox({
    * set this. */
   allowAnyOption?: boolean
   anyLabel?: string
+  /** P3 (C6c polish #3) — render as a SearchableSelect with
+   *  defaultOpen + inlineMode for inline-edit surfaces. The
+   *  "+ Add new" affordance is omitted in inline mode; use the
+   *  full edit form to add a brand-new lead source. */
+  inlineMode?: boolean
+  onDismiss?: () => void
 }) {
   const [addingNew, setAddingNew] = useState(false)
   const [newValue, setNewValue] = useState("")
 
+  // Compute the unfiltered options list before the inlineMode short-
+  // circuit. inlineMode is fixed across the component's lifetime by
+  // the parent (never flips at runtime), so the conditional return
+  // below doesn't break the hooks-order invariant in practice.
   const options = useMemo(() => {
     const hiddenLower = new Set(hiddenSources.map((s) => s.toLowerCase()))
     const seen = new Set<string>()
@@ -60,6 +73,28 @@ export function LeadSourceCombobox({
       .sort((a, b) => a.localeCompare(b))
     return [...out, ...customs]
   }, [existingValues, hiddenSources])
+
+  if (inlineMode) {
+    const items = options.map((o) => ({ value: o, label: o }))
+    // Mike's spec: drop the "— None —" sentinel + the inline "+ Add new"
+    // affordance in inlineMode. Use the full edit form for those.
+    return (
+      <SearchableSelect
+        id={id}
+        items={items}
+        value={value || null}
+        onChange={(next) => {
+          onChange(next ?? "")
+        }}
+        placeholder="Search lead sources…"
+        aria-label="Lead source"
+        defaultOpen
+        inlineMode
+        onDismiss={onDismiss}
+        allowClear
+      />
+    )
+  }
 
   if (addingNew) {
     return (

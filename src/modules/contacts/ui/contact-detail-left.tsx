@@ -4,9 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { User as UserIcon } from "lucide-react"
 import { InlineEditField } from "@/components/ui/inline-edit-field"
 import { InlineEditSelect } from "@/components/ui/inline-edit-select"
-import { SearchableSelect } from "@/components/ui/searchable-select"
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
-import { Input } from "@/components/ui/input"
 import { CompanyPicker, type CompanyOption } from "@/modules/companies/ui/company-picker"
 import { ContactRefPicker, type ContactOption } from "@/modules/custom-fields/ui/contact-ref-picker"
 import { UserRefPicker, type UserOption } from "@/modules/custom-fields/ui/user-ref-picker"
@@ -150,12 +148,63 @@ export function ContactDetailLeft({
     return callUpdate({ id: contact.id, tags: next })
   }
 
-  async function saveAddress(next: ContactMailingAddress): Promise<{ error?: string } | undefined> {
-    return callUpdate({ id: contact.id, mailingAddress: next })
+  // P3 (C6c polish #3) — Address is rendered as 3 stacked inline-edit
+  // lines (Street / City + State / Zip). Each line is its own
+  // independent primitive sharing this merge helper, which writes the
+  // full mailingAddress jsonb on every save.
+  function buildAddressPatch(
+    field: keyof ContactMailingAddress,
+    value: string | null,
+  ): ContactMailingAddress {
+    const next: ContactMailingAddress = { ...address }
+    const v = (value ?? "").trim()
+    switch (field) {
+      case "street1":
+        if (v) next.street1 = v
+        else next.street1 = undefined
+        break
+      case "street2":
+        if (v) next.street2 = v
+        else next.street2 = undefined
+        break
+      case "city":
+        if (v) next.city = v
+        else next.city = undefined
+        break
+      case "state":
+        if (v) next.state = v.toUpperCase()
+        else next.state = undefined
+        break
+      case "zip":
+        if (v) next.zip = v
+        else next.zip = undefined
+        break
+    }
+    // Drop undefined keys so the jsonb stays clean.
+    const cleaned: ContactMailingAddress = {}
+    if (next.street1) cleaned.street1 = next.street1
+    if (next.street2) cleaned.street2 = next.street2
+    if (next.city) cleaned.city = next.city
+    if (next.state) cleaned.state = next.state
+    if (next.zip) cleaned.zip = next.zip
+    return cleaned
+  }
+  function saveAddressField(field: keyof ContactMailingAddress) {
+    return async (raw: string): Promise<{ error?: string } | undefined> => {
+      return callUpdate({
+        id: contact.id,
+        mailingAddress: buildAddressPatch(field, raw),
+      })
+    }
+  }
+  async function saveAddressState(value: string | null): Promise<{ error?: string } | undefined> {
+    return callUpdate({
+      id: contact.id,
+      mailingAddress: buildAddressPatch("state", value),
+    })
   }
 
   const address = (contact.mailingAddress ?? {}) as ContactMailingAddress
-  const addressDisplay = formatAddress(address)
   const tagsDisplay = contact.tags.length > 0 ? contact.tags.join(", ") : null
 
   return (
@@ -196,6 +245,7 @@ export function ContactDetailLeft({
         <div className="border-t border-[var(--color-border)] px-2 py-3">
           <ActionIconRow
             contactId={contact.id}
+            contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
             primaryEmail={contact.primaryEmail}
             primaryPhone={contact.primaryPhone}
           />
@@ -271,6 +321,10 @@ export function ContactDetailLeft({
                   }}
                   existingValues={leadSourceValues}
                   hiddenSources={hiddenLeadSources}
+                  inlineMode
+                  onDismiss={() => {
+                    void commit(contact.leadSource)
+                  }}
                 />
               )}
             />
@@ -287,6 +341,10 @@ export function ContactDetailLeft({
                   value={contact.ownerUserId}
                   onChange={(v) => {
                     void commit(v)
+                  }}
+                  inlineMode
+                  onDismiss={() => {
+                    void commit(contact.ownerUserId)
                   }}
                 />
               )}
@@ -305,6 +363,10 @@ export function ContactDetailLeft({
                   onChange={(v) => {
                     void commit(v)
                   }}
+                  inlineMode
+                  onDismiss={() => {
+                    void commit(contact.companyId)
+                  }}
                 />
               )}
             />
@@ -318,7 +380,44 @@ export function ContactDetailLeft({
             />
           </AboutRow>
           <AboutRow label="Address">
-            <InlineEditAddress value={address} displayLabel={addressDisplay} onSave={saveAddress} />
+            <div className="space-y-1">
+              <InlineEditField
+                value={address.street1 ?? null}
+                onSave={saveAddressField("street1")}
+                placeholder="Street"
+                ariaLabel="Street"
+              />
+              <div className="grid grid-cols-[1fr_80px] gap-2">
+                <InlineEditField
+                  value={address.city ?? null}
+                  onSave={saveAddressField("city")}
+                  placeholder="City"
+                  ariaLabel="City"
+                />
+                <InlineEditSelect
+                  value={address.state ?? null}
+                  displayLabel={address.state ?? null}
+                  items={US_STATE_CODES.map((s) => ({ value: s, label: s }))}
+                  onSave={saveAddressState}
+                  ariaLabel="State"
+                  allowClear
+                  placeholder="State"
+                />
+              </div>
+              <div className="w-[120px]">
+                <InlineEditField
+                  value={address.zip ?? null}
+                  onSave={saveAddressField("zip")}
+                  placeholder="Zip"
+                  ariaLabel="Zip"
+                  validateBeforeSave={(v) =>
+                    v === "" || /^\d{5}(-\d{4})?$/.test(v)
+                      ? null
+                      : "Zip must be 5 digits or 5+4 (e.g. 94102 or 94102-1234)."
+                  }
+                />
+              </div>
+            </div>
           </AboutRow>
           <AboutRow label="Referred by">
             <InlineEditSelect
@@ -332,6 +431,10 @@ export function ContactDetailLeft({
                   value={contact.referredByContactId}
                   onChange={(v) => {
                     void commit(v)
+                  }}
+                  inlineMode
+                  onDismiss={() => {
+                    void commit(contact.referredByContactId)
                   }}
                 />
               )}
@@ -478,6 +581,11 @@ function InlineEditTags({
         placeholder="Add a tag…"
         allowCreate
         aria-label="Tags"
+        defaultOpen
+        inlineMode
+        onDismiss={() => {
+          void commit(draft)
+        }}
       />
       {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
       {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
@@ -489,210 +597,4 @@ function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
   return true
-}
-
-/**
- * P3 (C6c polish #2) — inline edit for the mailing address jsonb.
- *
- * Display: single line, gracefully omits empty fields:
- *   "123 Main St, San Francisco, CA 94102"
- * Edit: small popover with street1 / street2 / city / state / zip
- * inputs. Saves all five fields atomically as one updateContact call
- * writing the full jsonb. State picker uses SearchableSelect over
- * US_STATE_CODES; zip validates 5 or 5+4 inline.
- */
-function InlineEditAddress({
-  value,
-  displayLabel,
-  onSave,
-}: {
-  value: ContactMailingAddress
-  displayLabel: string | null
-  onSave: (next: ContactMailingAddress) => Promise<{ error?: string } | undefined>
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<ContactMailingAddress>(value)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const wrapperRef = useRef<HTMLDivElement | null>(null)
-
-  const [prevValue, setPrevValue] = useState(value)
-  const [prevEditing, setPrevEditing] = useState(editing)
-  if (prevValue !== value || prevEditing !== editing) {
-    setPrevValue(value)
-    setPrevEditing(editing)
-    if (!editing) {
-      setDraft(value)
-      setError(null)
-    }
-  }
-
-  async function commit(next: ContactMailingAddress) {
-    if (saving) return
-    if (addressEqual(next, value)) {
-      setEditing(false)
-      return
-    }
-    const zip = (next.zip ?? "").trim()
-    if (zip && !/^\d{5}(-\d{4})?$/.test(zip)) {
-      setError("Zip must be 5 digits or 5+4 (e.g. 94102 or 94102-1234).")
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      const cleaned: ContactMailingAddress = {}
-      if (next.street1?.trim()) cleaned.street1 = next.street1.trim()
-      if (next.street2?.trim()) cleaned.street2 = next.street2.trim()
-      if (next.city?.trim()) cleaned.city = next.city.trim()
-      if (next.state?.trim()) cleaned.state = next.state.trim().toUpperCase()
-      if (zip) cleaned.zip = zip
-      const result = await onSave(cleaned)
-      if (result && typeof result === "object" && "error" in result && result.error) {
-        setError(result.error)
-        setSaving(false)
-        return
-      }
-      setSaving(false)
-      setEditing(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed")
-      setSaving(false)
-    }
-  }
-
-  function cancel() {
-    if (saving) return
-    setDraft(value)
-    setError(null)
-    setEditing(false)
-  }
-
-  useEffect(() => {
-    if (!editing) return
-    function onPointer(e: MouseEvent) {
-      const t = e.target as Node | null
-      if (!t) return
-      if (wrapperRef.current?.contains(t)) return
-      void commit(draft)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        cancel()
-      }
-    }
-    document.addEventListener("mousedown", onPointer)
-    document.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("mousedown", onPointer)
-      document.removeEventListener("keydown", onKey)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, draft])
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setEditing(true)
-        }}
-        aria-label="Edit address"
-        className={cn(
-          "group flex w-full items-start gap-1 rounded-sm px-1 py-0.5 text-left text-xs",
-          "hover:bg-[var(--color-accent)]/30",
-        )}
-      >
-        <span
-          className={cn("flex-1 truncate", !displayLabel && "text-[var(--color-muted-foreground)]")}
-        >
-          {displayLabel ?? "—"}
-        </span>
-      </button>
-    )
-  }
-
-  return (
-    <div
-      ref={wrapperRef}
-      className="space-y-2 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 shadow-sm"
-    >
-      <Input
-        value={draft.street1 ?? ""}
-        onChange={(e) => {
-          setDraft((d) => ({ ...d, street1: e.target.value }))
-        }}
-        placeholder="Street address"
-        aria-label="Street address"
-        className="h-7 text-xs"
-      />
-      <Input
-        value={draft.street2 ?? ""}
-        onChange={(e) => {
-          setDraft((d) => ({ ...d, street2: e.target.value }))
-        }}
-        placeholder="Apt, unit, etc."
-        aria-label="Street line 2"
-        className="h-7 text-xs"
-      />
-      <Input
-        value={draft.city ?? ""}
-        onChange={(e) => {
-          setDraft((d) => ({ ...d, city: e.target.value }))
-        }}
-        placeholder="City"
-        aria-label="City"
-        className="h-7 text-xs"
-      />
-      <div className="grid grid-cols-[100px_1fr] gap-2">
-        <SearchableSelect
-          items={US_STATE_CODES.map((s) => ({ value: s, label: s }))}
-          value={draft.state ?? null}
-          onChange={(next) => {
-            setDraft((d) => ({ ...d, state: next ?? undefined }))
-          }}
-          placeholder="State"
-          allowClear
-          aria-label="State"
-        />
-        <Input
-          value={draft.zip ?? ""}
-          onChange={(e) => {
-            setDraft((d) => ({ ...d, zip: e.target.value }))
-          }}
-          placeholder="Zip"
-          aria-label="Zip"
-          className="h-7 text-xs"
-        />
-      </div>
-      {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
-      {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-    </div>
-  )
-}
-
-function addressEqual(a: ContactMailingAddress, b: ContactMailingAddress): boolean {
-  return (
-    (a.street1 ?? "") === (b.street1 ?? "") &&
-    (a.street2 ?? "") === (b.street2 ?? "") &&
-    (a.city ?? "") === (b.city ?? "") &&
-    (a.state ?? "") === (b.state ?? "") &&
-    (a.zip ?? "") === (b.zip ?? "")
-  )
-}
-
-/**
- * Format the mailing address jsonb as a single line. Omits empty
- * fields gracefully; returns null when nothing is populated so the
- * caller renders the placeholder.
- */
-function formatAddress(addr: ContactMailingAddress): string | null {
-  const nonEmpty = (s: string | undefined): boolean => !!s?.trim()
-  const streetParts = [addr.street1, addr.street2].filter(nonEmpty).join(" ")
-  const cityStateZip = [addr.city, [addr.state, addr.zip].filter(nonEmpty).join(" ")]
-    .filter(nonEmpty)
-    .join(", ")
-  const out = [streetParts, cityStateZip].filter(nonEmpty).join(", ")
-  return out.length > 0 ? out : null
 }

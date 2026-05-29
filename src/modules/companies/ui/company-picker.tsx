@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Modal } from "@/components/ui/modal"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createCompany } from "../actions"
 
@@ -36,6 +37,8 @@ export function CompanyPicker({
   allowEmpty = true,
   emptyLabel = "— No company —",
   placeholder = "Select a company",
+  inlineMode = false,
+  onDismiss,
 }: {
   id?: string
   options: CompanyOption[]
@@ -47,6 +50,13 @@ export function CompanyPicker({
   allowEmpty?: boolean
   emptyLabel?: string
   placeholder?: string
+  /** P3 (C6c polish #3) — render as a SearchableSelect with
+   *  defaultOpen + inlineMode, no bordered chrome. The "+ Add company"
+   *  affordance is omitted in inline mode; use the full edit form via
+   *  Actions dropdown when a new company needs to be created. */
+  inlineMode?: boolean
+  /** Forwarded to SearchableSelect.onDismiss in inlineMode. */
+  onDismiss?: () => void
 }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [name, setName] = useState("")
@@ -56,6 +66,23 @@ export function CompanyPicker({
   const sorted = useMemo(() => {
     return [...options].sort((a, b) => a.name.localeCompare(b.name))
   }, [options])
+
+  if (inlineMode) {
+    return (
+      <SearchableSelect
+        id={id}
+        items={sorted.map((c) => ({ value: c.id, label: c.name }))}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        aria-label="Search companies"
+        defaultOpen
+        inlineMode
+        onDismiss={onDismiss}
+        allowClear={allowEmpty}
+      />
+    )
+  }
 
   async function onCreate() {
     if (!name.trim()) {

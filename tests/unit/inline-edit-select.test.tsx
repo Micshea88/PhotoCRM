@@ -59,8 +59,9 @@ describe("InlineEditSelect — autosave on selection", () => {
       />,
     )
     await user.click(screen.getByRole("button", { name: "Type" }))
-    // SearchableSelect opens; click "Vendor".
-    await user.click(screen.getByRole("combobox"))
+    // P3 (C6c polish #2) — SearchableSelect now mounts with
+    // defaultOpen so the listbox is visible immediately. Click
+    // "Vendor" directly without re-opening.
     await user.click(screen.getByText("Vendor"))
     expect(onSave).toHaveBeenCalledWith("Vendor")
   })
@@ -129,7 +130,6 @@ describe("InlineEditSelect — error path", () => {
       />,
     )
     await user.click(screen.getByRole("button", { name: "Type" }))
-    await user.click(screen.getByRole("combobox"))
     await user.click(screen.getByText("Vendor"))
     expect(await screen.findByText("Server says no.")).toBeInTheDocument()
   })

@@ -49,8 +49,27 @@ triple:
 
 For select fields, `InlineEditSelect` autosaves on **selection** OR
 **blur** (click outside). Custom pickers (Owner → UserRefPicker,
-Company → CompanyPicker) plug in via the `renderPicker` slot and
-call the primitive's `commit(value)` callback to trigger the save.
+Company → CompanyPicker, Referred-by → ContactRefPicker,
+Tags → SearchableMultiSelect, Address → AddressEditor) plug in via
+the `renderPicker` slot (or, for non-string values, a small wrapper
+component) and call the primitive's `commit(value)` callback to
+trigger the save.
+
+### Inline edit visual (no box, underline only)
+
+Both `InlineEditField` AND `InlineEditSelect` use the **underline-
+only** visual in edit mode. Never a bordered box, never a shadow.
+Concretely:
+
+- Edit-mode input has `border-0 border-b border-[var(--color-primary)]`
+- For the default `SearchableSelect` path inside `InlineEditSelect`,
+  the picker is mounted with `defaultOpen` so the panel appears
+  immediately on entering edit mode (no second click to open) AND
+  with `inlineMode` so the trigger renders as the same underlined
+  value, not a closed box.
+
+The closed-box-then-second-click flow is a smoke-blocking bug. Any
+new primitive that fails this rule should be fixed before merge.
 
 ---
 
@@ -140,6 +159,31 @@ get rewired without any visual rework.
 
 ---
 
+## 4b. Actions dropdown (contact detail header)
+
+Replaces the C6c `[Edit / Archive / Delete]` button trio with a
+single `[Actions ▼]` dropdown. Items in this exact order:
+
+1. **Edit full contact record** → routes to the existing edit form
+   (`/contacts/[id]/edit`). Kept permanently — some users prefer the
+   form over inline editing. **Do not remove.**
+2. **View all properties** → placeholder modal (Add Fields action
+   bar — see §8 upcoming scope).
+3. **Merge** → contact-picker → existing merge engine. C7 redesigns
+   the merge UI itself; this entry point is permanent.
+4. **Clone** → placeholder modal.
+5. _(divider)_
+6. **Archive** → existing archive action (skipped when the contact
+   is already archived).
+7. **Delete** → existing delete action with confirm modal +
+   destructive red styling.
+8. **Export contact data** → placeholder modal.
+
+Placeholder modals follow the "Everything intentional" principle
+(§2). Each ships with a short title + ship-target body.
+
+---
+
 ## 5. Right sidebar polish standard
 
 HubSpot box pattern per section. Each section header row contains
@@ -212,3 +256,11 @@ its target slot or trigger.
     / project date / venue / event type / planner / vision / referral
     source. Auto-sends text + email on submit. Feeds the AI summary
     generator's richest signals.
+- **Add Fields action bar** (HubSpot pattern) → replaces the
+  contact-detail Actions dropdown's "View all properties" placeholder
+  modal. Modal lists every available contact field (intrinsic +
+  custom from the `custom_fields` engine) grouped by category, with
+  predictive search. Includes a "Hide blank properties" toggle and a
+  per-field "show on card" toggle. Persists the visible-field set
+  per user. The placeholder modal that ships now is the entry-point
+  for this feature.

@@ -5,15 +5,18 @@ import { getSession } from "@/modules/auth/session"
 import { getCurrentMember, getOrganizationMembers } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
-import { getContactForOrg, listContactCompanyAssociations } from "@/modules/contacts/queries"
+import {
+  getContactForOrg,
+  listContactCompanyAssociations,
+  listContactsForOrg,
+} from "@/modules/contacts/queries"
+import { listDistinctContactTags } from "@/modules/contacts/filter-spec"
 import { contactLabel } from "@/modules/contacts/display"
 import { loadContactActivity } from "@/modules/contacts/activity-loader"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
-import { Button } from "@/components/ui/button"
-import { DeleteContactButton } from "@/modules/contacts/ui/delete-contact-button"
-import { ArchiveContactButton } from "@/modules/contacts/ui/archive-contact-button"
+import { ContactActionsDropdown } from "@/modules/contacts/ui/contact-actions-dropdown"
 import { ContactDetailLeft } from "@/modules/contacts/ui/contact-detail-left"
 import { ContactDetailCenter } from "@/modules/contacts/ui/contact-detail-center"
 import { ContactDetailRight } from "@/modules/contacts/ui/contact-detail-right"
@@ -79,14 +82,23 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       return runWithOrgContext({ orgId, role: extended, userId: session.user.id }, async () => {
         const row = await getContactForOrg(id)
         if (!row) return null
-        const [associations, activity, companiesRows, leadSources, hiddenSources] =
-          await Promise.all([
-            listContactCompanyAssociations(id),
-            loadContactActivity(orgId, id),
-            listCompaniesForOrg(),
-            listDistinctContactLeadSources(),
-            listHiddenLeadSources(),
-          ])
+        const [
+          associations,
+          activity,
+          companiesRows,
+          leadSources,
+          hiddenSources,
+          allContacts,
+          allTags,
+        ] = await Promise.all([
+          listContactCompanyAssociations(id),
+          loadContactActivity(orgId, id),
+          listCompaniesForOrg(),
+          listDistinctContactLeadSources(),
+          listHiddenLeadSources(),
+          listContactsForOrg(),
+          listDistinctContactTags(),
+        ])
         return {
           row,
           associations,
@@ -94,14 +106,39 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           companyOptions: companiesRows.map((c) => ({ id: c.id, name: c.name })),
           leadSourceValues: leadSources,
           hiddenLeadSources: hiddenSources,
+          // P3 (C6c polish #2) — referrals = every contact in the org
+          // except this one. ContactRefPicker filters client-side.
+          referralOptions: allContacts
+            .filter((c) => c.id !== id)
+            .map((c) => ({
+              id: c.id,
+              firstName: c.firstName,
+              lastName: c.lastName,
+              primaryEmail: c.primaryEmail ?? null,
+            })),
+          tagOptions: allTags,
         }
       })
     },
   )
 
   if (!data) notFound()
-  const { row, associations, activity, companyOptions, leadSourceValues, hiddenLeadSources } = data
+  const {
+    row,
+    associations,
+    activity,
+    companyOptions,
+    leadSourceValues,
+    hiddenLeadSources,
+    referralOptions,
+    tagOptions,
+  } = data
   const { contact, company } = row
+  // P3 (C6c polish #2) — find the referred-by contact's display name
+  // for the read-mode label. Falls back to "—" when absent.
+  const referredByContact = contact.referredByContactId
+    ? referralOptions.find((c) => c.id === contact.referredByContactId)
+    : null
 
   const orgMembers = await getOrganizationMembers(orgId)
   const owner = orgMembers.find((m) => m.user.id === contact.ownerUserId)?.user
@@ -121,7 +158,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   }))
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    // P3 (C6c polish #2) — full page width. Earlier mx-auto max-w-7xl
+    // capped the page at ~1280px; on 1920+ viewports that left
+    // distracting empty margins AND squeezed the action icon row past
+    // its 6th slot. Drop the cap; columns flex with soft min/max
+    // bounds so the center fills any extra space.
+    <div className="space-y-6 px-6">
       <header className="flex items-start justify-between gap-4">
         <div>
           <Link
@@ -152,18 +194,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/contacts/${contact.id}/edit`}>
-            <Button type="button" variant="outline" size="sm">
-              Edit
-            </Button>
-          </Link>
-          {!contact.archivedAt && <ArchiveContactButton id={contact.id} />}
-          <DeleteContactButton id={contact.id} />
-        </div>
+        <ContactActionsDropdown contactId={contact.id} archived={!!contact.archivedAt} />
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr_320px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
         <ContactDetailLeft
           contact={{
             id: contact.id,
@@ -176,6 +210,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             leadSource: contact.leadSource,
             ownerUserId: contact.ownerUserId,
             companyId: contact.companyId,
+            tags: contact.tags ?? [],
+            mailingAddress: contact.mailingAddress,
+            referredByContactId: contact.referredByContactId,
           }}
           owner={ownerView}
           companyName={company?.name ?? null}
@@ -183,6 +220,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           companyOptions={companyOptions}
           leadSourceValues={leadSourceValues}
           hiddenLeadSources={hiddenLeadSources}
+          referralOptions={referralOptions}
+          referredByDisplayName={
+            referredByContact
+              ? `${referredByContact.firstName} ${referredByContact.lastName}`.trim()
+              : null
+          }
+          tagOptions={tagOptions}
         />
 
         <ContactDetailCenter

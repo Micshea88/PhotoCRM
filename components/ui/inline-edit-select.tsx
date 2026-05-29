@@ -178,17 +178,26 @@ export function InlineEditSelect({
           error,
         })
       ) : (
+        // P3 (C6c polish #2) — defaultOpen + inlineMode keep the
+        // visual identical to InlineEditField (underline-only, no
+        // bordered box) AND open the picker on mount so the user
+        // doesn't have to click twice. onDismiss fires on Esc or
+        // click-outside; we treat dismiss as "blur" — autosave the
+        // current draft (no-op if equal to the original value).
         <SearchableSelect
           items={items ?? []}
           value={draft}
           onChange={(next) => {
             setDraft(next)
-            // Autosave on selection. SearchableSelect closes its own
-            // panel after onChange, and we close edit mode here.
             void commit(next)
           }}
           aria-label={ariaLabel ?? "Edit field"}
           allowClear={allowClear}
+          defaultOpen
+          inlineMode
+          onDismiss={() => {
+            void commit(draft)
+          }}
         />
       )}
       {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}

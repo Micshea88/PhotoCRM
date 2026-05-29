@@ -47,6 +47,9 @@ export function SearchableSelect({
   id: propId,
   "aria-label": ariaLabel,
   emptyMessage = "No results",
+  defaultOpen = false,
+  inlineMode = false,
+  onDismiss,
 }: {
   items: SearchableSelectItem[]
   value: string | null
@@ -58,11 +61,23 @@ export function SearchableSelect({
   id?: string
   "aria-label"?: string
   emptyMessage?: string
+  /** P3 (C6c polish #2) — start the panel open on mount. Used by
+   *  InlineEditSelect so the user doesn't have to click twice to see
+   *  the picker after entering edit mode. */
+  defaultOpen?: boolean
+  /** P3 (C6c polish #2) — render the trigger as an underlined value
+   *  instead of a full bordered box. Matches the InlineEditField
+   *  visual exactly when used inside InlineEditSelect. */
+  inlineMode?: boolean
+  /** P3 (C6c polish #2) — fires when the user dismisses the panel
+   *  (Esc or click outside) without selecting. InlineEditSelect uses
+   *  this to autosave-on-blur the current draft. */
+  onDismiss?: () => void
 }) {
   const autoId = useId()
   const id = propId ?? autoId
   const listboxId = `${id}-listbox`
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -103,6 +118,8 @@ export function SearchableSelect({
   }, [open])
 
   // Click outside + Esc closes. Same pattern as the C2 popout fix.
+  // P3 (C6c polish #2) — onDismiss fires so InlineEditSelect can
+  // autosave the current draft / close edit mode on blur or Esc.
   useEffect(() => {
     if (!open) return
     function onPointer(e: MouseEvent) {
@@ -110,9 +127,13 @@ export function SearchableSelect({
       if (!t) return
       if (wrapperRef.current?.contains(t)) return
       setOpen(false)
+      onDismiss?.()
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false)
+      if (e.key === "Escape") {
+        setOpen(false)
+        onDismiss?.()
+      }
     }
     document.addEventListener("mousedown", onPointer)
     document.addEventListener("keydown", onKey)
@@ -120,7 +141,7 @@ export function SearchableSelect({
       document.removeEventListener("mousedown", onPointer)
       document.removeEventListener("keydown", onKey)
     }
-  }, [open])
+  }, [open, onDismiss])
 
   function commitChoice(item: SearchableSelectItem) {
     onChange(item.value)
@@ -175,8 +196,10 @@ export function SearchableSelect({
         aria-label={ariaLabel}
         role="combobox"
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-[var(--color-input)] bg-transparent px-2 text-left text-sm shadow-sm",
-          "focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none",
+          "flex w-full items-center justify-between gap-2 text-left text-sm",
+          inlineMode
+            ? "h-7 border-0 border-b border-[var(--color-primary)] bg-transparent px-0"
+            : "h-9 rounded-md border border-[var(--color-input)] bg-transparent px-2 shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >

@@ -19,7 +19,9 @@ import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactActionsDropdown } from "@/modules/contacts/ui/contact-actions-dropdown"
 import { ContactDetailLeft } from "@/modules/contacts/ui/contact-detail-left"
 import { ContactDetailCenter } from "@/modules/contacts/ui/contact-detail-center"
+import { ContactDetailMobile } from "@/modules/contacts/ui/contact-detail-mobile"
 import { ContactDetailRight } from "@/modules/contacts/ui/contact-detail-right"
+import { ActionIconRow } from "@/modules/contacts/ui/action-icon-row"
 import { ContactActivityFeed } from "@/modules/contacts/ui/contact-activity-feed"
 import { AiStatusBadge } from "@/modules/contacts/ui/ai-status-badge"
 import { AiSummaryCard } from "@/modules/contacts/ui/ai-summary-card"
@@ -198,60 +200,90 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         )}
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
-        <ContactDetailLeft
-          contact={{
-            id: contact.id,
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            primaryEmail: contact.primaryEmail,
-            primaryPhone: contact.primaryPhone,
-            contactType: contact.contactType,
-            lifecycleStatus: contact.lifecycleStatus,
-            leadSource: contact.leadSource,
-            ownerUserId: contact.ownerUserId,
-            companyId: contact.companyId,
-            tags: contact.tags ?? [],
-            mailingAddress: contact.mailingAddress,
-            referredByContactId: contact.referredByContactId,
-          }}
-          owner={ownerView}
-          companyName={company?.name ?? null}
-          ownerOptions={ownerOptions}
-          companyOptions={companyOptions}
-          leadSourceValues={leadSourceValues}
-          hiddenLeadSources={hiddenLeadSources}
-          referralOptions={referralOptions}
-          referredByDisplayName={
-            referredByContact
-              ? `${referredByContact.firstName} ${referredByContact.lastName}`.trim()
-              : null
-          }
-          tagOptions={tagOptions}
-        />
-
-        <ContactDetailCenter
-          overview={
-            <div className="space-y-4">
-              <AiSummaryCard
-                summary={contact.aiSummaryText}
-                generatedAt={contact.aiGeneratedAt}
-                generationModel={contact.aiGenerationModel}
-                rightSlot={<RegenerateAiButton contactId={contact.id} />}
+      {(() => {
+        const contactSlice = {
+          id: contact.id,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          primaryEmail: contact.primaryEmail,
+          primaryPhone: contact.primaryPhone,
+          contactType: contact.contactType,
+          lifecycleStatus: contact.lifecycleStatus,
+          leadSource: contact.leadSource,
+          ownerUserId: contact.ownerUserId,
+          companyId: contact.companyId,
+          tags: contact.tags ?? [],
+          mailingAddress: contact.mailingAddress,
+          referredByContactId: contact.referredByContactId,
+        }
+        const leftBaseProps = {
+          contact: contactSlice,
+          owner: ownerView,
+          companyName: company?.name ?? null,
+          ownerOptions,
+          companyOptions,
+          leadSourceValues,
+          hiddenLeadSources,
+          referralOptions,
+          referredByDisplayName: referredByContact
+            ? `${referredByContact.firstName} ${referredByContact.lastName}`.trim()
+            : null,
+          tagOptions,
+        }
+        const aiBlock = (
+          <div className="space-y-4">
+            <AiSummaryCard
+              summary={contact.aiSummaryText}
+              generatedAt={contact.aiGeneratedAt}
+              generationModel={contact.aiGenerationModel}
+              rightSlot={<RegenerateAiButton contactId={contact.id} />}
+            />
+            <AiInsightsCard insights={insights} />
+          </div>
+        )
+        const activityBlock = <ContactActivityFeed entries={activity} />
+        const todosBlock = (
+          <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
+            Tasks integration ships in Push 7.
+          </p>
+        )
+        return (
+          <>
+            {/* P3 (C6d) — mobile single-column tabbed shell (<lg).
+                Identity is covered by the page header H1 + AI badge;
+                the action row sits above the tabs; About tab renders
+                ContactDetailLeft panes=["info","about"] so the desktop
+                card styling is preserved without the action row dup. */}
+            <div className="space-y-4 lg:hidden" data-testid="contact-detail-mobile-shell">
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-2 py-3">
+                <ActionIconRow
+                  contactId={contact.id}
+                  contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
+                  primaryEmail={contact.primaryEmail}
+                  primaryPhone={contact.primaryPhone}
+                />
+              </div>
+              <ContactDetailMobile
+                activity={
+                  <div className="space-y-4">
+                    {aiBlock}
+                    {activityBlock}
+                  </div>
+                }
+                associations={<ContactDetailRight associations={associationsView} />}
+                about={<ContactDetailLeft {...leftBaseProps} panes={["info", "about"]} />}
               />
-              <AiInsightsCard insights={insights} />
             </div>
-          }
-          activity={<ContactActivityFeed entries={activity} />}
-          todos={
-            <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
-              Tasks integration ships in Push 7.
-            </p>
-          }
-        />
 
-        <ContactDetailRight associations={associationsView} />
-      </div>
+            {/* Desktop 3-column (lg+). */}
+            <div className="hidden gap-6 lg:grid lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
+              <ContactDetailLeft {...leftBaseProps} />
+              <ContactDetailCenter overview={aiBlock} activity={activityBlock} todos={todosBlock} />
+              <ContactDetailRight associations={associationsView} />
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }

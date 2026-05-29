@@ -39,6 +39,9 @@ export interface ContactMailingAddress {
   zip?: string
 }
 
+export type ContactDetailPane = "identity" | "actions" | "info" | "about"
+const DEFAULT_PANES: ContactDetailPane[] = ["identity", "actions", "info", "about"]
+
 export interface ContactDetailLeftProps {
   contact: {
     id: string
@@ -65,6 +68,10 @@ export interface ContactDetailLeftProps {
   /** Display name of the referred-by contact. Null when none. */
   referredByDisplayName: string | null
   tagOptions: string[]
+  /** P3 (C6d) — which blocks to render. Default = all 4 (desktop).
+   *  Mobile About tab passes `["info","about"]` so the action row +
+   *  identity card don't duplicate the top-of-page header. */
+  panes?: ContactDetailPane[]
 }
 
 export function ContactDetailLeft({
@@ -78,7 +85,22 @@ export function ContactDetailLeft({
   referralOptions,
   referredByDisplayName,
   tagOptions,
+  panes = DEFAULT_PANES,
 }: ContactDetailLeftProps) {
+  const showIdentity = panes.includes("identity")
+  const showActions = panes.includes("actions")
+  const showInfo = panes.includes("info")
+  const showAbout = panes.includes("about")
+  // Pre-compute which panes get the top-border divider. The first
+  // rendered pane never gets one; subsequent panes always do.
+  const order: ("identity" | "actions" | "info" | "about")[] = [
+    ...(showIdentity ? (["identity"] as const) : []),
+    ...(showActions ? (["actions"] as const) : []),
+    ...(showInfo ? (["info"] as const) : []),
+    ...(showAbout ? (["about"] as const) : []),
+  ]
+  const TOP_BORDER = "border-t border-[var(--color-border)]"
+  const dividerFor = (key: (typeof order)[number]) => (order.indexOf(key) > 0 ? TOP_BORDER : "")
   async function callUpdate(
     patch: Parameters<typeof updateContact>[0],
   ): Promise<{ error?: string } | undefined> {
@@ -214,233 +236,241 @@ export function ContactDetailLeft({
         data-testid="contact-detail-left-card"
       >
         {/* 1. Identity */}
-        <div className="space-y-2 p-4">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
-              <UserIcon className="size-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex gap-1">
-                <InlineEditField
-                  value={contact.firstName}
-                  onSave={saveText("firstName")}
-                  ariaLabel="First name"
-                  className="font-semibold"
-                />
-                <InlineEditField
-                  value={contact.lastName}
-                  onSave={saveText("lastName")}
-                  ariaLabel="Last name"
-                  className="font-semibold"
-                />
+        {showIdentity && (
+          <div className={cn("space-y-2 p-4", dividerFor("identity"))}>
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+                <UserIcon className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex gap-1">
+                  <InlineEditField
+                    value={contact.firstName}
+                    onSave={saveText("firstName")}
+                    ariaLabel="First name"
+                    className="font-semibold"
+                  />
+                  <InlineEditField
+                    value={contact.lastName}
+                    onSave={saveText("lastName")}
+                    ariaLabel="Last name"
+                    className="font-semibold"
+                  />
+                </div>
+                {companyName && (
+                  <p className="text-xs text-[var(--color-muted-foreground)]">{companyName}</p>
+                )}
               </div>
-              {companyName && (
-                <p className="text-xs text-[var(--color-muted-foreground)]">{companyName}</p>
-              )}
             </div>
           </div>
-        </div>
+        )}
 
         {/* 2. Action icon row */}
-        <div className="border-t border-[var(--color-border)] px-2 py-3">
-          <ActionIconRow
-            contactId={contact.id}
-            contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
-            primaryEmail={contact.primaryEmail}
-            primaryPhone={contact.primaryPhone}
-          />
-        </div>
+        {showActions && (
+          <div className={cn("px-2 py-3", dividerFor("actions"))}>
+            <ActionIconRow
+              contactId={contact.id}
+              contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
+              primaryEmail={contact.primaryEmail}
+              primaryPhone={contact.primaryPhone}
+            />
+          </div>
+        )}
 
         {/* 3. Contact info */}
-        <div className="space-y-2 border-t border-[var(--color-border)] p-4 text-sm">
-          <FieldLabel>Email</FieldLabel>
-          <InlineEditField
-            value={contact.primaryEmail}
-            onSave={saveEmail}
-            type="email"
-            ariaLabel="Primary email"
-          />
-          <FieldLabel>Phone</FieldLabel>
-          <InlineEditField
-            value={contact.primaryPhone}
-            displayValue={formatPhoneDisplay(contact.primaryPhone)}
-            editValue={formatPhoneDisplay(contact.primaryPhone)}
-            onSave={savePhone}
-            normalizeOnSave={(raw) => parsePhoneInput(raw) ?? ""}
-            validateBeforeSave={(normalized) => {
-              if (normalized === "") return null
-              return normalized.length === 10
-                ? null
-                : "Enter a 10-digit US phone (e.g. (555) 739-9897)."
-            }}
-            type="tel"
-            placeholder="No phone"
-            ariaLabel="Primary phone"
-          />
-        </div>
+        {showInfo && (
+          <div className={cn("space-y-2 p-4 text-sm", dividerFor("info"))}>
+            <FieldLabel>Email</FieldLabel>
+            <InlineEditField
+              value={contact.primaryEmail}
+              onSave={saveEmail}
+              type="email"
+              ariaLabel="Primary email"
+            />
+            <FieldLabel>Phone</FieldLabel>
+            <InlineEditField
+              value={contact.primaryPhone}
+              displayValue={formatPhoneDisplay(contact.primaryPhone)}
+              editValue={formatPhoneDisplay(contact.primaryPhone)}
+              onSave={savePhone}
+              normalizeOnSave={(raw) => parsePhoneInput(raw) ?? ""}
+              validateBeforeSave={(normalized) => {
+                if (normalized === "") return null
+                return normalized.length === 10
+                  ? null
+                  : "Enter a 10-digit US phone (e.g. (555) 739-9897)."
+              }}
+              type="tel"
+              placeholder="No phone"
+              ariaLabel="Primary phone"
+            />
+          </div>
+        )}
 
         {/* 4. About */}
-        <div
-          className="space-y-2 border-t border-[var(--color-border)] p-4 text-sm"
-          data-testid="contact-detail-left-about"
-        >
-          <h2 className="text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
-            About
-          </h2>
-          <AboutRow label="Type">
-            <InlineEditSelect
-              value={contact.contactType}
-              displayLabel={contact.contactType}
-              items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
-              onSave={saveSelect("contactType")}
-              ariaLabel="Contact type"
-              allowClear
-            />
-          </AboutRow>
-          <AboutRow label="Lifecycle">
-            <InlineEditSelect
-              value={contact.lifecycleStatus}
-              displayLabel={contact.lifecycleStatus}
-              items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
-              onSave={saveSelect("lifecycleStatus")}
-              ariaLabel="Lifecycle status"
-              allowClear
-            />
-          </AboutRow>
-          <AboutRow label="Lead source">
-            <InlineEditSelect
-              value={contact.leadSource}
-              displayLabel={contact.leadSource}
-              onSave={saveSelect("leadSource")}
-              ariaLabel="Lead source"
-              renderPicker={({ commit }) => (
-                <LeadSourceCombobox
-                  value={contact.leadSource ?? ""}
-                  onChange={(v) => {
-                    void commit(v === "" ? null : v)
-                  }}
-                  existingValues={leadSourceValues}
-                  hiddenSources={hiddenLeadSources}
-                  inlineMode
-                  onDismiss={() => {
-                    void commit(contact.leadSource)
-                  }}
-                />
-              )}
-            />
-          </AboutRow>
-          <AboutRow label="Owner">
-            <InlineEditSelect
-              value={contact.ownerUserId}
-              displayLabel={owner?.name ?? owner?.email ?? null}
-              onSave={saveSelect("ownerUserId")}
-              ariaLabel="Owner"
-              renderPicker={({ commit }) => (
-                <UserRefPicker
-                  options={ownerOptions}
-                  value={contact.ownerUserId}
-                  onChange={(v) => {
-                    void commit(v)
-                  }}
-                  inlineMode
-                  onDismiss={() => {
-                    void commit(contact.ownerUserId)
-                  }}
-                />
-              )}
-            />
-          </AboutRow>
-          <AboutRow label="Company">
-            <InlineEditSelect
-              value={contact.companyId}
-              displayLabel={companyName}
-              onSave={saveSelect("companyId")}
-              ariaLabel="Primary company"
-              renderPicker={({ commit }) => (
-                <CompanyPicker
-                  options={companyOptions}
-                  value={contact.companyId}
-                  onChange={(v) => {
-                    void commit(v)
-                  }}
-                  inlineMode
-                  onDismiss={() => {
-                    void commit(contact.companyId)
-                  }}
-                />
-              )}
-            />
-          </AboutRow>
-          <AboutRow label="Tags">
-            <InlineEditTags
-              value={contact.tags}
-              displayLabel={tagsDisplay}
-              tagOptions={tagOptions}
-              onSave={saveTags}
-            />
-          </AboutRow>
-          <AboutRow label="Address">
-            <div className="space-y-1">
-              <InlineEditField
-                value={address.street1 ?? null}
-                onSave={saveAddressField("street1")}
-                placeholder="Street"
-                ariaLabel="Street"
+        {showAbout && (
+          <div
+            className={cn("space-y-2 p-4 text-sm", dividerFor("about"))}
+            data-testid="contact-detail-left-about"
+          >
+            <h2 className="text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+              About
+            </h2>
+            <AboutRow label="Type">
+              <InlineEditSelect
+                value={contact.contactType}
+                displayLabel={contact.contactType}
+                items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
+                onSave={saveSelect("contactType")}
+                ariaLabel="Contact type"
+                allowClear
               />
-              <div className="grid grid-cols-[1fr_80px] gap-2">
+            </AboutRow>
+            <AboutRow label="Lifecycle">
+              <InlineEditSelect
+                value={contact.lifecycleStatus}
+                displayLabel={contact.lifecycleStatus}
+                items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
+                onSave={saveSelect("lifecycleStatus")}
+                ariaLabel="Lifecycle status"
+                allowClear
+              />
+            </AboutRow>
+            <AboutRow label="Lead source">
+              <InlineEditSelect
+                value={contact.leadSource}
+                displayLabel={contact.leadSource}
+                onSave={saveSelect("leadSource")}
+                ariaLabel="Lead source"
+                renderPicker={({ commit }) => (
+                  <LeadSourceCombobox
+                    value={contact.leadSource ?? ""}
+                    onChange={(v) => {
+                      void commit(v === "" ? null : v)
+                    }}
+                    existingValues={leadSourceValues}
+                    hiddenSources={hiddenLeadSources}
+                    inlineMode
+                    onDismiss={() => {
+                      void commit(contact.leadSource)
+                    }}
+                  />
+                )}
+              />
+            </AboutRow>
+            <AboutRow label="Owner">
+              <InlineEditSelect
+                value={contact.ownerUserId}
+                displayLabel={owner?.name ?? owner?.email ?? null}
+                onSave={saveSelect("ownerUserId")}
+                ariaLabel="Owner"
+                renderPicker={({ commit }) => (
+                  <UserRefPicker
+                    options={ownerOptions}
+                    value={contact.ownerUserId}
+                    onChange={(v) => {
+                      void commit(v)
+                    }}
+                    inlineMode
+                    onDismiss={() => {
+                      void commit(contact.ownerUserId)
+                    }}
+                  />
+                )}
+              />
+            </AboutRow>
+            <AboutRow label="Company">
+              <InlineEditSelect
+                value={contact.companyId}
+                displayLabel={companyName}
+                onSave={saveSelect("companyId")}
+                ariaLabel="Primary company"
+                renderPicker={({ commit }) => (
+                  <CompanyPicker
+                    options={companyOptions}
+                    value={contact.companyId}
+                    onChange={(v) => {
+                      void commit(v)
+                    }}
+                    inlineMode
+                    onDismiss={() => {
+                      void commit(contact.companyId)
+                    }}
+                  />
+                )}
+              />
+            </AboutRow>
+            <AboutRow label="Tags">
+              <InlineEditTags
+                value={contact.tags}
+                displayLabel={tagsDisplay}
+                tagOptions={tagOptions}
+                onSave={saveTags}
+              />
+            </AboutRow>
+            <AboutRow label="Address">
+              <div className="space-y-1">
                 <InlineEditField
-                  value={address.city ?? null}
-                  onSave={saveAddressField("city")}
-                  placeholder="City"
-                  ariaLabel="City"
+                  value={address.street1 ?? null}
+                  onSave={saveAddressField("street1")}
+                  placeholder="Street"
+                  ariaLabel="Street"
                 />
-                <InlineEditSelect
-                  value={address.state ?? null}
-                  displayLabel={address.state ?? null}
-                  items={US_STATE_CODES.map((s) => ({ value: s, label: s }))}
-                  onSave={saveAddressState}
-                  ariaLabel="State"
-                  allowClear
-                  placeholder="State"
-                />
+                <div className="grid grid-cols-[1fr_80px] gap-2">
+                  <InlineEditField
+                    value={address.city ?? null}
+                    onSave={saveAddressField("city")}
+                    placeholder="City"
+                    ariaLabel="City"
+                  />
+                  <InlineEditSelect
+                    value={address.state ?? null}
+                    displayLabel={address.state ?? null}
+                    items={US_STATE_CODES.map((s) => ({ value: s, label: s }))}
+                    onSave={saveAddressState}
+                    ariaLabel="State"
+                    allowClear
+                    placeholder="State"
+                  />
+                </div>
+                <div className="w-[120px]">
+                  <InlineEditField
+                    value={address.zip ?? null}
+                    onSave={saveAddressField("zip")}
+                    placeholder="Zip"
+                    ariaLabel="Zip"
+                    validateBeforeSave={(v) =>
+                      v === "" || /^\d{5}(-\d{4})?$/.test(v)
+                        ? null
+                        : "Zip must be 5 digits or 5+4 (e.g. 94102 or 94102-1234)."
+                    }
+                  />
+                </div>
               </div>
-              <div className="w-[120px]">
-                <InlineEditField
-                  value={address.zip ?? null}
-                  onSave={saveAddressField("zip")}
-                  placeholder="Zip"
-                  ariaLabel="Zip"
-                  validateBeforeSave={(v) =>
-                    v === "" || /^\d{5}(-\d{4})?$/.test(v)
-                      ? null
-                      : "Zip must be 5 digits or 5+4 (e.g. 94102 or 94102-1234)."
-                  }
-                />
-              </div>
-            </div>
-          </AboutRow>
-          <AboutRow label="Referred by">
-            <InlineEditSelect
-              value={contact.referredByContactId}
-              displayLabel={referredByDisplayName}
-              onSave={saveReferredBy}
-              ariaLabel="Referred by"
-              renderPicker={({ commit }) => (
-                <ContactRefPicker
-                  options={referralOptions}
-                  value={contact.referredByContactId}
-                  onChange={(v) => {
-                    void commit(v)
-                  }}
-                  inlineMode
-                  onDismiss={() => {
-                    void commit(contact.referredByContactId)
-                  }}
-                />
-              )}
-            />
-          </AboutRow>
-        </div>
+            </AboutRow>
+            <AboutRow label="Referred by">
+              <InlineEditSelect
+                value={contact.referredByContactId}
+                displayLabel={referredByDisplayName}
+                onSave={saveReferredBy}
+                ariaLabel="Referred by"
+                renderPicker={({ commit }) => (
+                  <ContactRefPicker
+                    options={referralOptions}
+                    value={contact.referredByContactId}
+                    onChange={(v) => {
+                      void commit(v)
+                    }}
+                    inlineMode
+                    onDismiss={() => {
+                      void commit(contact.referredByContactId)
+                    }}
+                  />
+                )}
+              />
+            </AboutRow>
+          </div>
+        )}
       </section>
     </aside>
   )

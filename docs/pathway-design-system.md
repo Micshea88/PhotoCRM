@@ -233,6 +233,63 @@ Reference implementation: `ContactDetailRight`'s
 
 ---
 
+## 5b. Mobile contact detail (single-column tabbed)
+
+Under `lg` (< 1024px), the contact detail page switches from the
+3-column desktop layout to a single-column tabbed shell. Both
+shapes mount in the React tree, gated by Tailwind responsive
+utilities (`lg:hidden` vs `hidden lg:grid`) so the user always sees
+exactly one. The double-mount is intentional — keeping the desktop
+and mobile trees structurally independent makes future shape
+changes safe.
+
+**Layout (top to bottom):**
+
+```
+Row 1: [< Back link]  [Actions ▼]
+Row 2: H1 name        + AI status badge
+Row 3 (when present): "Archived" pill
+─────────────────────────────────────
+[ActionIconRow — 6 icons, same as desktop]
+─────────────────────────────────────
+[Activity | Associations | About]    ← tab strip, equal-width flex
+  [active tab content]
+```
+
+**Tab content:**
+
+- **Activity** — AI summary card + AI insights card + activity feed
+  (notes / calls / meetings / SMS — same `loadContactActivity`
+  loader as desktop).
+- **Associations** — the `ContactDetailRight` content (4 sections:
+  Associations / Events / Financials / Files). Sections stack as
+  cards in the single column.
+- **About** — `ContactDetailLeft` with `panes=["info","about"]`. The
+  card preserves desktop styling (email + phone + the full About
+  block); identity (avatar + name) and the action row pane are
+  skipped because the page header + the standalone action row above
+  the tabs already cover them.
+
+**What's NOT in the mobile tab strip:**
+
+- **To-Do's** — omitted in V1 per docs/pathway-build-roadmap.md.
+  When Push 7 ships contact-scoped tasks, placement gets a focused
+  design pass.
+- **Right-sidebar gear menus** — the per-section gear / drag-handle
+  affordances render visually but are no-ops on mobile (same as
+  desktop V1).
+
+**Pane gating contract:** the `panes` prop on `ContactDetailLeft`
+takes a subset of `"identity" | "actions" | "info" | "about"` (each
+of the four bordered blocks inside the unified card). Default is
+all four (desktop). The mobile About tab passes `["info", "about"]`.
+A new mobile sub-surface can pass any other subset without
+disturbing the desktop layout — the dividers stay correct because
+the first rendered pane never gets a top border and subsequent
+panes always do.
+
+---
+
 ## 6. Phone format standard
 
 **Display:** `(555) 739-9897` everywhere — desktop, mobile, list,

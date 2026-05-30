@@ -1,12 +1,16 @@
 import "server-only"
 import { and, eq, isNull } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { withOrgContext } from "@/lib/org-context"
+import type * as schema from "@/db/schema"
 import { contactNotes } from "@/modules/contacts/schema"
 import { callLog } from "@/modules/calls/schema"
 import { meetings } from "@/modules/meetings/schema"
 import { smsMessages } from "@/modules/sms-messages/schema"
 import { user } from "@/modules/auth/schema"
 import type { ActivityEntry } from "./ui/contact-activity-feed"
+
+type DbHandle = NodePgDatabase<typeof schema>
 
 /**
  * Push 3 (C6c) — server-side loader for the unified activity feed.
@@ -27,7 +31,21 @@ export async function loadContactActivity(
   orgId: string,
   contactId: string,
 ): Promise<ActivityEntry[]> {
-  return withOrgContext(async (db) => {
+  return withOrgContext(async (db) => loadContactActivityWithDb(db, orgId, contactId))
+}
+
+/**
+ * Parametric variant for callers that already hold a tx — used by
+ * the regenerate pipeline (which runs inside its own action tx and
+ * can't grab the AsyncLocalStorage handle that `loadContactActivity`
+ * uses).
+ */
+export async function loadContactActivityWithDb(
+  db: DbHandle,
+  orgId: string,
+  contactId: string,
+): Promise<ActivityEntry[]> {
+  {
     // Notes
     const notesRows = await db
       .select({
@@ -164,5 +182,5 @@ export async function loadContactActivity(
 
     entries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     return entries
-  })
+  }
 }

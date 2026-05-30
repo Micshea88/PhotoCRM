@@ -127,6 +127,95 @@ exports `shouldRegenerate(contact, signal)` returning `boolean`. The
 detail-page server component calls this before deciding to invoke the
 classifier.
 
+### Summary content-pulling (polish #5 Fix 9)
+
+`generateContactSummary` takes `recentActivity: ActivityEntry[]` as
+a required argument. The Haiku user prompt is structured as:
+
+```
+Facts:
+- Name: Jimmy Jones
+- Type: Lead
+- Came from: Vendor referral
+- Tags: wedding
+- Days since last activity: 2
+- Has an upcoming meeting scheduled
+- Internal status: Hot Lead
+
+Recent activity (most recent first):
+[Note by Mike, 2 hours ago]: Jimmy and Janie agreed we should be their photographer.
+[Note by Mike, 1 day ago]: Jimmy is having his wedding at the Vinoy, needs to check with fiancé.
+[Call by Mike, 3 days ago]: Left a voicemail about scheduling the consultation.
+
+Write the summary paragraph.
+```
+
+Caps (enforced both at the call site via `formatActivityForPrompt`
+and in the Haiku prompt itself):
+
+- **10 most recent entries** — older entries truncate with
+  `"... and N more earlier entries."`
+- **2000 chars** of combined formatted body — engages BEFORE the
+  10-entry cap when individual notes are long.
+
+System prompt rules (rejected phrasings + style targets):
+
+- Open with the relationship/situation, not the full name as
+  subject. ("Wedding lead — Jimmy and Janie ...", not "Jimmy Jones
+  is ...")
+- Prefer first names. Skip facts that are zero/empty.
+- DO reference specific details from activity (dates, venues,
+  decisions).
+- DO NOT use "is classified as", "has been categorized as",
+  "has X count of Y", "1 referral(s)", "0 day(s) since".
+- DO NOT include test-data artifacts in names (e.g., a `-Test`
+  suffix → use the first name alone).
+
+**Do / Don't examples:**
+
+> ✅ "Wedding lead — Jimmy and Janie are getting married at the Vinoy
+> and agreed today we should be their photographer. Last touchpoint
+> was a voicemail three days ago about the consultation."
+>
+> ❌ "Jimmy Jones-Test is classified as warm lead. Has made 1
+> referral(s). Last activity 2 day(s) ago."
+
+### Referral directionality
+
+The `ContactFacts.referralsMade` field is **outbound**:
+
+```
+referralsMade = COUNT(*) FROM contacts
+  WHERE referred_by_contact_id = thisContact.id
+    AND deleted_at IS NULL
+```
+
+It measures how many OTHER contacts came from this one. It is NOT
+incremented by this contact's own `leadSource` field — that's the
+inbound channel (where this contact came from).
+
+A contact with `leadSource = "Vendor referral"` and no one pointing
+to them has `referralsMade = 0`. The prompt now surfaces this
+clearly via `"Outbound referrals: N other contacts were referred BY
+this person"` when N > 0, and omits the line entirely when zero.
+
+### Out-of-scope (locked — do not modify without separate scope)
+
+- `lead-status-classifier.ts` — separate Haiku call with its own
+  prompt. Status classification is working; touching it risks
+  regressions in the badge.
+- `insights-detector.ts` — watch item, deferred. Touching it now
+  risks breaking lead-status badge insights without a full redesign.
+- Empty-floor logic in `regenerate-pipeline.ts` — must continue to
+  fire on truly empty contacts (zero activity AND zero bookings).
+- `ai_usage_log` table and schema.
+- AI cache invalidation hooks in `createContactNote` / `logCall`
+  (polish #5 Fix 8).
+- The 7-day summary cache TTL.
+- The 24-hour lead-status cache TTL.
+- Fallback chain (no API key → rules; unparseable Haiku → fallback
+  template).
+
 ---
 
 ## Hybrid Intelligence Layers

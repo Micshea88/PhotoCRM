@@ -4,6 +4,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { contacts } from "../schema"
+import { loadContactActivityWithDb } from "../activity-loader"
 import { computeContactFacts, isEmptyContact } from "./lead-status-rules"
 import {
   classifyLeadStatus,
@@ -148,7 +149,12 @@ export async function runRegeneratePipeline(
     }
   } else {
     classifier = await classifyLeadStatus(facts, slice)
-    summary = await generateContactSummary(facts, slice, classifier.status)
+    // P3 polish #5 Fix 9 — load recent activity bodies for the
+    // summary prompt. Same tx as the pipeline so we see any
+    // just-committed activity (e.g. after a note insert through
+    // createContactNote nulled the cache).
+    const recentActivity = await loadContactActivityWithDb(db, ctx.organizationId, row.id)
+    summary = await generateContactSummary(facts, slice, classifier.status, recentActivity)
     trace = {
       floor: false,
       classifier: classifier.source,

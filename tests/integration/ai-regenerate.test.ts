@@ -102,6 +102,33 @@ describe("computeContactFacts — DB queries the right activity tables", () => {
     })
   })
 
+  it("polish #5 Fix 9 — referralsMade is OUTBOUND only; inbound leadSource does NOT increment it", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      // Jimmy is a vendor-referral LEAD. Nobody points to him as
+      // their referrer. referralsMade MUST be 0 — the "Has made N
+      // referral(s)" template the user saw was Haiku confused by
+      // robotic phrasing, not a wrong count.
+      const jimmy = createId()
+      await db.insert(contacts).values({
+        id: jimmy,
+        organizationId: orgId,
+        firstName: "Jimmy",
+        lastName: "Jones",
+        contactType: "Lead",
+        leadSource: "Vendor referral",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+
+      const facts = await computeContactFacts(db, orgId, jimmy)
+      expect(facts?.referralsMade).toBe(0)
+    })
+  })
+
   it("counts referrals where another contact's referred_by_contact_id points here", async () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
@@ -296,7 +323,9 @@ describe("Fallback classifier — wired in via deterministic path", () => {
         },
         r.status,
       )
-      expect(t).toContain("L M")
+      // Polish #5 Fix 9 — fallback uses first name only per the
+      // natural-prose style guide. "L. ..." is the lead-in.
+      expect(t).toMatch(/^L\./)
       expect(t).toContain("lead in progress")
     })
   })

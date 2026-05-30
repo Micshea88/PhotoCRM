@@ -14,6 +14,7 @@ import {
 } from "@/modules/custom-fields/host-helpers"
 import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
+import { invalidateContactAiCache } from "./ai/cache-invalidation"
 import { findDedupConflict, type DedupMatchField } from "./dedup-preflight"
 import {
   addContactCompanyAssociationInput,
@@ -489,6 +490,10 @@ export const createContactNote = orgAction
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
+    // P3 polish #5 Fix 8 — null AI cache so the next page render
+    // auto-regens with the new activity counts. Atomic with the
+    // insert (same orgAction transaction).
+    await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
     await audit(
       {
         db: ctx.db,

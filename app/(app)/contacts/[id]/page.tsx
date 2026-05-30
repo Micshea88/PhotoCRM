@@ -27,6 +27,7 @@ import { AiStatusBadge } from "@/modules/contacts/ui/ai-status-badge"
 import { AiSummaryCard } from "@/modules/contacts/ui/ai-summary-card"
 import { AiInsightsCard } from "@/modules/contacts/ui/ai-insights-card"
 import { RegenerateAiButton } from "@/modules/contacts/ui/regenerate-ai-button"
+import { regenerateContactAiIfMissing } from "@/modules/contacts/ai/auto-regenerate"
 import type { AiInsight } from "@/modules/contacts/ai/insights-detector"
 
 /**
@@ -153,7 +154,39 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     email: m.user.email,
   }))
 
-  const insights = readCachedInsights(contact.aiInsightsJson)
+  // P3 polish #5 Fix 8 — auto-regen the AI cache when it's null
+  // (typical case: just after createContactNote / logCall ran the
+  // Fix 8 invalidation). Empty-floor contacts hit the deterministic
+  // template inside the pipeline so no Haiku call is made until
+  // there's real activity to summarize. Failure (e.g. provider
+  // outage) returns null and the page falls back to the cached
+  // empty state — the user can still hit Regenerate manually.
+  let liveLeadStatus = contact.aiLeadStatus
+  let liveLeadStatusReasoning = contact.aiLeadStatusReasoning
+  let liveSummaryText = contact.aiSummaryText
+  let liveGeneratedAt = contact.aiGeneratedAt
+  let liveGenerationModel = contact.aiGenerationModel
+  let insights = readCachedInsights(contact.aiInsightsJson)
+  if (contact.aiGeneratedAt === null) {
+    const fresh = await runWithOrgContext(
+      { orgId, role: tentativeRole, userId: session.user.id },
+      async () =>
+        regenerateContactAiIfMissing(contact.id, {
+          organizationId: orgId,
+          userId: session.user.id,
+          ipAddress: null,
+          userAgent: null,
+        }),
+    )
+    if (fresh) {
+      liveLeadStatus = fresh.aiLeadStatus
+      liveLeadStatusReasoning = fresh.aiLeadStatusReasoning
+      liveSummaryText = fresh.aiSummaryText
+      liveGeneratedAt = fresh.aiGeneratedAt
+      liveGenerationModel = fresh.aiGenerationModel
+      insights = fresh.aiInsights
+    }
+  }
   const associationsView = associations.map(({ company: c, association }) => ({
     label: c.name,
     sub: association.role,
@@ -191,7 +224,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               company?.name,
             )}
           </h1>
-          <AiStatusBadge status={contact.aiLeadStatus} reasoning={contact.aiLeadStatusReasoning} />
+          <AiStatusBadge status={liveLeadStatus} reasoning={liveLeadStatusReasoning} />
         </div>
         {contact.archivedAt && (
           <span className="inline-block rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs text-[var(--color-muted-foreground)]">
@@ -247,9 +280,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         const aiBlock = (
           <div className="space-y-4">
             <AiSummaryCard
-              summary={contact.aiSummaryText}
-              generatedAt={contact.aiGeneratedAt}
-              generationModel={contact.aiGenerationModel}
+              summary={liveSummaryText}
+              generatedAt={liveGeneratedAt}
+              generationModel={liveGenerationModel}
               rightSlot={<RegenerateAiButton contactId={contact.id} />}
             />
             <AiInsightsCard insights={insights} />

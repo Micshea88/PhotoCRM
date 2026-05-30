@@ -82,6 +82,46 @@ contract Push 12+ needs is already established.
 4. Status change (manual or rule-engine driven).
 5. Manual **Refresh** button on the badge / summary.
 
+### Cache invalidation contract (polish #5 Fix 8)
+
+Any action that creates or updates contact-scoped activity MUST null
+all 6 ai\_\* cache fields on the parent contact, **atomically** with
+the activity insert. The shared helper
+`src/modules/contacts/ai/cache-invalidation.ts` does the UPDATE; the
+surrounding orgAction transaction (see `src/lib/safe-action.ts`)
+guarantees rollback if either the insert or the cache null fails.
+
+Wired today:
+
+- `createContactNote` (`src/modules/contacts/actions.ts`) — calls
+  `invalidateContactAiCache` right after the note insert, before
+  the audit row.
+- `logCall` (`src/modules/calls/actions.ts`) — same place.
+
+Required when shipping NEW activity-creating actions:
+
+- `createMeeting` (P6) — call `invalidateContactAiCache` after the
+  meeting insert. Schema already exists; the action ships in P6.
+- `logSms` (P5+) — call `invalidateContactAiCache` after the message
+  insert. Schema already exists; the action ships once the SMS
+  provider integration lands.
+
+### Auto-regenerate on page render (polish #5 Fix 8)
+
+When the detail-page server component loads a contact and finds
+`aiGeneratedAt === null`, it calls `regenerateContactAiIfMissing`
+inside the same `runWithOrgContext` block. The helper invokes the
+shared pipeline (`runRegeneratePipeline` in `regenerate-pipeline.ts`)
+and returns the freshly computed values so the page renders the new
+summary without a re-read.
+
+Cost guardrail: the empty-floor short-circuit fires for contacts
+with zero activity — no Haiku call. Real Haiku runs only when there
+IS activity to summarize, which is exactly when the cache is most
+valuable. Failure paths (provider outage, contact deleted between
+read and regen) return `null` and the page falls back to the cached
+empty state with the manual Regenerate button still available.
+
 Implementation: a small policy module `src/lib/ai/cache-policy.ts`
 exports `shouldRegenerate(contact, signal)` returning `boolean`. The
 detail-page server component calls this before deciding to invoke the

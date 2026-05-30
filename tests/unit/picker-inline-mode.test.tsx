@@ -163,3 +163,101 @@ describe("LeadSourceCombobox — inlineMode delegates to SearchableSelect", () =
     expect(container.textContent).not.toMatch(/Add new/)
   })
 })
+
+describe("Polish #5 Fix 3 — chevron + portal + label-only filter", () => {
+  it("suppresses the chevron icon when inlineMode={true}", () => {
+    const { container } = render(
+      <SearchableSelect
+        items={[{ value: "a", label: "Alpha" }]}
+        value={null}
+        onChange={vi.fn()}
+        defaultOpen
+        inlineMode
+        aria-label="Inline pick"
+      />,
+    )
+    // Lucide renders icons as SVGs with class containing "size-4".
+    // The chevron is the ONLY decorative size-4 SVG inside the trigger
+    // button — assert none renders inside the combobox button.
+    const trigger = container.querySelector("[role='combobox']")
+    expect(trigger).not.toBeNull()
+    expect(trigger?.querySelector("svg")).toBeNull()
+  })
+
+  it("renders the trigger chevron when NOT in inlineMode", () => {
+    const { container } = render(
+      <SearchableSelect
+        items={[{ value: "a", label: "Alpha" }]}
+        value={null}
+        onChange={vi.fn()}
+        aria-label="Default pick"
+      />,
+    )
+    const trigger = container.querySelector("[role='combobox']")
+    expect(trigger?.querySelector("svg")).not.toBeNull()
+  })
+
+  it("portals the panel under document.body in inlineMode", () => {
+    const { container } = render(
+      <SearchableSelect
+        items={[{ value: "a", label: "Alpha" }]}
+        value={null}
+        onChange={vi.fn()}
+        defaultOpen
+        inlineMode
+        aria-label="Portaled"
+      />,
+    )
+    // The panel mounts in a portal — NOT a descendant of the SearchableSelect
+    // wrapper.
+    const portalPanel = document.querySelector('[data-picker-portal="true"]')
+    expect(portalPanel).not.toBeNull()
+    expect(container.contains(portalPanel)).toBe(false)
+  })
+
+  it("filter matches by label only in inlineMode (ignores description)", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event")
+    const user = userEvent.setup()
+    render(
+      <SearchableSelect
+        items={[
+          { value: "j", label: "Julie Wise", description: "jwise@gmail.com" },
+          { value: "a", label: "Alex" },
+        ]}
+        value={null}
+        onChange={vi.fn()}
+        defaultOpen
+        inlineMode
+        aria-label="By label"
+      />,
+    )
+    const input = screen.getByLabelText("Filter options")
+    await user.type(input, "m")
+    // Default mode would have surfaced "Julie Wise" (description contains
+    // 'm' in 'gmail'). Inline mode filters by label only → "Julie Wise"
+    // is NOT visible.
+    expect(screen.queryByText("Julie Wise")).not.toBeInTheDocument()
+    expect(screen.queryByText("Alex")).not.toBeInTheDocument()
+  })
+
+  it("filter matches by label OR description in default mode", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event")
+    const user = userEvent.setup()
+    const { container } = render(
+      <SearchableSelect
+        items={[
+          { value: "j", label: "Julie Wise", description: "jwise@gmail.com" },
+          { value: "a", label: "Alex" },
+        ]}
+        value={null}
+        onChange={vi.fn()}
+        aria-label="Default mode"
+      />,
+    )
+    // Default mode trigger requires a click to open.
+    await user.click(container.querySelector("[role='combobox']")!)
+    const input = screen.getByLabelText("Filter options")
+    await user.type(input, "m")
+    expect(screen.getByText("Julie Wise")).toBeInTheDocument()
+  })
+})

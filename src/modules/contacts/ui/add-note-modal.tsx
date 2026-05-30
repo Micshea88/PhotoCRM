@@ -9,6 +9,8 @@ import {
   AssociationsSection,
   ContactPill,
   FollowUpTaskAffordance,
+  type AssociationOption,
+  type AssociationsDraft,
 } from "@/components/ui/activity-modal-chrome"
 import { createContactNote } from "@/modules/contacts/actions"
 
@@ -38,6 +40,8 @@ export function AddNoteModal({
   onClose,
   contactId,
   contactLabel,
+  contactOptions = [],
+  companyOptions = [],
 }: {
   open: boolean
   onClose: () => void
@@ -45,11 +49,20 @@ export function AddNoteModal({
   /** Display name for the For pill. Falls back to "this contact"
    *  when the host doesn't have a name handy. */
   contactLabel?: string
+  /** Options for the AssociationsPicker — V1 only the primary
+   *  contact persists, but the multi-record UI ships now. */
+  contactOptions?: AssociationOption[]
+  companyOptions?: AssociationOption[]
 }) {
   const router = useRouter()
   const [body, setBody] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [associations, setAssociations] = useState<AssociationsDraft>({
+    contactIds: [contactId],
+    companyIds: [],
+    eventIds: [],
+  })
   const [, startTransition] = useTransition()
   const label = contactLabel ?? "this contact"
 
@@ -164,7 +177,14 @@ export function AddNoteModal({
           />
         </div>
 
-        <AssociationsSection contactId={contactId} contactLabel={label} />
+        <AssociationsSection
+          contactId={contactId}
+          contactLabel={label}
+          draft={associations}
+          onChange={setAssociations}
+          contactOptions={contactOptions}
+          companyOptions={companyOptions}
+        />
         <FollowUpTaskAffordance />
       </div>
     </ActivityModalChrome>

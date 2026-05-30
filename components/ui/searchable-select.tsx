@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./input"
+import { PickerPortal } from "./picker-portal"
 
 /**
  * Push 3 (C3) — single-select searchable combobox primitive.
@@ -81,18 +82,26 @@ export function SearchableSelect({
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const itemRefs = useRef<(HTMLLIElement | null)[]>([])
 
   const selectedItem = useMemo(() => items.find((i) => i.value === value) ?? null, [items, value])
 
+  // P3 polish #5 Fix 3c — inline mode filters by label only. The
+  // default mode keeps the label+description match so the form-field
+  // picker can still surface contacts via email substring.
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return items
+    if (inlineMode) {
+      return items.filter((i) => i.label.toLowerCase().includes(q))
+    }
     return items.filter(
       (i) => i.label.toLowerCase().includes(q) || (i.description ?? "").toLowerCase().includes(q),
     )
-  }, [items, query])
+  }, [items, query, inlineMode])
 
   // Reset query + activeIndex when `open` changes. React's "adjusting
   // state in response to a prop/state change" pattern (compare prev to
@@ -126,6 +135,10 @@ export function SearchableSelect({
       const t = e.target as Node | null
       if (!t) return
       if (wrapperRef.current?.contains(t)) return
+      // P3 polish #5 Fix 3a — panel may live in a portal under
+      // document.body, so the wrapper check alone misses clicks
+      // inside the panel itself.
+      if (panelRef.current?.contains(t)) return
       setOpen(false)
       onDismiss?.()
     }
@@ -183,6 +196,7 @@ export function SearchableSelect({
   return (
     <div ref={wrapperRef} className="relative w-full">
       <button
+        ref={triggerRef}
         type="button"
         id={id}
         name={name}
@@ -221,13 +235,17 @@ export function SearchableSelect({
               <X className="size-3.5" />
             </span>
           )}
-          <ChevronDown className="size-4 shrink-0 text-[var(--color-muted-foreground)]" />
+          {/* P3 polish #5 Fix 3b — inlineMode suppresses the chevron.
+              Surface = underlined value text only. */}
+          {!inlineMode && (
+            <ChevronDown className="size-4 shrink-0 text-[var(--color-muted-foreground)]" />
+          )}
         </span>
       </button>
 
-      {open && (
+      <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
         <div
-          className="absolute top-full right-0 left-0 z-30 mt-1 max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md"
+          className="max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md"
           onKeyDown={onPanelKeyDown}
         >
           <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-2 py-1.5">
@@ -301,7 +319,7 @@ export function SearchableSelect({
             </ul>
           )}
         </div>
-      )}
+      </PickerPortal>
     </div>
   )
 }

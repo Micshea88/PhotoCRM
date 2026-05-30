@@ -93,6 +93,12 @@ export function InlineEditSelect({
       const t = e.target as Node | null
       if (!t) return
       if (wrapperRef.current?.contains(t)) return
+      // P3 polish #5 Fix 3a — the picker panel may be portaled to
+      // document.body, so wrapperRef won't contain it. Treat any
+      // click inside a picker portal as "inside" so the inner
+      // picker's onChange handler can run before we autosave-blur.
+      const el = t as Element & { closest?: (sel: string) => Element | null }
+      if (typeof el.closest === "function" && el.closest("[data-picker-portal]")) return
       // Blur → autosave whatever's in draft.
       void commit(draft)
     }

@@ -1,8 +1,15 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronUp, GripHorizontal, Maximize2, Minimize2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  AssociationsPicker,
+  type AssociationOption,
+  type AssociationsDraft,
+} from "./associations-picker"
+
+export type { AssociationsDraft, AssociationOption }
 
 /**
  * Push 3 (C6c polish #4) — shared chrome for activity-logging modals.
@@ -176,39 +183,73 @@ export function ActivityModalChrome({
 
 /**
  * Shared "For: [Contact pill]" sub-component used by every activity
- * modal. Renders the primary associated contact as a clickable pill
- * that opens the contact in a new tab.
+ * modal. Polish #5 Fix 5a — rendered as a non-navigable chip (no
+ * link, no onClick). Activity modals already live on the contact's
+ * detail page; navigation would close the modal mid-edit which is
+ * disorienting.
+ *
+ * Accepts an unused `contactId` param (still passed by every caller)
+ * so the API stays consistent if multi-record associations later
+ * need to render per-record links.
  */
 export function ContactPill({ contactId, label }: { contactId: string; label: string }) {
+  void contactId
   return (
-    <a
-      href={`/contacts/${contactId}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-xs font-medium hover:bg-[var(--color-accent)]/40"
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-xs font-medium"
+      data-testid="contact-pill"
     >
       {label}
-    </a>
+    </span>
   )
 }
 
 /**
- * Shared "Associated with N record(s)" expandable section. V1 ships
- * as read-only single-contact display per the C6c polish #4 audit
- * (contact_notes / call_log don't have multi-association tables).
+ * Shared "Associated with N record(s)" expandable section. Polish #5
+ * Fix 5b — added the "+ Add association" button that opens the
+ * `AssociationsPicker` (HubSpot rail + checkbox list). Multi-record
+ * persistence still depends on Push 3.5+ schema work; the picker
+ * shows the warning footer when the user picks beyond primary.
  *
- * The expandable affordance is rendered so the design language stays
- * consistent with HubSpot — clicking it opens an inline note that
- * multi-record associations land in Push 3.5+.
+ * The host modal owns the draft state and passes initial pills +
+ * onChange. AssociationsSection itself stays presentational.
  */
 export function AssociationsSection({
   contactId,
   contactLabel,
+  draft,
+  onChange,
+  contactOptions = [],
+  companyOptions = [],
 }: {
   contactId: string
   contactLabel: string
+  /** Current draft state. If omitted, defaults to "primary contact
+   *  only" — the section still renders the pill but the "+ Add
+   *  association" button is hidden. */
+  draft?: AssociationsDraft
+  onChange?: (next: AssociationsDraft) => void
+  contactOptions?: AssociationOption[]
+  companyOptions?: AssociationOption[]
 }) {
   const [open, setOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const addRef = useRef<HTMLButtonElement | null>(null)
+  const labelLookup = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const o of contactOptions) m.set(o.id, o.label)
+    for (const o of companyOptions) m.set(o.id, o.label)
+    m.set(contactId, contactLabel)
+    return m
+  }, [contactOptions, companyOptions, contactId, contactLabel])
+
+  const allContacts = draft?.contactIds ?? [contactId]
+  const extraContacts = allContacts.filter((id) => id !== contactId)
+  const companies = draft?.companyIds ?? []
+  const totalCount = 1 + extraContacts.length + companies.length
+
+  const canEdit = !!draft && !!onChange
+
   return (
     <section className="space-y-1.5 rounded-md border border-[var(--color-border)] p-2 text-xs">
       <button
@@ -219,19 +260,54 @@ export function AssociationsSection({
         aria-expanded={open}
         className="flex w-full items-center justify-between rounded text-left"
       >
-        <span className="font-medium">Associated with 1 record</span>
+        <span className="font-medium">
+          Associated with {totalCount} record{totalCount === 1 ? "" : "s"}
+        </span>
         <span className="text-[var(--color-muted-foreground)]">{open ? "−" : "+"}</span>
       </button>
       {open && (
         <div className="space-y-2 pt-1">
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <ContactPill contactId={contactId} label={contactLabel} />
+            {extraContacts.map((id) => (
+              <ContactPill key={id} contactId={id} label={labelLookup.get(id) ?? id} />
+            ))}
+            {companies.map((id) => (
+              <ContactPill key={id} contactId={id} label={labelLookup.get(id) ?? id} />
+            ))}
+            {canEdit && (
+              <button
+                ref={addRef}
+                type="button"
+                onClick={() => {
+                  setPickerOpen(true)
+                }}
+                data-testid="add-association"
+                className="ml-1 rounded border border-dashed border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-primary)] hover:bg-[var(--color-accent)]/30"
+              >
+                + Add association
+              </button>
+            )}
           </div>
-          <p className="text-[var(--color-muted-foreground)]">
-            Associating an activity with multiple records (contacts, companies, events) ships in
-            Push 3.5+. The activity stays linked to this contact for now.
-          </p>
+          {(extraContacts.length > 0 || companies.length > 0) && (
+            <p className="text-[var(--color-muted-foreground)]">
+              Multi-record associations ship in Push 3.5+. Only the primary contact persists in this
+              version.
+            </p>
+          )}
         </div>
+      )}
+      {draft && onChange && (
+        <AssociationsPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          draft={draft}
+          onChange={onChange}
+          contactOptions={contactOptions}
+          companyOptions={companyOptions}
+          primaryContactId={contactId}
+          triggerRef={addRef}
+        />
       )}
     </section>
   )

@@ -2,25 +2,23 @@
 
 import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Settings } from "lucide-react"
+import { Modal } from "@/components/ui/modal"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 
 /**
- * Push 3 (C6c polish) — right sidebar.
+ * Push 3 (C6c polish #5 Fix 4a) — right sidebar.
  *
- * HubSpot box pattern per section:
- *   - Header row: drag handle (visual placeholder for reorder, not
- *     interactive in V1), chevron, title, Actions dropdown, gear icon
- *   - Content area with proper padding
- *   - Empty states render intentionally (per the "Everything
- *     intentional" principle locked in docs/pathway-design-system.md)
+ * Polish #5 unified the 4 sections into ONE outer bordered card with
+ * `divide-y` between sections. Each section header now ships a count
+ * and a real "+ Add" button (real or placeholder, per the section's
+ * V1 backing).
  *
- * Sections: Associations (real data), Events (P6 placeholder),
- * Financials (P11 placeholder), Files (V1.5 placeholder).
- *
- * Drag-to-reorder lands in a polish push once we know which sections
- * end up in V1. For now the handle communicates "future affordance"
- * without being interactive — matches the spec's no-grey-empty rule.
+ * Sections, in order:
+ *   - Associations (real — live count from association loader)
+ *   - Events (P6 placeholder)
+ *   - Financials (P11 placeholder)
+ *   - Files (P11 placeholder)
  */
 export function ContactDetailRight({
   associations,
@@ -31,8 +29,19 @@ export function ContactDetailRight({
   hasEventsModule?: boolean
 }) {
   return (
-    <aside className="space-y-3" data-testid="contact-detail-right">
-      <CollapsibleSection title="Associations" defaultOpen>
+    <aside
+      className="divide-y divide-[var(--color-border)] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] lg:h-full"
+      data-testid="contact-detail-right"
+    >
+      <CollapsibleSection
+        title="Associations"
+        count={associations.length}
+        defaultOpen
+        addModal={{
+          title: "Add association",
+          body: "Association management ships with the Companies module in Push 9. Until then, link companies to contacts via the contact edit form.",
+        }}
+      >
         {associations.length === 0 ? (
           <IntentionalEmpty
             title="No companies linked"
@@ -50,7 +59,14 @@ export function ContactDetailRight({
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Events">
+      <CollapsibleSection
+        title="Events"
+        count={0}
+        addModal={{
+          title: "Add event",
+          body: "Events ship in Push 6. Bookings and inquiries linked to this contact land here once the Events module ships.",
+        }}
+      >
         {hasEventsModule ? null : (
           <IntentionalEmpty
             title="Events arrive in Push 6"
@@ -59,19 +75,31 @@ export function ContactDetailRight({
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Financials">
+      <CollapsibleSection
+        title="Financials"
+        count={0}
+        addModal={{
+          title: "Add financial record",
+          body: "Stripe-backed invoicing + payment tracking ship in Push 11. Adding charges, refunds, and credits from this surface lands then.",
+        }}
+      >
         <IntentionalEmpty
           title="Invoices and payments arrive in Push 11"
           body="Stripe-backed invoicing + payment tracking surface here once the Finance module ships."
-          withAddButton
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Files">
+      <CollapsibleSection
+        title="Files"
+        count={0}
+        addModal={{
+          title: "Add file",
+          body: "Files attach to a contact in Push 11 (Finance + Files surface). The blob upload pipeline already exists — once the file → contact join lands, uploads land here.",
+        }}
+      >
         <IntentionalEmpty
           title="File uploads coming soon"
           body="Contracts, mood boards, and asset deliveries attach here once the Files module ships."
-          withAddButton
         />
       </CollapsibleSection>
     </aside>
@@ -80,17 +108,26 @@ export function ContactDetailRight({
 
 function CollapsibleSection({
   title,
+  count,
   defaultOpen = false,
+  addModal,
   children,
 }: {
   title: string
+  /** V1 visible count next to the title. Zero shows muted "(0)". */
+  count: number
   defaultOpen?: boolean
+  /** "+ Add" click opens a placeholder modal with this title + body.
+   *  Real wiring (e.g. company association picker for Associations)
+   *  lands when the relevant module ships. */
+  addModal: { title: string; body: string }
   children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [addOpen, setAddOpen] = useState(false)
   return (
-    <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-      <header className="flex items-center gap-1 border-b border-[var(--color-border)] px-2 py-2">
+    <section data-testid={`contact-detail-right-section-${title.toLowerCase()}`}>
+      <header className="flex items-center gap-1 px-2 py-2">
         <GripVertical
           className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]/50"
           aria-hidden="true"
@@ -115,6 +152,17 @@ function CollapsibleSection({
             />
           )}
           <span>{title}</span>
+          <span className="text-xs text-[var(--color-muted-foreground)]">({count})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAddOpen(true)
+          }}
+          className="px-1 text-xs font-medium text-[var(--color-primary)] hover:underline"
+          data-testid={`add-${title.toLowerCase()}`}
+        >
+          + Add
         </button>
         <Popover
           align="end"
@@ -145,43 +193,31 @@ function CollapsibleSection({
         </button>
       </header>
       {open && <div className="px-3 py-3">{children}</div>}
+
+      <Modal
+        open={addOpen}
+        onClose={() => {
+          setAddOpen(false)
+        }}
+        title={addModal.title}
+      >
+        <p className="text-sm text-[var(--color-muted-foreground)]">{addModal.body}</p>
+      </Modal>
     </section>
   )
 }
 
 /**
- * "Everything intentional" empty state.
- *
- * Every right-sidebar empty state ships polished: a short title, a
- * one-sentence body, and an optional disabled "+ Add" button. Never
- * a barren box with a stale paragraph.
+ * "Everything intentional" empty state. Polish #5 dropped the
+ * `withAddButton` variant — the section header now owns the "+ Add"
+ * affordance, so the body just renders the title + explanatory
+ * sentence.
  */
-function IntentionalEmpty({
-  title,
-  body,
-  withAddButton = false,
-}: {
-  title: string
-  body: string
-  withAddButton?: boolean
-}) {
+function IntentionalEmpty({ title, body }: { title: string; body: string }) {
   return (
-    <div className="space-y-2 text-xs">
+    <div className={cn("space-y-2 text-xs")}>
       <p className="font-medium text-[var(--color-foreground)]">{title}</p>
       <p className="text-[var(--color-muted-foreground)]">{body}</p>
-      {withAddButton && (
-        <button
-          type="button"
-          disabled
-          title="Ships with the linked module."
-          className={cn(
-            "inline-flex h-7 cursor-not-allowed items-center gap-1 rounded-md border border-[var(--color-border)] px-2 text-xs",
-            "text-[var(--color-muted-foreground)] opacity-50",
-          )}
-        >
-          + Add
-        </button>
-      )}
     </div>
   )
 }

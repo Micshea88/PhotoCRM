@@ -79,6 +79,23 @@ new primitive that fails this rule should be fixed before merge.
 > without `inlineMode` support is a smoke-blocking bug — fix the
 > picker, don't paper over it in the wrapper.
 
+Polish #5 added three additional `inlineMode` invariants:
+
+1. **Chevron suppressed.** Inline triggers MUST NOT render a
+   `ChevronDown` (or any decorative dropdown indicator). Surface =
+   underlined value text only.
+2. **Panel portaled.** The results panel MUST render via
+   `<PickerPortal>` (createPortal to `document.body`) so it can
+   escape the host card's `overflow-hidden`. Any outside-click
+   handler in the inline-edit family must check
+   `target.closest('[data-picker-portal]')` to detect portal-
+   originated clicks and avoid premature edit-mode dismissal.
+3. **Filter by visible label only.** In inline mode the filter
+   predicate MUST ignore the `description` field — typing "m" in a
+   contact picker should not match "jwise@gmail.com" via its email.
+
+All three are smoke-blocking bugs if violated.
+
 Pickers shipping `inlineMode` today: `SearchableSelect`,
 `SearchableMultiSelect`, `ContactRefPicker`, `UserRefPicker`,
 `CompanyPicker`, `LeadSourceCombobox`. Each inline mode also
@@ -106,6 +123,30 @@ Concretely:
   complete; the wiring happens when the linked module ships.
 - The reference implementation: `ContactDetailRight`'s
   `IntentionalEmpty` component. Mirror its pattern.
+
+### Box usage rule (polish #5 Fix 4)
+
+Bordered cards (rounded + border + background) belong on **discrete
+actionable items**:
+
+- Activity entries (notes, calls, meetings, SMS in the feed)
+- Right-sidebar section container (single outer box with `divide-y`
+  between sections; see §5)
+- Modals
+- Action icons (the circular icon backgrounds)
+- Per-insight wrappers inside `AiInsightsCard`
+
+Bordered cards DO **NOT** belong on:
+
+- Inline-edit fields (use underline-only per §1)
+- AI-generated content blocks (AI summary + AI insights outer
+  wrappers) — they read as in-page text, not detachable widgets
+- Pseudo-select triggers (already covered by §1 inlineMode rule)
+- Content that flows with the page (page headers, breadcrumb rows)
+
+**Test:** if a user acts on it or distinguishes it visually from
+neighbours → card. If a user reads it as part of the page → no
+card.
 
 ---
 
@@ -215,13 +256,20 @@ Row 3 (when present): "Archived" pill
 
 ## 5. Right sidebar polish standard
 
-HubSpot box pattern per section. Each section header row contains
-(in order, left to right):
+Polish #5 Fix 4a — the right sidebar is now **one** outer bordered
+container. Sections are siblings separated by `divide-y`. Each
+section header has count + "+ Add" + Actions popover + gear inline.
+Content collapses via chevron without affecting the outer box.
+
+Section header row, left to right:
 
 - Drag handle (visual placeholder for reorder — not yet
   interactive)
 - Chevron (open / closed)
-- Title
+- Title + `(count)` inline
+- "+ Add" — primary-colored inline text button. Opens a placeholder
+  modal until the linked module ships (Associations → P9, Events →
+  P6, Financials / Files → P11).
 - Actions dropdown (`MoreHorizontal` icon)
 - Gear icon (section settings)
 
@@ -321,6 +369,58 @@ Raw renders are a bug.
 
 ---
 
+## 7. Center column tabs (polish #5 Fix 7a)
+
+The contact-detail center column has **two** main tabs:
+
+```
+        Overview  Activities
+        ──────    ─────────
+```
+
+- Tabs are **center-aligned** (HubSpot pattern).
+- Underline-on-active styling.
+- The legacy "To-Do's" tab is removed. Tasks live under the
+  Activities sub-filter strip — when Push 7 ships contact-scoped
+  tasks, the Tasks tab inside Activities surfaces the data.
+
+### Activities sub-filter strip (polish #5 Fix 7b)
+
+Inside the Activities tab, a 7-tab HubSpot underline strip filters
+the feed. Counts render inline.
+
+```
+All activities (N)  Notes (N)  Calls (N)  Emails (0)  Tasks (0)  Meetings (N)  SMS (N)
+```
+
+Active tab = underline + primary color. Inactive = muted text.
+
+Placeholder filters (Emails / Tasks / SMS) selected → an
+intentional empty state surfaces the ship-target sentence:
+
+- Emails → "Email logging ships in Push 5+ once the integration lands."
+- Tasks → "Tasks ship in Push 7. Once they exist they'll surface here."
+- SMS → "SMS logging ships in Push 5+ once the provider integration lands."
+
+Mobile (`<lg`) renders the same 7-tab strip with `overflow-x-auto`
+
+- `whitespace-nowrap` so it scrolls horizontally on narrow viewports.
+
+---
+
+## 7b. AI content blocks (polish #5 Fix 4c)
+
+`AiSummaryCard` and `AiInsightsCard` no longer render as outer
+bordered cards. They flow inline in the center column — heading +
+body + footer with modest padding, no border, no background. Per
+the box rule (§2.5) AI-generated content is read as part of the
+page.
+
+Per-insight wrappers INSIDE `AiInsightsCard` keep their bordered
+cards (each insight is a discrete actionable item).
+
+---
+
 ## 9. Activity logging modals
 
 Every Log X / Add Note modal renders the shared HubSpot chrome
@@ -343,17 +443,25 @@ provided by `components/ui/activity-modal-chrome.tsx`.
 **Standard body sections** (in order, omit per-modal where not
 applicable):
 
-1. **For: [Contact pill]** — clickable pill linking to the contact.
+1. **For: [Contact pill]** — non-navigable chip (polish #5 Fix 5a).
+   Activity modals live on the contact's own detail page, so
+   navigation would close the modal mid-edit. The pill renders as a
+   styled span, not a link.
 2. **Body** — modal-specific fields.
 3. **Formatting toolbar** (Note only) — Bold / Italic / Underline /
    Strike / Attach / Sparkle. Display-only in V1 (rich-text pipeline
    ships in a later polish push). Per the "Everything intentional"
    rule (§2) the toolbar renders visually complete.
 4. **`AssociationsSection`** — "Associated with N record(s)"
-   expandable. V1 ships read-only single-contact display because
-   `contact_notes` + `call_log` schemas don't have multi-association
-   tables. Inline note explains multi-record associations land in
-   Push 3.5+.
+   expandable. Polish #5 Fix 5b ships the multi-record UI now: an
+   "+ Add association" button opens `AssociationsPicker`, the new
+   HubSpot-pattern picker (left rail Selected / Contacts / Companies
+   / Events + search + checkbox list + Done button). Persistence
+   stays single-contact in V1 because `contact_notes` + `call_log`
+   schemas don't have `*_associations` join tables — selections
+   beyond the primary contact surface a warning footer. When the
+   join tables land in Push 3.5+ persistence flips on without UI
+   rework.
 5. **`FollowUpTaskAffordance`** — disabled checkbox + date dropdown.
    Tasks are project-scoped today; contact-only tasks ship with
    Push 7.

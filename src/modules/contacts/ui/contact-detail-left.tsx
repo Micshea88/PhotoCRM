@@ -72,6 +72,12 @@ export interface ContactDetailLeftProps {
    *  Mobile About tab passes `["info","about"]` so the action row +
    *  identity card don't duplicate the top-of-page header. */
   panes?: ContactDetailPane[]
+  /** P3 polish #5 Fix 5 — forwarded to ActionIconRow → activity
+   *  modals → AssociationsPicker. Allows the multi-record picker
+   *  inside Note / Call modals to surface real contact + company
+   *  options. */
+  associationContactOptions?: { id: string; label: string; sub?: string | null }[]
+  associationCompanyOptions?: { id: string; label: string; sub?: string | null }[]
 }
 
 export function ContactDetailLeft({
@@ -86,6 +92,8 @@ export function ContactDetailLeft({
   referredByDisplayName,
   tagOptions,
   panes = DEFAULT_PANES,
+  associationContactOptions = [],
+  associationCompanyOptions = [],
 }: ContactDetailLeftProps) {
   const showIdentity = panes.includes("identity")
   const showActions = panes.includes("actions")
@@ -230,9 +238,9 @@ export function ContactDetailLeft({
   const tagsDisplay = contact.tags.length > 0 ? contact.tags.join(", ") : null
 
   return (
-    <aside className="space-y-4">
+    <aside className="space-y-4 lg:h-full">
       <section
-        className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]"
+        className="flex flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] lg:h-full"
         data-testid="contact-detail-left-card"
       >
         {/* 1. Identity */}
@@ -273,6 +281,8 @@ export function ContactDetailLeft({
               contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
               primaryEmail={contact.primaryEmail}
               primaryPhone={contact.primaryPhone}
+              contactOptions={associationContactOptions}
+              companyOptions={associationCompanyOptions}
             />
           </div>
         )}

@@ -33,13 +33,11 @@ export function AiInsightsCard({
 }) {
   if (insights.length === 0) return null
   return (
-    <section
-      className={cn(
-        "space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4",
-        className,
-      )}
-      data-testid="ai-insights-card"
-    >
+    // P3 polish #5 Fix 4c — de-card outer. Per-insight cards inside
+    // stay bordered (each insight is a discrete actionable item;
+    // per design-system §2 those keep their card). The wrapper just
+    // flows in the center column.
+    <section className={cn("space-y-2 px-1 py-1", className)} data-testid="ai-insights-card">
       <header className="flex items-center gap-2">
         <Sparkles className="size-4 text-[var(--color-primary)]" aria-hidden="true" />
         <h2 className="text-sm font-semibold">AI insights</h2>

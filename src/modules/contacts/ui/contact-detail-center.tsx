@@ -4,33 +4,26 @@ import { useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * Push 3 (C6c) — center column with the 3-tab strip.
+ * Push 3 (C6c) — center column with the tab strip.
  *
- * Tabs: Overview / Activity / To-Do's. Owns the active-tab state +
- * keyboard navigation (Arrow keys per autonomous default C — Radix-
- * style accessibility without pulling in @radix-ui/react-tabs).
- *
- * Host passes the per-tab content as `overview` / `activity` / `todos`
- * props. Only the active tab's content renders; the inactive panels
- * still mount their containers (preserving layout reservations) so
- * tab switching doesn't reflow the surrounding columns.
+ * Polish #5 Fix 7a — dropped the "To-Do's" tab. Tasks moved under
+ * `Activities → Tasks` filter inside `ContactActivityFeed` (when
+ * Push 7 lands). The strip now has TWO tabs only: Overview and
+ * Activities. The wrapper is center-aligned (HubSpot pattern).
  */
-type TabKey = "overview" | "activity" | "todos"
-const TAB_ORDER: TabKey[] = ["overview", "activity", "todos"]
+type TabKey = "overview" | "activities"
+const TAB_ORDER: TabKey[] = ["overview", "activities"]
 const TAB_LABEL: Record<TabKey, string> = {
   overview: "Overview",
-  activity: "Activity",
-  todos: "To-Do's",
+  activities: "Activities",
 }
 
 export function ContactDetailCenter({
   overview,
   activity,
-  todos,
 }: {
   overview: ReactNode
   activity: ReactNode
-  todos: ReactNode
 }) {
   const [active, setActive] = useState<TabKey>("overview")
 
@@ -50,7 +43,7 @@ export function ContactDetailCenter({
       <div
         role="tablist"
         aria-label="Contact detail tabs"
-        className="flex gap-1 border-b border-[var(--color-border)]"
+        className="flex justify-center gap-4 border-b border-[var(--color-border)]"
       >
         {TAB_ORDER.map((tab) => {
           const isActive = active === tab
@@ -88,8 +81,7 @@ export function ContactDetailCenter({
         aria-labelledby={`contact-tab-${active}`}
       >
         {active === "overview" && overview}
-        {active === "activity" && activity}
-        {active === "todos" && todos}
+        {active === "activities" && activity}
       </div>
     </section>
   )

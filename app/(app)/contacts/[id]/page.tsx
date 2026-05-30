@@ -216,6 +216,18 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           mailingAddress: contact.mailingAddress,
           referredByContactId: contact.referredByContactId,
         }
+        // P3 polish #5 Fix 5 — AssociationsPicker options. Contacts =
+        // every contact except this one; companies = all org companies.
+        const associationContactOptions = referralOptions.map((c) => ({
+          id: c.id,
+          label: `${c.firstName} ${c.lastName}`.trim() || (c.primaryEmail ?? "") || c.id,
+          sub: c.primaryEmail ?? null,
+        }))
+        const associationCompanyOptions = companyOptions.map((c) => ({
+          id: c.id,
+          label: c.name,
+          sub: null,
+        }))
         const leftBaseProps = {
           contact: contactSlice,
           owner: ownerView,
@@ -229,6 +241,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             ? `${referredByContact.firstName} ${referredByContact.lastName}`.trim()
             : null,
           tagOptions,
+          associationContactOptions,
+          associationCompanyOptions,
         }
         const aiBlock = (
           <div className="space-y-4">
@@ -242,11 +256,6 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           </div>
         )
         const activityBlock = <ContactActivityFeed entries={activity} />
-        const todosBlock = (
-          <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
-            Tasks integration ships in Push 7.
-          </p>
-        )
         return (
           <>
             {/* P3 (C6d) — mobile single-column tabbed shell (<lg).
@@ -261,6 +270,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
                   primaryEmail={contact.primaryEmail}
                   primaryPhone={contact.primaryPhone}
+                  contactOptions={associationContactOptions}
+                  companyOptions={associationCompanyOptions}
                 />
               </div>
               <ContactDetailMobile
@@ -275,10 +286,16 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               />
             </div>
 
-            {/* Desktop 3-column (lg+). */}
-            <div className="hidden gap-6 lg:grid lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
+            {/* Desktop 3-column (lg+). P3 polish #5 Fix 2 —
+                lg:min-h-[calc(100vh-14rem)] keeps the columns tall on
+                content-light contacts so dropdowns near the bottom of
+                the left card have room to open. 14rem (~224px) is a
+                conservative offset for global header + page header
+                rows 1+2+3 + page padding. min-h (not h) so heavy
+                activity still grows the row past the viewport. */}
+            <div className="hidden gap-6 lg:grid lg:min-h-[calc(100vh-14rem)] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
               <ContactDetailLeft {...leftBaseProps} />
-              <ContactDetailCenter overview={aiBlock} activity={activityBlock} todos={todosBlock} />
+              <ContactDetailCenter overview={aiBlock} activity={activityBlock} />
               <ContactDetailRight associations={associationsView} />
             </div>
           </>

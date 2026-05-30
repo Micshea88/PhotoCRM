@@ -43,14 +43,12 @@ export function AiSummaryCard({
   rightSlot?: React.ReactNode
   className?: string
 }) {
+  // P3 polish #5 Fix 4c — de-card. AI-generated content reads as
+  // part of the page; only the heading + body + footer remain. No
+  // outer border, no rounded card, no background. Internal padding
+  // preserves breathing room within the center column.
   return (
-    <section
-      className={cn(
-        "space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4",
-        className,
-      )}
-      data-testid="ai-summary-card"
-    >
+    <section className={cn("space-y-2 px-1 py-1", className)} data-testid="ai-summary-card">
       <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-[var(--color-primary)]" aria-hidden="true" />

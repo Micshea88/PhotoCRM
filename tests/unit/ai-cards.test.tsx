@@ -115,22 +115,28 @@ describe("ContactActivityFeed", () => {
     },
   ]
 
-  it("renders all entries + a filter row per present kind", () => {
+  it("renders all entries + the locked 7-tab sub-filter strip", () => {
     render(<ContactActivityFeed entries={entries} />)
-    expect(screen.getByText("Note added")).toBeInTheDocument()
-    expect(screen.getByText("Call (outgoing)")).toBeInTheDocument()
-    // Filter chips for kinds present in data + "All"
-    expect(screen.getByRole("button", { name: /All \(2\)/ })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Notes \(1\)/ })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Calls \(1\)/ })).toBeInTheDocument()
+    // Polish #5 Fix 6 — title format is "{Type} by {Author}".
+    expect(screen.getByText("Note by Alice")).toBeInTheDocument()
+    expect(screen.getByText("Call by Bob")).toBeInTheDocument()
+    // Polish #5 Fix 7b — sub-tab strip with 7 fixed tabs, counts inline.
+    expect(screen.getByRole("tab", { name: /All activities \(2\)/ })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: /Notes \(1\)/ })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: /Calls \(1\)/ })).toBeInTheDocument()
+    // Placeholder filters surface with zero counts but always present.
+    expect(screen.getByRole("tab", { name: /Emails \(0\)/ })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: /Tasks \(0\)/ })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: /Meetings \(0\)/ })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: /SMS \(0\)/ })).toBeInTheDocument()
   })
 
-  it("filter chip narrows the visible entries", async () => {
+  it("filter tab narrows the visible entries", async () => {
     const user = userEvent.setup()
     render(<ContactActivityFeed entries={entries} />)
-    await user.click(screen.getByRole("button", { name: /Calls \(1\)/ }))
-    expect(screen.queryByText("Note added")).not.toBeInTheDocument()
-    expect(screen.getByText("Call (outgoing)")).toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: /Calls \(1\)/ }))
+    expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
+    expect(screen.getByText("Call by Bob")).toBeInTheDocument()
   })
 
   it("empty state prompts the user to use Add Note / Log Call", () => {
@@ -140,36 +146,27 @@ describe("ContactActivityFeed", () => {
 })
 
 describe("ContactDetailCenter — tab strip", () => {
-  // The tabs component lives in ./contact-detail-center.tsx. Quick
-  // smoke test verifying the 3 tab buttons render + Overview is the
-  // initial active tab.
-  it("renders Overview / Activity / To-Do's", async () => {
+  // Polish #5 Fix 7a — center column now has 2 tabs only:
+  // Overview / Activities. To-Do's removed; Tasks moved to the
+  // Activities sub-filter strip (Push 7 wires it).
+  it("renders Overview / Activities and starts on Overview", async () => {
     const { ContactDetailCenter } = await import("@/modules/contacts/ui/contact-detail-center")
-    render(
-      <ContactDetailCenter
-        overview={<div>OV</div>}
-        activity={<div>AC</div>}
-        todos={<div>TD</div>}
-      />,
-    )
+    render(<ContactDetailCenter overview={<div>OV</div>} activity={<div>AC</div>} />)
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true")
-    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "false")
-    expect(screen.getByRole("tab", { name: "To-Do's" })).toHaveAttribute("aria-selected", "false")
+    expect(screen.getByRole("tab", { name: "Activities" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    )
+    expect(screen.queryByRole("tab", { name: "To-Do's" })).toBeNull()
     expect(screen.getByText("OV")).toBeInTheDocument()
   })
 
   it("clicking a tab switches active state + content", async () => {
     const { ContactDetailCenter } = await import("@/modules/contacts/ui/contact-detail-center")
     const user = userEvent.setup()
-    render(
-      <ContactDetailCenter
-        overview={<div>OV</div>}
-        activity={<div>AC</div>}
-        todos={<div>TD</div>}
-      />,
-    )
-    await user.click(screen.getByRole("tab", { name: "Activity" }))
-    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "true")
+    render(<ContactDetailCenter overview={<div>OV</div>} activity={<div>AC</div>} />)
+    await user.click(screen.getByRole("tab", { name: "Activities" }))
+    expect(screen.getByRole("tab", { name: "Activities" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByText("AC")).toBeInTheDocument()
     expect(screen.queryByText("OV")).not.toBeInTheDocument()
   })

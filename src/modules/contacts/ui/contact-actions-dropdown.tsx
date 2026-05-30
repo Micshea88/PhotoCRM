@@ -94,7 +94,7 @@ export function ContactActionsDropdown({
   return (
     <>
       <Popover
-        align="end"
+        align="start"
         trigger={({ open, toggle }) => (
           <Button
             type="button"

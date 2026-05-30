@@ -10,6 +10,8 @@ import {
   AssociationsSection,
   ContactPill,
   FollowUpTaskAffordance,
+  type AssociationOption,
+  type AssociationsDraft,
 } from "@/components/ui/activity-modal-chrome"
 import { logCall } from "@/modules/calls/actions"
 import type { CallDirection } from "@/modules/calls/types"
@@ -45,11 +47,15 @@ export function LogCallModal({
   onClose,
   contactId,
   contactLabel,
+  contactOptions = [],
+  companyOptions = [],
 }: {
   open: boolean
   onClose: () => void
   contactId: string
   contactLabel?: string
+  contactOptions?: AssociationOption[]
+  companyOptions?: AssociationOption[]
 }) {
   const router = useRouter()
   const [direction, setDirection] = useState<CallDirection | null>("outgoing")
@@ -58,6 +64,11 @@ export function LogCallModal({
   const [notes, setNotes] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [associations, setAssociations] = useState<AssociationsDraft>({
+    contactIds: [contactId],
+    companyIds: [],
+    eventIds: [],
+  })
   const [, startTransition] = useTransition()
   const label = contactLabel ?? "this contact"
 
@@ -229,7 +240,14 @@ export function LogCallModal({
           />
         </div>
 
-        <AssociationsSection contactId={contactId} contactLabel={label} />
+        <AssociationsSection
+          contactId={contactId}
+          contactLabel={label}
+          draft={associations}
+          onChange={setAssociations}
+          contactOptions={contactOptions}
+          companyOptions={companyOptions}
+        />
         <FollowUpTaskAffordance />
       </div>
     </ActivityModalChrome>

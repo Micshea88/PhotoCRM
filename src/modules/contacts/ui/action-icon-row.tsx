@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react"
 import { Calendar, CheckSquare, Mail, MoreHorizontal, Phone, StickyNote } from "lucide-react"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import type { AssociationOption } from "@/components/ui/activity-modal-chrome"
 import { AddNoteModal } from "./add-note-modal"
 import { LogCallModal } from "./log-call-modal"
 import {
@@ -38,12 +39,17 @@ export function ActionIconRow({
   contactLabel,
   primaryEmail,
   primaryPhone,
+  contactOptions = [],
+  companyOptions = [],
 }: {
   contactId: string
   /** Display name surfaced as the "For" pill across every activity modal. */
   contactLabel: string
   primaryEmail: string | null
   primaryPhone: string | null
+  /** Forwarded to AssociationsPicker in every modal that supports it. */
+  contactOptions?: AssociationOption[]
+  companyOptions?: AssociationOption[]
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [callOpen, setCallOpen] = useState(false)
@@ -147,6 +153,8 @@ export function ActionIconRow({
         }}
         contactId={contactId}
         contactLabel={contactLabel}
+        contactOptions={contactOptions}
+        companyOptions={companyOptions}
       />
       <LogCallModal
         open={callOpen}
@@ -155,6 +163,8 @@ export function ActionIconRow({
         }}
         contactId={contactId}
         contactLabel={contactLabel}
+        contactOptions={contactOptions}
+        companyOptions={companyOptions}
       />
       <LogEmailModal
         open={emailOpen}

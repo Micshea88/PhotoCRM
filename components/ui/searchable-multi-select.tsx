@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./input"
+import { PickerPortal } from "./picker-portal"
 
 /**
  * Push 3 (C3) — multi-select searchable combobox primitive with
@@ -87,6 +88,8 @@ export function SearchableMultiSelect({
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const itemRefs = useRef<(HTMLLIElement | null)[]>([])
 
@@ -144,6 +147,7 @@ export function SearchableMultiSelect({
       const t = e.target as Node | null
       if (!t) return
       if (wrapperRef.current?.contains(t)) return
+      if (panelRef.current?.contains(t)) return
       setOpen(false)
       onDismiss?.()
     }
@@ -227,6 +231,7 @@ export function SearchableMultiSelect({
   return (
     <div ref={wrapperRef} className="relative w-full">
       <div
+        ref={triggerRef}
         className={cn(
           "flex min-h-7 w-full flex-wrap items-center gap-1 bg-transparent text-sm",
           inlineMode
@@ -290,8 +295,8 @@ export function SearchableMultiSelect({
         />
       </div>
 
-      {open && (
-        <div className="absolute top-full right-0 left-0 z-30 mt-1 max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md">
+      <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
+        <div className="max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md">
           {visibleItems.length === 0 && !showCreate ? (
             <div className="p-3 text-center text-xs text-[var(--color-muted-foreground)]">
               {emptyMessage}
@@ -355,7 +360,7 @@ export function SearchableMultiSelect({
             </ul>
           )}
         </div>
-      )}
+      </PickerPortal>
     </div>
   )
 }

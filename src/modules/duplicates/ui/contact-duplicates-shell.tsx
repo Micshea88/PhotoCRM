@@ -11,7 +11,10 @@ import { ContactMergeModal } from "./merge-contact-modal"
 const REASON_LABEL: Record<ContactMatchReason, string> = {
   email: "Same email",
   phone: "Same phone",
-  name_and_company: "Same name + company",
+  name_and_company: "Similar name and company",
+  similar_email: "Similar email",
+  similar_name_and_email: "Similar name and email",
+  similar_name_and_phone: "Similar name and phone",
 }
 
 /**

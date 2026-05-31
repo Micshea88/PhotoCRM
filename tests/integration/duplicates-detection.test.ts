@@ -79,7 +79,14 @@ describe("duplicates engine — query loaders", () => {
       const groups = findDuplicateContactGroups(candidates)
       expect(groups.length).toBe(1)
       expect(new Set(groups[0]?.ids)).toEqual(new Set([aId, bId]))
-      expect(new Set(groups[0]?.reasons)).toEqual(new Set(["email", "name_and_company"]))
+      // Push 4 followup — the similarity scorer also surfaces
+      // similar_name_and_email here because the two contacts have an
+      // exact name match AND shared email (Jaro-Winkler on identical
+      // strings = 1.0). The legacy exact reasons still surface; new
+      // reasons are added.
+      const reasons = new Set(groups[0]?.reasons)
+      expect(reasons).toContain("email")
+      expect(reasons).toContain("name_and_company")
     })
   })
 

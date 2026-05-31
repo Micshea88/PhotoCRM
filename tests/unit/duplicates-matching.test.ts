@@ -147,6 +147,141 @@ describe("duplicates engine — contacts", () => {
     ])
     expect(groups).toHaveLength(0)
   })
+
+  // ─── HubSpot-parity similarity rules (Push 4 followup) ────────────
+
+  describe("similarity scoring", () => {
+    it("Wendy Feldposh vs Wendy Feldposh f w/ same-local cross-domain email → similar_name_and_email", () => {
+      const groups = findDuplicateContactGroups([
+        contact("a", {
+          firstName: "Wendy",
+          lastName: "Feldposh",
+          primaryEmail: "weeeendy@yoohoo.uk",
+          primaryPhone: "7275550100",
+        }),
+        contact("b", {
+          firstName: "Wendy",
+          lastName: "Feldposh f",
+          primaryEmail: "weeeendy@yoohoo.com",
+          primaryPhone: null,
+        }),
+      ])
+      expect(groups).toHaveLength(1)
+      expect(new Set(groups[0]?.ids)).toEqual(new Set(["a", "b"]))
+      expect(groups[0]?.reasons).toContain("similar_name_and_email")
+    })
+
+    it("name-only similarity NEVER surfaces (two different 'John Smith's, no other signal)", () => {
+      const groups = findDuplicateContactGroups([
+        contact("a", {
+          firstName: "John",
+          lastName: "Smith",
+          primaryEmail: "john.smith@acme.com",
+          primaryPhone: "7275550100",
+        }),
+        contact("b", {
+          firstName: "John",
+          lastName: "Smith",
+          primaryEmail: "jsmith@globex.io",
+          primaryPhone: "7275550200",
+        }),
+      ])
+      expect(groups).toHaveLength(0)
+    })
+
+    it("name-only with one shared first name and NO other signal does NOT surface", () => {
+      const groups = findDuplicateContactGroups([
+        contact("a", { firstName: "Alex", lastName: "Brown" }),
+        contact("b", { firstName: "Alex", lastName: "Chen" }),
+      ])
+      expect(groups).toHaveLength(0)
+    })
+
+    it("same company only (different name + no other signal) does NOT surface", () => {
+      const groups = findDuplicateContactGroups([
+        contact("a", {
+          firstName: "Ada",
+          lastName: "Lovelace",
+          primaryCompanyName: "Evergreen",
+        }),
+        contact("b", {
+          firstName: "Grace",
+          lastName: "Hopper",
+          primaryCompanyName: "Evergreen",
+        }),
+      ])
+      expect(groups).toHaveLength(0)
+    })
+
+    it("similar name + similar company → similar_name_and_company (HubSpot-style fuzzy variant)", () => {
+      const groups = findDuplicateContactGroups([
+        contact("a", {
+          firstName: "Ada",
+          lastName: "Lovelace",
+          primaryCompanyName: "K&K Photography",
+        }),
+        contact("b", {
+          firstName: "Ada",
+          lastName: "Lovelace",
+          primaryCompanyName: "K & K Photography Inc",
+        }),
+      ])
+      expect(groups).toHaveLength(1)
+      expect(groups[0]?.reasons).toContain("name_and_company")
+    })
+
+    it("name-only (no email/phone/company signal at all) does NOT surface even when name is identical", () => {
+      const groups = findDuplicateContactGroups([
+        contact("a", { firstName: "Ada", lastName: "Lovelace" }),
+        contact("b", { firstName: "Ada", lastName: "Lovelace" }),
+      ])
+      expect(groups).toHaveLength(0)
+    })
+
+    it("inverted name order ('Smith John' vs 'John Smith') matches via inverted-token max", () => {
+      // The spec calls for testing both forward + inverted name
+      // tokens. Pair with a same-local email signal to satisfy the
+      // surface rule.
+      const groups = findDuplicateContactGroups([
+        contact("a", {
+          firstName: "John",
+          lastName: "Smith",
+          primaryEmail: "jsmith@a.com",
+        }),
+        contact("b", {
+          firstName: "Smith",
+          lastName: "John",
+          primaryEmail: "jsmith@b.com",
+        }),
+      ])
+      expect(groups).toHaveLength(1)
+      expect(groups[0]?.reasons).toContain("similar_name_and_email")
+    })
+
+    it("ranks pairs by composite score — exact-email pair sorts ahead of similar-name pair", () => {
+      // Two distinct dup pairs in the same scan; verify ordering.
+      const groups = findDuplicateContactGroups([
+        // Strong: same email
+        contact("a1", { primaryEmail: "ada@example.com" }),
+        contact("a2", { primaryEmail: "ada@example.com" }),
+        // Weaker: similar name + similar email
+        contact("b1", {
+          firstName: "Wendy",
+          lastName: "Feldposh",
+          primaryEmail: "weeeendy@yoohoo.uk",
+        }),
+        contact("b2", {
+          firstName: "Wendy",
+          lastName: "Feldposh f",
+          primaryEmail: "weeeendy@yoohoo.com",
+        }),
+      ])
+      expect(groups).toHaveLength(2)
+      // The exact-email group ranks first (top score 100+).
+      expect(new Set(groups[0]?.ids)).toEqual(new Set(["a1", "a2"]))
+      expect(new Set(groups[1]?.ids)).toEqual(new Set(["b1", "b2"]))
+    })
+  })
 })
 
 describe("duplicates engine — companies", () => {

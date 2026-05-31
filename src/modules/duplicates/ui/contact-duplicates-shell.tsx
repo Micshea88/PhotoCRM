@@ -105,16 +105,31 @@ export function ContactDuplicatesShell() {
                     </span>
                   ))}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setReviewGroup(g)
-                  }}
-                >
-                  Review
-                </Button>
+                {g.records.length === 2 && g.records[0] && g.records[1] ? (
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    {/* P3 C7 rebuild — pairwise groups route to the
+                        full-record merge surface. 3+ groups continue
+                        to use the B2 modal until multi-way merge
+                        ships (captured upcoming). */}
+                    <a
+                      href={`/contacts/${g.records[0].id}/merge?with=${g.records[1].id}`}
+                      data-testid="duplicate-review-pairwise"
+                    >
+                      Review
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setReviewGroup(g)
+                    }}
+                  >
+                    Review
+                  </Button>
+                )}
               </div>
               <ul className="divide-y divide-[var(--color-border)]">
                 {g.records.map((r) => (

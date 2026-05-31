@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Crown, Pencil } from "lucide-react"
+import { ArrowLeft, Crown, Pencil, User as UserIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InlineEditField } from "@/components/ui/inline-edit-field"
 import { InlineEditSelect } from "@/components/ui/inline-edit-select"
@@ -23,106 +23,105 @@ import type { ContactDisplayRow } from "@/modules/duplicates/queries"
 import { CONTACT_TYPES, LIFECYCLE_STATUSES } from "@/modules/contacts/types"
 
 /**
- * Push 3 (C7) — manual pairwise merge surface.
+ * Push 3 (C7 rebuild) — full-record schema-driven merge grid.
  *
- * TRUE side-by-side full-record view. Every contact field renders
- * regardless of conflict. Per memory #23 + the C7 spec the winning
- * column hosts the inline-edit primitive (InlineEditField /
- * InlineEditSelect / SearchableMultiSelect) so the user can either
+ * Replaces the conflicts-only B2 modal AND the prior C7 draft. Builds
+ * the approved Copper-style 3-column grid (label | Record A | Record
+ * B) with HubSpot-style record headers, primary-drives-column
+ * defaulting, Model C inline edit on selected cells (§1), an
+ * "Only show fields that differ" toggle, and a flat page-flow with
+ * divide-y rows (§2 — no outer card box).
  *
- *   1. Click the non-winning side to swap which record wins, OR
- *   2. Click the winning side to inline-edit a custom value that
- *      overrides both A and B.
+ * Field enumeration is schema-driven:
+ *   - Standard fields enumerated from the denylist-filtered contact
+ *     surface (firstName … internalNotes + mailingAddress).
+ *   - Custom fields enumerated from the active contact custom-field
+ *     definitions (one row per def, formatted via the existing
+ *     `formatCustomFieldCell` helper).
  *
- * Custom-edited cells render with an "edited" pill. Esc on the
- * inline-edit primitive reverts to that side's original value.
+ * Wire contract: the client resolves every pick + inline edit into a
+ * concrete `fieldValues` object before submit (`mergeContacts` engine
+ * extension). No pick/winner semantics travel over the wire.
  *
- * Engine: calls `mergeContacts` from Push 4 B2 (extended in C7 to
- * accept `customOverrides`). The UI batches all picks + overrides
- * into a single action call. Engine atomically: writes the merged
- * row, repoints FKs (notes/calls/meetings/sms/opportunities/etc),
- * soft-deletes the loser, busts AI cache, audits.
+ * Engine side effects (Push 4 B2 + C7 hooks, unchanged):
+ *   - UPDATE primary with the final values
+ *   - Repoint FKs on contact_notes / call_log / meetings / sms /
+ *     opportunities / project_contacts / payment_installments /
+ *     contact_company_associations to primary
+ *   - Soft-delete the loser
+ *   - Bust primary's AI cache (auto-regen on next view via Fix 8)
+ *   - Audit log
+ *   - Redirect to /contacts/<primaryId>
  *
- * V1 captured upcoming (see docs §8):
+ * V1 captured upcoming (docs §8):
  *   - 3+ contact merge (multi-way)
- *   - Per-subfield address pick (street/city/state/zip independent)
+ *   - Per-subfield address pick
  *   - Live merged-record preview column
  */
 
-// ─── Field key types ────────────────────────────────────────────────────
+// ─── Field schema (denylist-filtered standard columns) ───────────────
 
-type IntrinsicKey =
-  | "firstName"
-  | "lastName"
-  | "primaryEmail"
-  | "secondaryEmail"
-  | "primaryPhone"
-  | "secondaryPhone"
-  | "contactType"
-  | "lifecycleStatus"
+type FieldKind =
+  | "text"
+  | "multiline"
+  | "email"
+  | "phone"
+  | "url"
+  | "date"
+  | "selectContactType"
+  | "selectLifecycle"
   | "leadSource"
-  | "sourceDetail"
-  | "companyId"
-  | "ownerUserId"
-  | "instagramHandle"
-  | "facebookUrl"
-  | "website"
-  | "notes"
-  | "internalNotes"
-  | "dob"
-  | "anniversaryDate"
-  | "referredByContactId"
-type FieldKey = IntrinsicKey | "tags" | "mailingAddress" | `cf:${string}`
+  | "owner"
+  | "company"
+  | "contactRef"
+  | "address"
 
-const INTRINSIC_KEYS: IntrinsicKey[] = [
-  "firstName",
-  "lastName",
-  "primaryEmail",
-  "secondaryEmail",
-  "primaryPhone",
-  "secondaryPhone",
-  "contactType",
-  "lifecycleStatus",
-  "leadSource",
-  "sourceDetail",
-  "companyId",
-  "ownerUserId",
-  "instagramHandle",
-  "facebookUrl",
-  "website",
-  "notes",
-  "internalNotes",
-  "dob",
-  "anniversaryDate",
-  "referredByContactId",
-]
-
-const FIELD_LABEL: Record<IntrinsicKey | "tags" | "mailingAddress", string> = {
-  firstName: "First name",
-  lastName: "Last name",
-  primaryEmail: "Primary email",
-  secondaryEmail: "Secondary email",
-  primaryPhone: "Primary phone",
-  secondaryPhone: "Secondary phone",
-  contactType: "Contact type",
-  lifecycleStatus: "Lifecycle status",
-  leadSource: "Lead source",
-  sourceDetail: "Source detail",
-  companyId: "Primary company",
-  ownerUserId: "Owner",
-  instagramHandle: "Instagram",
-  facebookUrl: "Facebook",
-  website: "Website",
-  notes: "Notes",
-  internalNotes: "Internal notes",
-  dob: "Birthday",
-  anniversaryDate: "Anniversary",
-  referredByContactId: "Referred by",
-  tags: "Tags",
-  mailingAddress: "Mailing address",
+interface StandardField {
+  key: string
+  label: string
+  kind: FieldKind
 }
 
-// ─── Value extraction + display ─────────────────────────────────────────
+/**
+ * Approved field order — identity/contact, status/ownership, address,
+ * relationship/event, notes. Custom fields appended dynamically.
+ * Denylist (NOT rendered): id, organizationId, createdBy/updatedBy,
+ * deletedAt/deletedBy, archivedAt/archivedBy, mergedRecordIds, all six
+ * ai_* cache fields, search/tsv. System dates (createdAt/updatedAt)
+ * are read-only — engine preserves oldest createdAt + writes a new
+ * updatedAt automatically (out of this grid).
+ */
+const STANDARD_FIELDS: StandardField[] = [
+  // Identity / contact
+  { key: "firstName", label: "First name", kind: "text" },
+  { key: "lastName", label: "Last name", kind: "text" },
+  { key: "primaryEmail", label: "Primary email", kind: "email" },
+  { key: "secondaryEmail", label: "Secondary email", kind: "email" },
+  { key: "primaryPhone", label: "Primary phone", kind: "phone" },
+  { key: "secondaryPhone", label: "Secondary phone", kind: "phone" },
+  { key: "instagramHandle", label: "Instagram handle", kind: "text" },
+  { key: "instagramUserId", label: "Instagram user ID", kind: "text" },
+  { key: "facebookUrl", label: "Facebook", kind: "url" },
+  { key: "website", label: "Website", kind: "url" },
+  // Status / ownership
+  { key: "contactType", label: "Contact type", kind: "selectContactType" },
+  { key: "lifecycleStatus", label: "Lifecycle status", kind: "selectLifecycle" },
+  { key: "leadSource", label: "Lead source", kind: "leadSource" },
+  { key: "sourceDetail", label: "Source detail", kind: "text" },
+  { key: "ownerUserId", label: "Owner", kind: "owner" },
+  // Address
+  { key: "mailingAddress", label: "Mailing address", kind: "address" },
+  // Relationship / event
+  { key: "companyId", label: "Primary company", kind: "company" },
+  { key: "referredByContactId", label: "Referred by", kind: "contactRef" },
+  { key: "dob", label: "Birthday", kind: "date" },
+  { key: "anniversaryDate", label: "Anniversary", kind: "date" },
+  // Notes
+  { key: "notes", label: "Notes", kind: "multiline" },
+  { key: "internalNotes", label: "Internal notes", kind: "multiline" },
+]
+
+// ─── Pure helpers ────────────────────────────────────────────────────
 
 function safeString(v: unknown): string {
   if (v === null || v === undefined) return ""
@@ -131,77 +130,288 @@ function safeString(v: unknown): string {
   return ""
 }
 
-function intrinsicValue(key: IntrinsicKey, row: ContactDisplayRow): string | null {
-  const v = (row as unknown as Record<string, unknown>)[key]
-  if (v === null || v === undefined) return null
-  if (typeof v === "string") return v
-  if (typeof v === "number" || typeof v === "boolean") return String(v)
-  return null
-}
-
-function displayValue(
-  key: FieldKey,
-  row: ContactDisplayRow,
-  customFieldDefs: ListCustomFieldDef[],
-  companyOptions: CompanyOption[],
-  ownerOptions: UserOption[],
-  referralOptions: ContactOption[],
-): string {
-  if (key.startsWith("cf:")) {
-    const defId = key.slice(3)
-    const def = customFieldDefs.find((d) => d.id === defId)
-    if (!def) return ""
-    return formatCustomFieldCell(def, row.customFields?.[defId]) || ""
-  }
-  if (key === "tags") return (row.tags ?? []).join(", ")
-  if (key === "mailingAddress") {
-    const addr: Record<string, unknown> = row.mailingAddress ?? {}
-    const parts = [addr.street1, addr.street2, addr.city, addr.state, addr.zip].filter(
-      (p): p is string => typeof p === "string" && p.length > 0,
-    )
-    return parts.join(", ")
-  }
-  switch (key) {
-    case "primaryPhone":
-    case "secondaryPhone":
-      return formatPhoneDisplay(intrinsicValue(key, row))
-    case "companyId": {
-      const id = intrinsicValue("companyId", row)
-      if (!id) return ""
-      return companyOptions.find((c) => c.id === id)?.name ?? row.companyName ?? id
-    }
-    case "ownerUserId": {
-      const id = intrinsicValue("ownerUserId", row)
-      if (!id) return ""
-      const u = ownerOptions.find((o) => o.id === id)
-      return u?.name ?? u?.email ?? id
-    }
-    case "referredByContactId": {
-      const id = intrinsicValue("referredByContactId", row)
-      if (!id) return ""
-      const c = referralOptions.find((c) => c.id === id)
-      return c ? `${c.firstName} ${c.lastName}`.trim() : id
-    }
-    default:
-      return intrinsicValue(key as IntrinsicKey, row) ?? ""
-  }
-}
-
-function rawValue(key: FieldKey, row: ContactDisplayRow): unknown {
+function rawValue(key: string, row: ContactDisplayRow): unknown {
+  if (key === "tags") return row.tags ?? []
+  if (key === "mailingAddress") return row.mailingAddress ?? null
   if (key.startsWith("cf:")) {
     const defId = key.slice(3)
     return row.customFields?.[defId] ?? null
   }
-  if (key === "tags") return row.tags ?? []
-  if (key === "mailingAddress") return row.mailingAddress ?? null
-  return intrinsicValue(key as IntrinsicKey, row)
+  return (row as unknown as Record<string, unknown>)[key] ?? null
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a == null && b == null) return true
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((x, i) => x === b[i])
+  }
+  if (typeof a === "object" && typeof b === "object" && a && b) {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b)
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+function isEmptyish(v: unknown): boolean {
+  if (v === null || v === undefined) return true
+  if (typeof v === "string") return v.trim().length === 0
+  if (Array.isArray(v)) return v.length === 0
+  if (typeof v === "object") return Object.keys(v).length === 0
+  return false
 }
 
 function recordLabel(r: ContactDisplayRow): string {
   return `${r.firstName} ${r.lastName}`.trim() || (r.primaryEmail ?? "") || r.id
 }
 
-// ─── Main component ────────────────────────────────────────────────────
+function initials(r: ContactDisplayRow): string {
+  const first = r.firstName.trim().charAt(0)
+  const last = r.lastName.trim().charAt(0)
+  const combined = `${first}${last}`.toUpperCase()
+  if (combined) return combined
+  return (r.primaryEmail ?? "?").charAt(0).toUpperCase()
+}
+
+// ─── Display formatting per field kind ───────────────────────────────
+
+function displayValue(field: StandardField, row: ContactDisplayRow, ctx: EditorCtx): string {
+  const v = rawValue(field.key, row)
+  switch (field.kind) {
+    case "phone":
+      return formatPhoneDisplay(safeString(v))
+    case "owner": {
+      const id = safeString(v)
+      if (!id) return ""
+      const u = ctx.ownerOptions.find((o) => o.id === id)
+      return u?.name ?? u?.email ?? id
+    }
+    case "company": {
+      const id = safeString(v)
+      if (!id) return ""
+      return ctx.companyOptions.find((c) => c.id === id)?.name ?? row.companyName ?? id
+    }
+    case "contactRef": {
+      const id = safeString(v)
+      if (!id) return ""
+      const c = ctx.referralOptions.find((c) => c.id === id)
+      return c ? `${c.firstName} ${c.lastName}`.trim() : id
+    }
+    case "address": {
+      if (!v || typeof v !== "object") return ""
+      const addr = v as Record<string, unknown>
+      const parts = [addr.street1, addr.street2, addr.city, addr.state, addr.zip].filter(
+        (p): p is string => typeof p === "string" && p.length > 0,
+      )
+      return parts.join(", ")
+    }
+    default:
+      return safeString(v)
+  }
+}
+
+// ─── Editor renderer per field kind ──────────────────────────────────
+
+interface EditorCtx {
+  companyOptions: CompanyOption[]
+  ownerOptions: UserOption[]
+  referralOptions: ContactOption[]
+  leadSourceValues: string[]
+  hiddenLeadSources: string[]
+}
+
+function renderEditor(
+  field: StandardField,
+  current: unknown,
+  onSave: (v: unknown) => void,
+  ctx: EditorCtx,
+): React.ReactNode {
+  const sV = current === null || current === undefined ? null : safeString(current) || null
+  switch (field.kind) {
+    case "text":
+    case "multiline":
+    case "email":
+    case "url":
+    case "date":
+      return (
+        <InlineEditField
+          value={sV}
+          onSave={(next) => {
+            onSave(next || null)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+        />
+      )
+    case "phone":
+      return (
+        <InlineEditField
+          value={sV}
+          displayValue={formatPhoneDisplay(sV)}
+          editValue={formatPhoneDisplay(sV)}
+          onSave={(next) => {
+            onSave(next || null)
+            return Promise.resolve(undefined)
+          }}
+          normalizeOnSave={(raw) => parsePhoneInput(raw) ?? ""}
+          validateBeforeSave={(n) =>
+            n === "" || n.length === 10 ? null : "Enter a 10-digit US phone."
+          }
+          ariaLabel={field.label}
+        />
+      )
+    case "selectContactType":
+      return (
+        <InlineEditSelect
+          value={sV}
+          displayLabel={sV}
+          items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
+          onSave={(next) => {
+            onSave(next)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+          allowClear
+        />
+      )
+    case "selectLifecycle":
+      return (
+        <InlineEditSelect
+          value={sV}
+          displayLabel={sV}
+          items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
+          onSave={(next) => {
+            onSave(next)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+          allowClear
+        />
+      )
+    case "leadSource":
+      return (
+        <InlineEditSelect
+          value={sV}
+          displayLabel={sV}
+          onSave={(next) => {
+            onSave(next)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+          allowClear
+          renderPicker={({ commit }) => (
+            <LeadSourceCombobox
+              value={sV ?? ""}
+              onChange={(v) => {
+                void commit(v || null)
+              }}
+              existingValues={ctx.leadSourceValues}
+              hiddenSources={ctx.hiddenLeadSources}
+              inlineMode
+              onDismiss={() => {
+                void commit(sV)
+              }}
+            />
+          )}
+        />
+      )
+    case "owner":
+      return (
+        <InlineEditSelect
+          value={sV}
+          displayLabel={sV ? (ctx.ownerOptions.find((o) => o.id === sV)?.name ?? sV) : null}
+          onSave={(next) => {
+            onSave(next)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+          allowClear
+          renderPicker={({ commit }) => (
+            <UserRefPicker
+              options={ctx.ownerOptions}
+              value={sV}
+              onChange={(v) => {
+                void commit(v)
+              }}
+              inlineMode
+              onDismiss={() => {
+                void commit(sV)
+              }}
+            />
+          )}
+        />
+      )
+    case "company":
+      return (
+        <InlineEditSelect
+          value={sV}
+          displayLabel={sV ? (ctx.companyOptions.find((c) => c.id === sV)?.name ?? sV) : null}
+          onSave={(next) => {
+            onSave(next)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+          allowClear
+          renderPicker={({ commit }) => (
+            <CompanyPicker
+              options={ctx.companyOptions}
+              value={sV}
+              onChange={(v) => {
+                void commit(v)
+              }}
+              inlineMode
+              onDismiss={() => {
+                void commit(sV)
+              }}
+            />
+          )}
+        />
+      )
+    case "contactRef":
+      return (
+        <InlineEditSelect
+          value={sV}
+          displayLabel={
+            sV
+              ? (() => {
+                  const c = ctx.referralOptions.find((c) => c.id === sV)
+                  return c ? `${c.firstName} ${c.lastName}`.trim() : sV
+                })()
+              : null
+          }
+          onSave={(next) => {
+            onSave(next)
+            return Promise.resolve(undefined)
+          }}
+          ariaLabel={field.label}
+          allowClear
+          renderPicker={({ commit }) => (
+            <ContactRefPicker
+              options={ctx.referralOptions}
+              value={sV}
+              onChange={(v) => {
+                void commit(v)
+              }}
+              inlineMode
+              onDismiss={() => {
+                void commit(sV)
+              }}
+            />
+          )}
+        />
+      )
+    case "address":
+      // V1: address picks are whole-blob from A or B; no inline edit
+      // in the grid cell. Per-subfield is captured upcoming.
+      return null
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────
 
 export interface ContactMergeSideBySideProps {
   recordA: ContactDisplayRow
@@ -216,7 +426,7 @@ export interface ContactMergeSideBySideProps {
   cancelHref: string
 }
 
-type Pick = "A" | "B" | "custom"
+type Side = "A" | "B"
 
 export function ContactMergeSideBySide({
   recordA,
@@ -232,25 +442,35 @@ export function ContactMergeSideBySide({
 }: ContactMergeSideBySideProps) {
   const router = useRouter()
   const [primaryId, setPrimaryId] = useState<string>(recordA.id)
-  const [picks, setPicks] = useState<Map<FieldKey, Pick>>(new Map())
-  const [overrides, setOverrides] = useState<Map<FieldKey, unknown>>(new Map())
-  const [tagsMode, setTagsMode] = useState<"A" | "B" | "merged">("merged")
+  // Explicit per-row pick. When unset, the row defaults to the
+  // primary side (or the non-empty side when primary is empty).
+  const [picks, setPicks] = useState<Map<string, Side>>(new Map())
+  // Inline-edit overrides. Take precedence over picks.
+  const [overrides, setOverrides] = useState<Map<string, unknown>>(new Map())
+  // Which row, if any, is currently in inline-edit mode. Clicking a
+  // selected cell toggles this.
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [tagsMode, setTagsMode] = useState<"both" | "A" | "B">("both")
+  const [companiesMode, setCompaniesMode] = useState<"both" | "A" | "B">("both")
+  const [diffOnly, setDiffOnly] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const allFieldKeys: FieldKey[] = useMemo(() => {
-    const cfKeys: FieldKey[] = customFieldDefs.map((d): FieldKey => `cf:${d.id}`)
-    return [...INTRINSIC_KEYS, "tags", "mailingAddress", ...cfKeys]
+  const editorCtx: EditorCtx = {
+    companyOptions,
+    ownerOptions,
+    referralOptions,
+    leadSourceValues,
+    hiddenLeadSources,
+  }
+
+  const allFields: (StandardField | { custom: ListCustomFieldDef })[] = useMemo(() => {
+    const cf = customFieldDefs.map((d) => ({ custom: d }))
+    return [...STANDARD_FIELDS, ...cf]
   }, [customFieldDefs])
 
-  // Auto-pick contract:
-  //   1. user override → "custom" (uses overrides Map value)
-  //   2. user explicit pick → "A" or "B"
-  //   3. primary's value if non-empty
-  //   4. other side's value if non-empty
-  //   5. primary (both empty)
-  function autoPick(key: FieldKey): Pick {
+  function effectiveSide(key: string): Side {
     const explicit = picks.get(key)
     if (explicit) return explicit
     const aRaw = rawValue(key, recordA)
@@ -267,40 +487,49 @@ export function ContactMergeSideBySide({
     return "B"
   }
 
-  function setPick(key: FieldKey, pick: Pick) {
-    setPicks((prev) => {
-      const next = new Map(prev)
-      next.set(key, pick)
-      return next
-    })
+  function effectiveValue(key: string): unknown {
+    if (overrides.has(key)) return overrides.get(key)
+    const side = effectiveSide(key)
+    return rawValue(key, side === "A" ? recordA : recordB)
   }
 
-  function setOverride(key: FieldKey, value: unknown) {
+  function isEdited(key: string): boolean {
+    if (!overrides.has(key)) return false
+    const ov = overrides.get(key)
+    return !valuesEqual(ov, rawValue(key, recordA)) && !valuesEqual(ov, rawValue(key, recordB))
+  }
+
+  function selectSide(key: string, side: Side) {
+    setPicks((prev) => {
+      const next = new Map(prev)
+      next.set(key, side)
+      return next
+    })
+    setOverrides((prev) => {
+      if (!prev.has(key)) return prev
+      const next = new Map(prev)
+      next.delete(key)
+      return next
+    })
+    setEditingKey(null)
+  }
+
+  function setOverride(key: string, value: unknown) {
     setOverrides((prev) => {
       const next = new Map(prev)
       next.set(key, value)
       return next
     })
-    setPick(key, "custom")
-  }
-
-  function clearOverride(key: FieldKey) {
-    setOverrides((prev) => {
-      const next = new Map(prev)
-      next.delete(key)
-      return next
-    })
-    setPicks((prev) => {
-      const next = new Map(prev)
-      next.delete(key)
-      return next
-    })
   }
 
   function setPrimary(id: string) {
+    // Approved behavior: flipping primary re-defaults ALL picks to
+    // the new primary's column. Inline-edit overrides also clear so
+    // the user sees the column-driven defaults.
     setPrimaryId(id)
-    setPicks(new Map()) // recompute defaults from new primary
+    setPicks(new Map())
     setOverrides(new Map())
+    setEditingKey(null)
   }
 
   async function submit() {
@@ -308,27 +537,33 @@ export function ContactMergeSideBySide({
     setBusy(true)
     setError(null)
     const loserId = primaryId === recordA.id ? recordB.id : recordA.id
-    const fieldChoices: Record<string, string> = {}
-    const customOverrides: Record<string, unknown> = {}
-    for (const key of allFieldKeys) {
-      const pick = autoPick(key)
-      if (pick === "custom") {
-        customOverrides[key] = overrides.get(key) ?? null
-      } else {
-        fieldChoices[key] = pick === "A" ? recordA.id : recordB.id
-      }
+    const fieldValues: Record<string, unknown> = {}
+    // Standard fields.
+    for (const f of STANDARD_FIELDS) {
+      fieldValues[f.key] = effectiveValue(f.key)
     }
+    // Custom fields.
+    for (const def of customFieldDefs) {
+      fieldValues[`cf:${def.id}`] = effectiveValue(`cf:${def.id}`)
+    }
+    // Tags + companies remain mode-driven (3-mode radios below grid).
     const tagsEngine =
-      tagsMode === "merged"
+      tagsMode === "both"
         ? ({ mode: "union" } as const)
         : ({ mode: "use", fromId: tagsMode === "A" ? recordA.id : recordB.id } as const)
+    const companiesEngine =
+      companiesMode === "both"
+        ? ({ mode: "union" } as const)
+        : ({
+            mode: "use",
+            fromId: companiesMode === "A" ? recordA.id : recordB.id,
+          } as const)
     const result = await mergeContacts({
       winnerId: primaryId,
       loserIds: [loserId],
-      fieldChoices,
-      customOverrides,
+      fieldValues,
       tagsMode: tagsEngine,
-      companiesMode: { mode: "union" },
+      companiesMode: companiesEngine,
     })
     setBusy(false)
     if (result.serverError) {
@@ -357,16 +592,29 @@ export function ContactMergeSideBySide({
           </a>
           <h1 className="text-xl font-semibold">Merge contacts</h1>
         </div>
-        <Button
-          type="button"
-          onClick={() => {
-            setConfirm(true)
-          }}
-          disabled={busy}
-          data-testid="merge-open-confirm"
-        >
-          Merge {loserLabel} → {winnerLabel}
-        </Button>
+        <div className="flex items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+            <input
+              type="checkbox"
+              checked={diffOnly}
+              onChange={(e) => {
+                setDiffOnly(e.target.checked)
+              }}
+              data-testid="merge-diff-only-toggle"
+            />
+            Only show fields that differ
+          </label>
+          <Button
+            type="button"
+            onClick={() => {
+              setConfirm(true)
+            }}
+            disabled={busy}
+            data-testid="merge-open-confirm"
+          >
+            Merge {loserLabel} → {winnerLabel}
+          </Button>
+        </div>
       </header>
 
       {error && (
@@ -376,97 +624,147 @@ export function ContactMergeSideBySide({
       )}
 
       <p className="text-sm text-[var(--color-muted-foreground)]">
-        Combine two contacts into one. Pick which value wins for each field, or edit the value
-        directly; the non-primary contact will be archived.
+        Pick the value to keep for each field, or click the winning cell to edit it directly. The
+        non-primary contact will be archived; their notes, calls, meetings, and other activity will
+        move to the primary.
       </p>
 
-      <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-        <div className="grid grid-cols-1 gap-0 lg:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="hidden lg:block" />
-          <ColumnHeader
-            record={recordA}
-            isPrimary={primaryId === recordA.id}
-            onSetPrimary={() => {
-              setPrimary(recordA.id)
-            }}
-          />
-          <ColumnHeader
-            record={recordB}
-            isPrimary={primaryId === recordB.id}
-            onSetPrimary={() => {
-              setPrimary(recordB.id)
-            }}
-          />
+      {/* Flat grid — no outer card box, per design system §2. */}
+      <div className="grid grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3">
+        {/* Record headers (row 1). */}
+        <div />
+        <RecordHeader
+          record={recordA}
+          isPrimary={primaryId === recordA.id}
+          onSetPrimary={() => {
+            setPrimary(recordA.id)
+          }}
+        />
+        <RecordHeader
+          record={recordB}
+          isPrimary={primaryId === recordB.id}
+          onSetPrimary={() => {
+            setPrimary(recordB.id)
+          }}
+        />
 
-          {INTRINSIC_KEYS.map((key) => (
-            <IntrinsicFieldRow
-              key={key}
-              fieldKey={key}
-              recordA={recordA}
-              recordB={recordB}
-              pick={autoPick(key)}
-              override={overrides.get(key)}
-              onPick={(p) => {
-                if (p === "A" || p === "B") clearOverrideKeepPick(key, p, setPicks, setOverrides)
-                else setPick(key, p)
-              }}
-              onOverride={(v) => {
-                setOverride(key, v)
-              }}
-              companyOptions={companyOptions}
-              ownerOptions={ownerOptions}
-              referralOptions={referralOptions}
-              leadSourceValues={leadSourceValues}
-              hiddenLeadSources={hiddenLeadSources}
-            />
-          ))}
-
-          <TagsRow
-            recordA={recordA}
-            recordB={recordB}
-            mode={tagsMode}
-            override={overrides.get("tags") as string[] | undefined}
-            onModeChange={(m) => {
-              setTagsMode(m)
-              clearOverride("tags")
-            }}
-            onOverride={(v) => {
-              setOverride("tags", v)
-            }}
-            tagOptions={tagOptions}
-          />
-
-          <AddressRow
-            recordA={recordA}
-            recordB={recordB}
-            pick={autoPick("mailingAddress")}
-            onPick={(p) => {
-              setPick("mailingAddress", p)
-            }}
-          />
-
-          {customFieldDefs.map((def) => {
-            const key: FieldKey = `cf:${def.id}`
+        {/* Field rows (divide-y between rows). */}
+        {allFields.map((entry, idx) => {
+          if ("custom" in entry) {
+            const def = entry.custom
+            const key = `cf:${def.id}`
+            const aRaw = rawValue(key, recordA)
+            const bRaw = rawValue(key, recordB)
+            if (diffOnly && valuesEqual(aRaw, bRaw)) return null
             return (
               <CustomFieldRow
                 key={key}
                 def={def}
-                recordA={recordA}
-                recordB={recordB}
-                pick={autoPick(key)}
-                override={overrides.get(key)}
-                onPick={(p) => {
-                  if (p === "A" || p === "B") clearOverrideKeepPick(key, p, setPicks, setOverrides)
-                  else setPick(key, p)
+                aRaw={aRaw}
+                bRaw={bRaw}
+                pickedSide={effectiveSide(key)}
+                overrideValue={overrides.get(key)}
+                edited={isEdited(key)}
+                editing={editingKey === key}
+                onPickA={() => {
+                  if (effectiveSide(key) === "A" && !editingKey) setEditingKey(key)
+                  else selectSide(key, "A")
+                }}
+                onPickB={() => {
+                  if (effectiveSide(key) === "B" && !editingKey) setEditingKey(key)
+                  else selectSide(key, "B")
                 }}
                 onOverride={(v) => {
                   setOverride(key, v)
+                  setEditingKey(null)
                 }}
+                onDismissEdit={() => {
+                  setEditingKey(null)
+                }}
+                divider={idx > 0}
               />
             )
-          })}
-        </div>
+          }
+          const field = entry
+          const aRaw = rawValue(field.key, recordA)
+          const bRaw = rawValue(field.key, recordB)
+          if (diffOnly && valuesEqual(aRaw, bRaw)) return null
+          return (
+            <StandardFieldRow
+              key={field.key}
+              field={field}
+              recordA={recordA}
+              recordB={recordB}
+              pickedSide={effectiveSide(field.key)}
+              overrideValue={overrides.get(field.key)}
+              edited={isEdited(field.key)}
+              editing={editingKey === field.key}
+              ctx={editorCtx}
+              onPickA={() => {
+                if (effectiveSide(field.key) === "A" && !editingKey && field.kind !== "address") {
+                  setEditingKey(field.key)
+                } else {
+                  selectSide(field.key, "A")
+                }
+              }}
+              onPickB={() => {
+                if (effectiveSide(field.key) === "B" && !editingKey && field.kind !== "address") {
+                  setEditingKey(field.key)
+                } else {
+                  selectSide(field.key, "B")
+                }
+              }}
+              onOverride={(v) => {
+                setOverride(field.key, v)
+                setEditingKey(null)
+              }}
+              onDismissEdit={() => {
+                setEditingKey(null)
+              }}
+              divider={idx > 0}
+            />
+          )
+        })}
       </div>
+
+      {/* Tags + Companies 3-mode sections. */}
+      <section className="grid gap-6 md:grid-cols-2">
+        <ModeSection
+          title="Tags"
+          mode={tagsMode}
+          onMode={setTagsMode}
+          recordA={recordA}
+          recordB={recordB}
+        >
+          <SearchableMultiSelect
+            items={tagOptions.map((t) => ({ value: t, label: t }))}
+            values={(() => {
+              if (tagsMode === "A") return recordA.tags ?? []
+              if (tagsMode === "B") return recordB.tags ?? []
+              return Array.from(new Set([...(recordA.tags ?? []), ...(recordB.tags ?? [])]))
+            })()}
+            onChange={() => {
+              // Tags are mode-driven only in the grid — bulk edit
+              // lands in the activity / detail page after merge.
+            }}
+            disabled
+            placeholder="Tags resolve via mode above"
+          />
+        </ModeSection>
+        <ModeSection
+          title="Additional companies (associations)"
+          mode={companiesMode}
+          onMode={setCompaniesMode}
+          recordA={recordA}
+          recordB={recordB}
+        >
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            {companiesMode === "both"
+              ? "Union of both records' additional company links."
+              : `Use only ${recordLabel(companiesMode === "A" ? recordA : recordB)}'s links.`}
+          </p>
+        </ModeSection>
+      </section>
 
       <Modal
         open={confirm}
@@ -478,8 +776,9 @@ export function ContactMergeSideBySide({
       >
         <p className="mb-4 text-sm">
           This will permanently combine these records.{" "}
-          <span className="font-medium">{loserLabel}</span> will be soft-deleted but recoverable
-          from <span className="font-mono text-xs">/contacts/deleted</span>. Are you sure?
+          <span className="font-medium">{loserLabel}</span> will be archived and their activity
+          moved to <span className="font-medium">{winnerLabel}</span>. Recoverable from
+          <span className="font-mono text-xs"> /contacts/deleted</span>. Are you sure?
         </p>
         <div className="flex justify-end gap-2">
           <Button
@@ -508,28 +807,9 @@ export function ContactMergeSideBySide({
   )
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────
 
-function clearOverrideKeepPick(
-  key: FieldKey,
-  pick: "A" | "B",
-  setPicks: React.Dispatch<React.SetStateAction<Map<FieldKey, Pick>>>,
-  setOverrides: React.Dispatch<React.SetStateAction<Map<FieldKey, unknown>>>,
-) {
-  setPicks((prev) => {
-    const next = new Map(prev)
-    next.set(key, pick)
-    return next
-  })
-  setOverrides((prev) => {
-    if (!prev.has(key)) return prev
-    const next = new Map(prev)
-    next.delete(key)
-    return next
-  })
-}
-
-function ColumnHeader({
+function RecordHeader({
   record,
   isPrimary,
   onSetPrimary,
@@ -541,22 +821,28 @@ function ColumnHeader({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-2 border-b border-[var(--color-border)] p-3",
-        isPrimary && "bg-[var(--color-primary)]/5",
+        "flex items-center justify-between gap-2 rounded-lg border-2 bg-[var(--color-card)] p-3",
+        isPrimary ? "border-[var(--color-primary)]" : "border-[var(--color-border)]",
       )}
+      data-testid={`merge-header-${record.id}`}
     >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{recordLabel(record)}</p>
-        <p className="truncate text-[11px] text-[var(--color-muted-foreground)]">
-          {record.primaryEmail ?? "—"}
-        </p>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)]/15 text-xs font-semibold text-[var(--color-primary)]">
+          {initials(record) || <UserIcon className="size-4" aria-hidden="true" />}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{recordLabel(record)}</p>
+          <p className="truncate text-[11px] text-[var(--color-muted-foreground)]">
+            {record.primaryEmail ?? "—"}
+          </p>
+        </div>
       </div>
       {isPrimary ? (
         <span
           className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2 py-0.5 text-[11px] font-medium text-[var(--color-primary)]"
-          data-testid={`merge-primary-badge-${record.id}`}
+          data-testid={`merge-primary-pill-${record.id}`}
         >
-          <Crown className="size-3" aria-hidden="true" /> Primary
+          <Crown className="size-3" aria-hidden="true" /> Primary — kept
         </span>
       ) : (
         <button
@@ -572,606 +858,289 @@ function ColumnHeader({
   )
 }
 
-function RowLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ children, divider }: { children: React.ReactNode; divider: boolean }) {
   return (
-    <div className="border-t border-[var(--color-border)] bg-[var(--color-muted)]/20 px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] lg:flex lg:items-center">
+    <div
+      className={cn(
+        "self-center py-3 pr-2 text-xs text-[var(--color-muted-foreground)]",
+        divider && "border-t border-[var(--color-border)]",
+      )}
+    >
       {children}
     </div>
   )
+}
+
+interface ValueCellProps {
+  picked: boolean
+  edited: boolean
+  display: string
+  inlineEdit?: React.ReactNode
+  onClick: () => void
+  divider: boolean
+  disabled?: boolean
+  testId: string
 }
 
 function ValueCell({
   picked,
   edited,
   display,
-  onClickToSelect,
   inlineEdit,
+  onClick,
+  divider,
+  disabled,
   testId,
-}: {
-  picked: boolean
-  edited: boolean
-  display: string
-  onClickToSelect: () => void
-  /** Optional inline-edit primitive. When supplied AND `picked`, this
-   *  replaces the plain display so the user can autosave a custom
-   *  value to local draft state. */
-  inlineEdit?: React.ReactNode
-  testId: string
-}) {
-  if (picked) {
-    return (
-      <div
-        data-testid={testId}
-        data-picked="true"
-        className="border-t border-[var(--color-border)] bg-[var(--color-primary)]/5 px-3 py-2 text-sm"
-      >
-        {inlineEdit ?? (
-          <span className={cn(!display && "text-[var(--color-muted-foreground)]")}>
-            {display || "—"}
-          </span>
-        )}
-        {edited && (
-          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-700/20 dark:text-amber-300">
-            <Pencil className="size-2.5" aria-hidden="true" /> edited
-          </span>
-        )}
-      </div>
-    )
-  }
+}: ValueCellProps) {
+  // Clickable button row. Selected → blue background (info) + filled
+  // radio. Inline-edit primitive replaces the display when the host
+  // hands one in.
   return (
     <button
       type="button"
-      onClick={onClickToSelect}
+      onClick={onClick}
+      disabled={disabled}
       data-testid={testId}
-      data-picked="false"
-      className="border-t border-[var(--color-border)] px-3 py-2 text-left text-sm hover:bg-[var(--color-accent)]/30 hover:underline"
+      data-picked={picked ? "true" : "false"}
+      className={cn(
+        "group flex items-center gap-2 px-3 py-3 text-left text-sm",
+        divider && "border-t border-[var(--color-border)]",
+        picked
+          ? "bg-[var(--color-info)]/10 ring-1 ring-[var(--color-primary)]/30 ring-inset"
+          : "hover:bg-[var(--color-accent)]/30",
+        disabled && !picked && "cursor-default opacity-60",
+      )}
     >
-      <span className={cn(!display && "text-[var(--color-muted-foreground)]")}>
-        {display || "—"}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
+          picked
+            ? "border-[var(--color-primary)] bg-[var(--color-primary)]"
+            : "border-[var(--color-border)] bg-transparent",
+        )}
+      >
+        {picked && <span className="size-1.5 rounded-full bg-white" />}
       </span>
+      <span className="min-w-0 flex-1">
+        {inlineEdit ?? (
+          <span
+            className={cn("block truncate", !display && "text-[var(--color-muted-foreground)]")}
+          >
+            {display || "—"}
+          </span>
+        )}
+      </span>
+      {edited && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-700/20 dark:text-amber-300">
+          <Pencil className="size-2.5" aria-hidden="true" /> edited
+        </span>
+      )}
     </button>
   )
 }
 
-// ─── Intrinsic field row ────────────────────────────────────────────────
-
-function IntrinsicFieldRow({
-  fieldKey,
+function StandardFieldRow({
+  field,
   recordA,
   recordB,
-  pick,
-  override,
-  onPick,
+  pickedSide,
+  overrideValue,
+  edited,
+  editing,
+  ctx,
+  onPickA,
+  onPickB,
   onOverride,
-  companyOptions,
-  ownerOptions,
-  referralOptions,
-  leadSourceValues,
-  hiddenLeadSources,
+  onDismissEdit,
+  divider,
 }: {
-  fieldKey: IntrinsicKey
+  field: StandardField
   recordA: ContactDisplayRow
   recordB: ContactDisplayRow
-  pick: Pick
-  override: unknown
-  onPick: (p: Pick) => void
+  pickedSide: Side
+  overrideValue: unknown
+  edited: boolean
+  editing: boolean
+  ctx: EditorCtx
+  onPickA: () => void
+  onPickB: () => void
   onOverride: (v: unknown) => void
-  companyOptions: CompanyOption[]
-  ownerOptions: UserOption[]
-  referralOptions: ContactOption[]
-  leadSourceValues: string[]
-  hiddenLeadSources: string[]
+  onDismissEdit: () => void
+  divider: boolean
 }) {
-  const aDisplay = displayValue(
-    fieldKey,
-    recordA,
-    [],
-    companyOptions,
-    ownerOptions,
-    referralOptions,
-  )
-  const bDisplay = displayValue(
-    fieldKey,
-    recordB,
-    [],
-    companyOptions,
-    ownerOptions,
-    referralOptions,
-  )
-  const isPickA = pick === "A" || (pick === "custom" && currentWinnerSide(recordA, recordB) === "A")
-  const editor =
-    pick === "custom"
-      ? renderEditor(fieldKey, override, onOverride, {
-          companyOptions,
-          ownerOptions,
-          referralOptions,
-          leadSourceValues,
-          hiddenLeadSources,
-        })
-      : isPickA
-        ? renderEditor(fieldKey, intrinsicValue(fieldKey, recordA), onOverride, {
-            companyOptions,
-            ownerOptions,
-            referralOptions,
-            leadSourceValues,
-            hiddenLeadSources,
-          })
-        : renderEditor(fieldKey, intrinsicValue(fieldKey, recordB), onOverride, {
-            companyOptions,
-            ownerOptions,
-            referralOptions,
-            leadSourceValues,
-            hiddenLeadSources,
-          })
-
-  const customDisplay =
-    pick === "custom"
-      ? renderOverrideDisplay(fieldKey, override, {
-          companyOptions,
-          ownerOptions,
-          referralOptions,
-        })
+  const aPicked = pickedSide === "A"
+  const bPicked = pickedSide === "B"
+  const aDisplay = displayValue(field, recordA, ctx)
+  const bDisplay = displayValue(field, recordB, ctx)
+  // When edited, both cells show the overridden value; the picked side
+  // still drives which one is highlighted blue.
+  const editedDisplay = edited ? safeString(overrideValue) : null
+  const showInlineOnSide: Side | null = editing && field.kind !== "address" ? pickedSide : null
+  const editorNode =
+    showInlineOnSide !== null
+      ? renderEditor(
+          field,
+          overrideValue ?? rawValue(field.key, pickedSide === "A" ? recordA : recordB),
+          (v) => {
+            onOverride(v)
+          },
+          ctx,
+        )
       : null
 
+  void onDismissEdit // Esc handling lives in InlineEditField; we just close on commit.
+
   return (
     <>
-      <RowLabel>{FIELD_LABEL[fieldKey]}</RowLabel>
+      <FieldLabel divider={divider}>{field.label}</FieldLabel>
       <ValueCell
-        picked={pick === "A" || (pick === "custom" && currentWinnerSide(recordA, recordB) === "A")}
-        edited={pick === "custom"}
-        display={customDisplay ?? aDisplay}
-        onClickToSelect={() => {
-          onPick("A")
-        }}
-        inlineEdit={pick === "custom" || pick === "A" ? editor : undefined}
-        testId={`merge-cell-${fieldKey}-a`}
+        picked={aPicked}
+        edited={edited && aPicked}
+        display={edited && aPicked ? (editedDisplay ?? aDisplay) : aDisplay}
+        inlineEdit={showInlineOnSide === "A" ? editorNode : undefined}
+        onClick={onPickA}
+        divider={divider}
+        testId={`merge-cell-${field.key}-a`}
       />
       <ValueCell
-        picked={pick === "B" || (pick === "custom" && currentWinnerSide(recordA, recordB) === "B")}
-        edited={pick === "custom"}
-        display={customDisplay ?? bDisplay}
-        onClickToSelect={() => {
-          onPick("B")
-        }}
-        inlineEdit={pick === "custom" || pick === "B" ? editor : undefined}
-        testId={`merge-cell-${fieldKey}-b`}
+        picked={bPicked}
+        edited={edited && bPicked}
+        display={edited && bPicked ? (editedDisplay ?? bDisplay) : bDisplay}
+        inlineEdit={showInlineOnSide === "B" ? editorNode : undefined}
+        onClick={onPickB}
+        divider={divider}
+        testId={`merge-cell-${field.key}-b`}
       />
     </>
   )
 }
-
-// Whichever record was the most-recent winner is the side the
-// override displays on. We track it via the last explicit pick;
-// when both A and B are valid candidates we default to A.
-function currentWinnerSide(_a: ContactDisplayRow, _b: ContactDisplayRow): "A" | "B" {
-  return "A"
-}
-
-function isEmptyish(v: unknown): boolean {
-  if (v === null || v === undefined) return true
-  if (typeof v === "string") return v.trim().length === 0
-  if (Array.isArray(v)) return v.length === 0
-  if (typeof v === "object") return Object.keys(v).length === 0
-  return false
-}
-
-// ─── Inline-edit primitive renderer per field key ──────────────────────
-
-interface EditorCtx {
-  companyOptions: CompanyOption[]
-  ownerOptions: UserOption[]
-  referralOptions: ContactOption[]
-  leadSourceValues: string[]
-  hiddenLeadSources: string[]
-}
-
-function renderEditor(
-  key: IntrinsicKey,
-  current: unknown,
-  onSave: (v: unknown) => void,
-  ctx: EditorCtx,
-): React.ReactNode {
-  const sV = current === null || current === undefined ? null : safeString(current) || null
-  switch (key) {
-    case "firstName":
-    case "lastName":
-    case "secondaryEmail":
-    case "primaryEmail":
-    case "sourceDetail":
-    case "instagramHandle":
-    case "facebookUrl":
-    case "website":
-    case "notes":
-    case "internalNotes":
-    case "dob":
-    case "anniversaryDate":
-      return (
-        <InlineEditField
-          value={sV}
-          onSave={(next) => {
-            onSave(next || null)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-        />
-      )
-    case "primaryPhone":
-    case "secondaryPhone":
-      return (
-        <InlineEditField
-          value={sV}
-          displayValue={formatPhoneDisplay(sV)}
-          editValue={formatPhoneDisplay(sV)}
-          onSave={(next) => {
-            onSave(next || null)
-            return Promise.resolve(undefined)
-          }}
-          normalizeOnSave={(raw) => parsePhoneInput(raw) ?? ""}
-          validateBeforeSave={(n) =>
-            n === "" || n.length === 10 ? null : "Enter a 10-digit US phone."
-          }
-          ariaLabel={FIELD_LABEL[key]}
-        />
-      )
-    case "contactType":
-      return (
-        <InlineEditSelect
-          value={sV}
-          displayLabel={sV}
-          items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
-          onSave={(next) => {
-            onSave(next)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-          allowClear
-        />
-      )
-    case "lifecycleStatus":
-      return (
-        <InlineEditSelect
-          value={sV}
-          displayLabel={sV}
-          items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
-          onSave={(next) => {
-            onSave(next)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-          allowClear
-        />
-      )
-    case "leadSource":
-      return (
-        <InlineEditSelect
-          value={sV}
-          displayLabel={sV}
-          onSave={(next) => {
-            onSave(next)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-          allowClear
-          renderPicker={({ commit }) => (
-            <LeadSourceCombobox
-              value={sV ?? ""}
-              onChange={(v) => {
-                void commit(v || null)
-              }}
-              existingValues={ctx.leadSourceValues}
-              hiddenSources={ctx.hiddenLeadSources}
-              inlineMode
-              onDismiss={() => {
-                void commit(sV)
-              }}
-            />
-          )}
-        />
-      )
-    case "ownerUserId":
-      return (
-        <InlineEditSelect
-          value={sV}
-          displayLabel={sV ? (ctx.ownerOptions.find((o) => o.id === sV)?.name ?? sV) : null}
-          onSave={(next) => {
-            onSave(next)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-          allowClear
-          renderPicker={({ commit }) => (
-            <UserRefPicker
-              options={ctx.ownerOptions}
-              value={sV}
-              onChange={(v) => {
-                void commit(v)
-              }}
-              inlineMode
-              onDismiss={() => {
-                void commit(sV)
-              }}
-            />
-          )}
-        />
-      )
-    case "companyId":
-      return (
-        <InlineEditSelect
-          value={sV}
-          displayLabel={sV ? (ctx.companyOptions.find((c) => c.id === sV)?.name ?? sV) : null}
-          onSave={(next) => {
-            onSave(next)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-          allowClear
-          renderPicker={({ commit }) => (
-            <CompanyPicker
-              options={ctx.companyOptions}
-              value={sV}
-              onChange={(v) => {
-                void commit(v)
-              }}
-              inlineMode
-              onDismiss={() => {
-                void commit(sV)
-              }}
-            />
-          )}
-        />
-      )
-    case "referredByContactId":
-      return (
-        <InlineEditSelect
-          value={sV}
-          displayLabel={
-            sV
-              ? (() => {
-                  const c = ctx.referralOptions.find((c) => c.id === sV)
-                  return c ? `${c.firstName} ${c.lastName}`.trim() : sV
-                })()
-              : null
-          }
-          onSave={(next) => {
-            onSave(next)
-            return Promise.resolve(undefined)
-          }}
-          ariaLabel={FIELD_LABEL[key]}
-          allowClear
-          renderPicker={({ commit }) => (
-            <ContactRefPicker
-              options={ctx.referralOptions}
-              value={sV}
-              onChange={(v) => {
-                void commit(v)
-              }}
-              inlineMode
-              onDismiss={() => {
-                void commit(sV)
-              }}
-            />
-          )}
-        />
-      )
-  }
-}
-
-function renderOverrideDisplay(
-  key: IntrinsicKey,
-  override: unknown,
-  ctx: {
-    companyOptions: CompanyOption[]
-    ownerOptions: UserOption[]
-    referralOptions: ContactOption[]
-  },
-): string {
-  if (override === null || override === undefined) return ""
-  if (key === "primaryPhone" || key === "secondaryPhone")
-    return formatPhoneDisplay(safeString(override))
-  if (key === "companyId") {
-    const id = safeString(override)
-    return ctx.companyOptions.find((c) => c.id === id)?.name ?? id
-  }
-  if (key === "ownerUserId") {
-    const id = safeString(override)
-    const u = ctx.ownerOptions.find((o) => o.id === id)
-    return u?.name ?? u?.email ?? id
-  }
-  if (key === "referredByContactId") {
-    const id = safeString(override)
-    const c = ctx.referralOptions.find((c) => c.id === id)
-    return c ? `${c.firstName} ${c.lastName}`.trim() : id
-  }
-  return safeString(override)
-}
-
-// ─── Tags row (3-mode pick + editable union) ──────────────────────────
-
-function TagsRow({
-  recordA,
-  recordB,
-  mode,
-  override,
-  onModeChange,
-  onOverride,
-  tagOptions,
-}: {
-  recordA: ContactDisplayRow
-  recordB: ContactDisplayRow
-  mode: "A" | "B" | "merged"
-  override: string[] | undefined
-  onModeChange: (m: "A" | "B" | "merged") => void
-  onOverride: (v: string[]) => void
-  tagOptions: string[]
-}) {
-  const aTags = recordA.tags ?? []
-  const bTags = recordB.tags ?? []
-  const mergedTags = Array.from(new Set([...aTags, ...bTags]))
-  const effective = override ?? (mode === "A" ? aTags : mode === "B" ? bTags : mergedTags)
-  return (
-    <>
-      <RowLabel>Tags</RowLabel>
-      <div className="col-span-1 border-t border-[var(--color-border)] p-3 text-xs lg:col-span-2">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <ModeRadio
-            name="tags-mode"
-            checked={mode === "A"}
-            label={`All from ${recordLabel(recordA)}`}
-            onChange={() => {
-              onModeChange("A")
-            }}
-          />
-          <ModeRadio
-            name="tags-mode"
-            checked={mode === "B"}
-            label={`All from ${recordLabel(recordB)}`}
-            onChange={() => {
-              onModeChange("B")
-            }}
-          />
-          <ModeRadio
-            name="tags-mode"
-            checked={mode === "merged"}
-            label="Merged (union)"
-            onChange={() => {
-              onModeChange("merged")
-            }}
-          />
-          {override && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-700/20 dark:text-amber-300">
-              <Pencil className="size-2.5" aria-hidden="true" /> edited
-            </span>
-          )}
-        </div>
-        <SearchableMultiSelect
-          items={tagOptions.map((t) => ({ value: t, label: t }))}
-          values={effective}
-          onChange={(v) => {
-            onOverride(v)
-          }}
-          allowCreate
-          placeholder="Add a tag…"
-        />
-      </div>
-    </>
-  )
-}
-
-function ModeRadio({
-  name,
-  checked,
-  label,
-  onChange,
-}: {
-  name: string
-  checked: boolean
-  label: string
-  onChange: () => void
-}) {
-  return (
-    <label className="inline-flex items-center gap-1">
-      <input type="radio" name={name} checked={checked} onChange={onChange} />
-      <span>{label}</span>
-    </label>
-  )
-}
-
-// ─── Address row (whole-blob pick) ────────────────────────────────────
-
-function AddressRow({
-  recordA,
-  recordB,
-  pick,
-  onPick,
-}: {
-  recordA: ContactDisplayRow
-  recordB: ContactDisplayRow
-  pick: Pick
-  onPick: (p: "A" | "B") => void
-}) {
-  const aDisplay = displayValue("mailingAddress", recordA, [], [], [], [])
-  const bDisplay = displayValue("mailingAddress", recordB, [], [], [], [])
-  return (
-    <>
-      <RowLabel>Mailing address</RowLabel>
-      <ValueCell
-        picked={pick === "A"}
-        edited={false}
-        display={aDisplay}
-        onClickToSelect={() => {
-          onPick("A")
-        }}
-        testId="merge-cell-mailingAddress-a"
-      />
-      <ValueCell
-        picked={pick === "B"}
-        edited={false}
-        display={bDisplay}
-        onClickToSelect={() => {
-          onPick("B")
-        }}
-        testId="merge-cell-mailingAddress-b"
-      />
-    </>
-  )
-}
-
-// ─── Custom field row (per-key pick) ────────────────────────────────────
 
 function CustomFieldRow({
   def,
-  recordA,
-  recordB,
-  pick,
-  override,
-  onPick,
+  aRaw,
+  bRaw,
+  pickedSide,
+  overrideValue,
+  edited,
+  editing,
+  onPickA,
+  onPickB,
   onOverride,
+  onDismissEdit,
+  divider,
 }: {
   def: ListCustomFieldDef
-  recordA: ContactDisplayRow
-  recordB: ContactDisplayRow
-  pick: Pick
-  override: unknown
-  onPick: (p: Pick) => void
+  aRaw: unknown
+  bRaw: unknown
+  pickedSide: Side
+  overrideValue: unknown
+  edited: boolean
+  editing: boolean
+  onPickA: () => void
+  onPickB: () => void
   onOverride: (v: unknown) => void
+  onDismissEdit: () => void
+  divider: boolean
 }) {
-  const key = `cf:${def.id}`
-  const aDisplay = formatCustomFieldCell(def, recordA.customFields?.[def.id]) || ""
-  const bDisplay = formatCustomFieldCell(def, recordB.customFields?.[def.id]) || ""
-  const overrideDisplay = override === null || override === undefined ? "" : safeString(override)
-  const customEditor = (
+  const aDisplay = formatCustomFieldCell(def, aRaw) || ""
+  const bDisplay = formatCustomFieldCell(def, bRaw) || ""
+  const aPicked = pickedSide === "A"
+  const bPicked = pickedSide === "B"
+  // Custom-field inline edit V1: plain text input. The 19-type field
+  // engine has rich editors elsewhere — surfacing those here would
+  // double the surface area; text-edit is good enough for the
+  // typo-fix use case (full-fidelity edit is V1.5 alongside the
+  // multi-way merge work).
+  const editorNode = editing ? (
     <InlineEditField
-      value={pick === "custom" ? overrideDisplay : pick === "A" ? aDisplay : bDisplay}
+      value={safeString(overrideValue ?? (pickedSide === "A" ? aRaw : bRaw))}
       onSave={(next) => {
         onOverride(next || null)
         return Promise.resolve(undefined)
       }}
       ariaLabel={def.name}
     />
-  )
+  ) : undefined
+
+  void onDismissEdit
+
   return (
     <>
-      <RowLabel>{def.name}</RowLabel>
+      <FieldLabel divider={divider}>{def.name}</FieldLabel>
       <ValueCell
-        picked={pick === "A" || (pick === "custom" && currentWinnerSide(recordA, recordB) === "A")}
-        edited={pick === "custom"}
-        display={pick === "custom" ? overrideDisplay : aDisplay}
-        onClickToSelect={() => {
-          onPick("A")
-        }}
-        inlineEdit={pick === "A" || pick === "custom" ? customEditor : undefined}
-        testId={`merge-cell-${key.replace(/:/g, "-")}-a`}
+        picked={aPicked}
+        edited={edited && aPicked}
+        display={edited && aPicked ? safeString(overrideValue) : aDisplay}
+        inlineEdit={editing && pickedSide === "A" ? editorNode : undefined}
+        onClick={onPickA}
+        divider={divider}
+        testId={`merge-cell-cf-${def.id}-a`}
       />
       <ValueCell
-        picked={pick === "B" || (pick === "custom" && currentWinnerSide(recordA, recordB) === "B")}
-        edited={pick === "custom"}
-        display={pick === "custom" ? overrideDisplay : bDisplay}
-        onClickToSelect={() => {
-          onPick("B")
-        }}
-        inlineEdit={pick === "B" || pick === "custom" ? customEditor : undefined}
-        testId={`merge-cell-${key.replace(/:/g, "-")}-b`}
+        picked={bPicked}
+        edited={edited && bPicked}
+        display={edited && bPicked ? safeString(overrideValue) : bDisplay}
+        inlineEdit={editing && pickedSide === "B" ? editorNode : undefined}
+        onClick={onPickB}
+        divider={divider}
+        testId={`merge-cell-cf-${def.id}-b`}
       />
     </>
+  )
+}
+
+function ModeSection({
+  title,
+  mode,
+  onMode,
+  recordA,
+  recordB,
+  children,
+}: {
+  title: string
+  mode: "both" | "A" | "B"
+  onMode: (m: "both" | "A" | "B") => void
+  recordA: ContactDisplayRow
+  recordB: ContactDisplayRow
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="flex flex-wrap gap-3 text-xs">
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="radio"
+            checked={mode === "both"}
+            onChange={() => {
+              onMode("both")
+            }}
+          />
+          Keep all from both
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="radio"
+            checked={mode === "A"}
+            onChange={() => {
+              onMode("A")
+            }}
+          />
+          {recordLabel(recordA)} only
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="radio"
+            checked={mode === "B"}
+            onChange={() => {
+              onMode("B")
+            }}
+          />
+          {recordLabel(recordB)} only
+        </label>
+      </div>
+      <div>{children}</div>
+    </section>
   )
 }

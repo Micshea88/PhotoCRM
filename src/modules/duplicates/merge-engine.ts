@@ -77,6 +77,24 @@ export const mergeContactsInput = z.object({
    * overrides and the existing pick-only flow applies.
    */
   customOverrides: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * P3 (C7 rebuild) — final fieldValues from the new full-record
+   * merge grid. When present, takes top precedence: every key
+   * resolves to its value as-is and `fieldChoices` / `customOverrides`
+   * are ignored for matching keys.
+   *
+   * Wire contract: the C7 client resolves picks + inline edits into
+   * concrete values BEFORE submit, so the action has no pick/winner
+   * semantics to interpret. Intrinsic field keys (`firstName` etc.)
+   * map directly onto the merged row; `cf:<defId>` keys land in the
+   * customFields jsonb; `tags` accepts a string[]; `mailingAddress`
+   * accepts a record-or-null.
+   *
+   * `tagsMode` / `companiesMode` continue to drive the bulk-mode
+   * semantics for tags / additional companies — the C7 UI still
+   * uses the 3-mode radios for those two surfaces.
+   */
+  fieldValues: z.record(z.string(), z.unknown()).optional(),
   tagsMode: tagsModeSchema.default({ mode: "union" }),
   companiesMode: companiesModeSchema.default({ mode: "union" }),
 })
@@ -163,7 +181,12 @@ export async function executeContactMerge(
   input: MergeContactsInput,
 ): Promise<{ winnerId: string; mergedFromIds: string[] }> {
   const { winnerId, loserIds, fieldChoices, tagsMode, companiesMode } = input
-  const customOverrides = input.customOverrides ?? {}
+  // P3 (C7 rebuild) — fieldValues takes top precedence. If the C7
+  // client sent it, merge it INTO customOverrides so every downstream
+  // override site (intrinsic, tags, mailingAddress, cf:*) reads from
+  // a single map. Concretely: the existing customOverrides processing
+  // already does exactly what fieldValues semantics require.
+  const customOverrides = { ...(input.customOverrides ?? {}), ...(input.fieldValues ?? {}) }
   validateInput(winnerId, loserIds)
   const allIds = [winnerId, ...loserIds]
 

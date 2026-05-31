@@ -175,6 +175,44 @@ describe("ContactActivityFeed", () => {
     render(<ContactActivityFeed contactId="test-c" entries={[]} />)
     expect(screen.getByText(/No activity yet/)).toBeInTheDocument()
   })
+
+  it("Item 1a — pencil-edit shows underlined textarea with NO Save/Cancel buttons", async () => {
+    const user = userEvent.setup()
+    const entriesWithRawId: ActivityEntry[] = [
+      {
+        id: "n1",
+        rawId: "raw-n1",
+        kind: "note",
+        timestamp: new Date(Date.now() - 60_000),
+        title: "Note added",
+        body: "Original body",
+        actor: "Alice",
+      },
+    ]
+    render(<ContactActivityFeed contactId="test-c" entries={entriesWithRawId} />)
+    await user.click(screen.getByTestId("activity-edit-note"))
+    // Edit mode: textarea appears, autofocused.
+    const textarea = screen.getByTestId("activity-edit-body-note")
+    expect(textarea).toBeInTheDocument()
+    // §1 pencil-only — NO Save / Cancel buttons inside the edit area.
+    expect(screen.queryByRole("button", { name: /^Save$/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Cancel$/ })).not.toBeInTheDocument()
+  })
+
+  it("Item 1c — All-tab Type chips filter in place (do NOT change the active tab)", async () => {
+    const user = userEvent.setup()
+    render(<ContactActivityFeed contactId="test-c" entries={entries} />)
+    // All-activities tab is the default; click the Calls chip.
+    await user.click(screen.getByRole("button", { name: /Calls/ }))
+    // Active tab is still All activities.
+    expect(screen.getByRole("tab", { name: /All activities \(2\)/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    )
+    // Note hidden by the in-place type filter.
+    expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
+    expect(screen.getByText("Call by Bob")).toBeInTheDocument()
+  })
 })
 
 describe("ContactDetailCenter — tab strip", () => {

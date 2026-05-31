@@ -186,10 +186,12 @@ function ToolbarStub({ icon, label }: { icon: React.ReactNode; label: string }) 
 
 const CALL_OUTCOMES = ["Connected", "Left voicemail", "No answer", "Busy", "Wrong number"] as const
 
+// Backlog Item 1e — Mike's approved spec: direction = Outbound /
+// Inbound only. "Missed" was extra; dropped. A call you didn't pick
+// up gets logged as Inbound with outcome "No answer" instead.
 const CALL_DIRECTIONS: { value: CallDirection; label: string }[] = [
   { value: "outgoing", label: "Outbound" },
   { value: "incoming", label: "Inbound" },
-  { value: "missed", label: "Missed" },
 ]
 
 export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
@@ -395,7 +397,8 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
           />
         </Field>
       </div>
-      <Field label="Body">
+      {/* Item 1e — approved spec is date/time + subject + notes. */}
+      <Field label="Notes">
         <textarea
           value={body}
           onChange={(e) => {
@@ -404,7 +407,7 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
           rows={4}
           maxLength={10_000}
           disabled={saving}
-          placeholder="Email body"
+          placeholder="What did the email say?"
           className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
         />
       </Field>
@@ -421,7 +424,6 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
 export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
   const router = useRouter()
   const [startsAt, setStartsAt] = useState(nowIso())
-  const [subject, setSubject] = useState("")
   const [attendees, setAttendees] = useState("")
   const [notes, setNotes] = useState("")
   const [saving, setSaving] = useState(false)
@@ -438,13 +440,17 @@ export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBas
       onSave={async () => {
         setSaving(true)
         setError(null)
+        // Item 1e — approved spec is date/time + attendees + notes.
+        // No 'subject' field in V1. The attendees string is folded
+        // into the notes body so the backing meetings table still
+        // captures who was there.
         const combinedNotes = attendees.trim()
           ? `Attendees: ${attendees.trim()}\n${notes.trim()}`
           : notes.trim()
         const result = await logMeeting({
           contactId,
           startsAt: new Date(startsAt).toISOString(),
-          subject: subject.trim() || null,
+          subject: null,
           notes: combinedNotes || null,
         })
         setSaving(false)
@@ -456,32 +462,18 @@ export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBas
         refresh(router, transition)
       }}
     >
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="When">
-          <Input
-            type="datetime-local"
-            value={startsAt}
-            onChange={(e) => {
-              setStartsAt(e.target.value)
-            }}
-            disabled={saving}
-            className="h-8"
-            data-testid="meeting-composer-when"
-          />
-        </Field>
-        <Field label="Subject">
-          <Input
-            type="text"
-            value={subject}
-            onChange={(e) => {
-              setSubject(e.target.value)
-            }}
-            placeholder="Meeting subject"
-            disabled={saving}
-            className="h-8"
-          />
-        </Field>
-      </div>
+      <Field label="When">
+        <Input
+          type="datetime-local"
+          value={startsAt}
+          onChange={(e) => {
+            setStartsAt(e.target.value)
+          }}
+          disabled={saving}
+          className="h-8"
+          data-testid="meeting-composer-when"
+        />
+      </Field>
       <Field label="Attendees">
         <Input
           type="text"
@@ -515,8 +507,11 @@ export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBas
 
 export function SmsLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
   const router = useRouter()
+  // Item 1e — approved spec is body-only. Direction defaults to
+  // outbound silently so the backing sms_messages row still has the
+  // NOT NULL column populated; the user doesn't get a picker for it.
+  // Inbound SMS arrive via the (future P5+) provider webhook.
   const [body, setBody] = useState("")
-  const [direction, setDirection] = useState<"inbound" | "outbound">("outbound")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, transition] = useTransition()
@@ -531,7 +526,11 @@ export function SmsLogComposer({ contactId, onSaved, onCancel }: ComposerBasePro
       onSave={async () => {
         setSaving(true)
         setError(null)
-        const result = await logSms({ contactId, body: body.trim(), direction })
+        const result = await logSms({
+          contactId,
+          body: body.trim(),
+          direction: "outbound",
+        })
         setSaving(false)
         if (result.serverError) {
           setError(result.serverError)
@@ -541,20 +540,6 @@ export function SmsLogComposer({ contactId, onSaved, onCancel }: ComposerBasePro
         refresh(router, transition)
       }}
     >
-      <Field label="Direction">
-        <SearchableSelect
-          items={[
-            { value: "outbound", label: "Outbound" },
-            { value: "inbound", label: "Inbound" },
-          ]}
-          value={direction}
-          onChange={(v) => {
-            if (v === "outbound" || v === "inbound") setDirection(v)
-          }}
-          aria-label="SMS direction"
-          placeholder="Pick direction"
-        />
-      </Field>
       <Field label="Message">
         <textarea
           value={body}

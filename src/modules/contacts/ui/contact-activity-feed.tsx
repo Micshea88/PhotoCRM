@@ -10,6 +10,7 @@ import {
   Filter as FilterIcon,
   Mail,
   MessageSquare,
+  MoreHorizontal,
   Pencil,
   Phone,
   Plus,
@@ -19,6 +20,7 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
@@ -217,7 +219,10 @@ export function ContactActivityFeed({
 }) {
   const [activeTab, setActiveTab] = useState<FilterKey>("all")
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS)
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  // Backlog Item 1c — All-tab Type chips filter IN PLACE (don't jump
+  // to the type sub-tab). Local state on the All tab; tab-scoped so
+  // it resets when the user switches sub-tabs.
+  const [allTabTypeFilter, setAllTabTypeFilter] = useState<ActivityEntryKind | null>(null)
   const [collapseAll, setCollapseAll] = useState(false)
   const [composer, setComposer] = useState<null | "note" | "call" | "email" | "meeting" | "sms">(
     null,
@@ -239,7 +244,10 @@ export function ContactActivityFeed({
   const visible = useMemo(() => {
     const byTab =
       activeTab === "all"
-        ? entries
+        ? // Item 1c — All-tab inline Type chips filter in place.
+          allTabTypeFilter
+          ? entries.filter((e) => e.kind === allTabTypeFilter)
+          : entries
         : activeTab === "note"
           ? entries.filter((e) => e.kind === "note")
           : activeTab === "call"
@@ -250,7 +258,7 @@ export function ContactActivityFeed({
                 ? entries.filter((e) => e.kind === "sms")
                 : []
     return applyFilters(byTab, filters)
-  }, [entries, activeTab, filters])
+  }, [entries, activeTab, allTabTypeFilter, filters])
 
   // For "All activities" the filter strip mirrors the per-type
   // toolbar but also shows an inline Activity-type filter (since the
@@ -272,6 +280,7 @@ export function ContactActivityFeed({
             onClick={() => {
               setActiveTab(key)
               setFilters(DEFAULT_FILTERS)
+              setAllTabTypeFilter(null)
               setComposer(null)
             }}
             testId={`activity-filter-${key}`}
@@ -312,6 +321,10 @@ export function ContactActivityFeed({
 
       {/* Toolbar — row 2: filters + per-type create/log buttons. */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* Backlog Item 1d — Popover owns its own open/close state.
+            The earlier double-toggle (setFiltersOpen + toggle) made
+            one click cancel itself out. Removed the redundant state
+            so one click = one toggle. */}
         <Popover
           align="start"
           trigger={({ toggle }) => (
@@ -319,10 +332,7 @@ export function ContactActivityFeed({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => {
-                setFiltersOpen((v) => !v)
-                toggle()
-              }}
+              onClick={toggle}
               data-testid="activity-filters-button"
             >
               <FilterIcon className="mr-1 size-3.5" aria-hidden="true" /> Filters
@@ -335,10 +345,8 @@ export function ContactActivityFeed({
               setFilters(next)
             }}
             assigneeOptions={assigneeOptions}
-            showTypeFilter={false}
           />
         </Popover>
-        {filtersOpen ? null : null}
 
         {/* Per-tab create/log buttons. */}
         {activeTab === "all" && (
@@ -463,18 +471,26 @@ export function ContactActivityFeed({
         )}
       </div>
 
-      {/* All activities — inline type filter chips (the tab is type-
-          agnostic so type lives in the inline filter row). */}
+      {/* Backlog Item 1c — All-activities tab inline Type chips
+          FILTER IN PLACE; they do NOT change tabs. Click a chip to
+          narrow to that type; click again (or click "All") to clear. */}
       {activeTab === "all" && (
-        <div className="flex flex-wrap gap-1 text-xs">
+        <div className="flex flex-wrap items-center gap-1 text-xs">
           <span className="text-[var(--color-muted-foreground)]">Type:</span>
+          <TypeChip
+            label="All"
+            active={allTabTypeFilter === null}
+            onClick={() => {
+              setAllTabTypeFilter(null)
+            }}
+          />
           {(["note", "call", "meeting", "sms"] as const).map((k) => (
             <TypeChip
               key={k}
               label={FILTER_LABEL[k]}
-              active={false}
+              active={allTabTypeFilter === k}
               onClick={() => {
-                setActiveTab(k)
+                setAllTabTypeFilter((prev) => (prev === k ? null : k))
               }}
             />
           ))}
@@ -643,18 +659,13 @@ function FiltersPanel({
   filters,
   onChange,
   assigneeOptions,
-  showTypeFilter,
 }: {
   filters: FeedFilters
   onChange: (next: FeedFilters) => void
   assigneeOptions: AssigneeOption[]
-  showTypeFilter: boolean
 }) {
   return (
     <div className="space-y-3 text-xs" data-testid="activity-filters-panel">
-      {showTypeFilter && (
-        <p className="text-[var(--color-muted-foreground)]">Activity type chips above ↑</p>
-      )}
       <div className="space-y-1">
         <label className="font-medium text-[var(--color-muted-foreground)]">Date range</label>
         <select
@@ -718,23 +729,48 @@ function FiltersPanel({
   )
 }
 
+/**
+ * Backlog Item 1a/1b — activity-entry card with §1 pencil-only edit.
+ *
+ * Lifecycle (locked design system §1):
+ *   1. Pencil icon (visible on hover) toggles edit mode. Clicking
+ *      the body text does NOTHING.
+ *   2. In edit mode the body becomes an underlined textarea (no box,
+ *      no Save / Cancel buttons).
+ *   3. Autosave on blur OR Enter (Shift+Enter inserts a newline).
+ *   4. Esc reverts to the original body and exits edit.
+ *   5. On server error, edit mode stays open + an inline message
+ *      surfaces so the user can retry.
+ *   6. Delete moved off the edit area into the entry's kebab/overflow
+ *      menu. The delete action prompts via the shared ConfirmModal
+ *      (Item 1b — replaces window.confirm).
+ */
 function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsedAll: boolean }) {
   const [open, setOpen] = useState(true)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(entry.body ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const router = useRouter()
   const [, transition] = useTransition()
   const isOpen = collapsedAll ? false : open
   const hasBody = !!entry.body && entry.body.length > 0
   const canEdit = entry.kind !== "audit" && !!entry.rawId
 
-  async function save() {
+  async function autosave() {
     if (!entry.rawId) return
+    const next = draft.trim()
+    // No-op when the value didn't change — avoids burning a Haiku
+    // regen on a pure-blur with no edits.
+    if (next === (entry.body ?? "").trim()) {
+      setEditing(false)
+      return
+    }
     setSaving(true)
     setError(null)
-    const next = draft.trim()
     let serverError: string | undefined
     if (entry.kind === "note") {
       const r = await updateContactNote({ id: entry.rawId, body: next })
@@ -760,10 +796,10 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
     })
   }
 
-  async function remove() {
+  async function doDelete() {
     if (!entry.rawId) return
-    if (!window.confirm("Delete this entry?")) return
-    setSaving(true)
+    setDeleting(true)
+    setDeleteError(null)
     let serverError: string | undefined
     if (entry.kind === "note") {
       const r = await deleteContactNote({ id: entry.rawId })
@@ -778,11 +814,12 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
       const r = await deleteSms({ id: entry.rawId })
       serverError = r.serverError
     }
-    setSaving(false)
+    setDeleting(false)
     if (serverError) {
-      setError(serverError)
+      setDeleteError(serverError)
       return
     }
+    setDeleteOpen(false)
     transition(() => {
       router.refresh()
     })
@@ -790,7 +827,7 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
 
   return (
     <article
-      className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3"
+      className="group space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3"
       data-testid={`activity-entry-${entry.kind}`}
     >
       <header className="flex items-center gap-2">
@@ -815,18 +852,51 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
           {timeAgo(entry.timestamp)}
         </time>
         {canEdit && !editing && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(true)
-              setDraft(entry.body ?? "")
-            }}
-            aria-label="Edit entry"
-            data-testid={`activity-edit-${entry.kind}`}
-            className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
-          >
-            <Pencil className="size-3" aria-hidden="true" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(true)
+                setDraft(entry.body ?? "")
+                setError(null)
+              }}
+              aria-label="Edit entry"
+              data-testid={`activity-edit-${entry.kind}`}
+              className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
+            >
+              <Pencil className="size-3" aria-hidden="true" />
+            </button>
+            <Popover
+              align="end"
+              trigger={({ toggle }) => (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  aria-label="More actions"
+                  data-testid={`activity-kebab-${entry.kind}`}
+                  className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
+                >
+                  <MoreHorizontal className="size-3" aria-hidden="true" />
+                </button>
+              )}
+            >
+              <ul className="min-w-[140px] space-y-0.5 text-sm" role="menu">
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDeleteOpen(true)
+                    }}
+                    data-testid={`activity-delete-${entry.kind}`}
+                    className="block w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-500/10 dark:text-red-400"
+                  >
+                    Delete
+                  </button>
+                </li>
+              </ul>
+            </Popover>
+          </>
         )}
       </header>
       {isOpen && hasBody && !editing && (
@@ -835,7 +905,7 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
         </p>
       )}
       {editing && (
-        <div className="space-y-2 pl-7">
+        <div className="space-y-1 pl-7">
           <textarea
             value={draft}
             onChange={(e) => {
@@ -843,54 +913,53 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
             }}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
+                e.preventDefault()
                 setEditing(false)
                 setDraft(entry.body ?? "")
+                setError(null)
+              } else if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                void autosave()
               }
+            }}
+            onBlur={() => {
+              void autosave()
             }}
             rows={3}
             disabled={saving}
+            autoFocus
             data-testid={`activity-edit-body-${entry.kind}`}
             className="w-full resize-y border-0 border-b border-[var(--color-primary)] bg-transparent p-1 text-sm focus:outline-none disabled:opacity-50"
           />
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditing(false)
-                setDraft(entry.body ?? "")
-              }}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void remove()
-              }}
-              disabled={saving}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
-              Delete
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                void save()
-              }}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </div>
+          {saving && <p className="text-[11px] text-[var(--color-muted-foreground)]">Saving…</p>}
+          {error && (
+            <p className="text-xs text-red-600 dark:text-red-400" data-testid="activity-edit-error">
+              {error}
+            </p>
+          )}
         </div>
       )}
+      {/* Item 1b — ConfirmModal replaces window.confirm. */}
+      <ConfirmModal
+        open={deleteOpen}
+        onClose={() => {
+          if (!deleting) {
+            setDeleteOpen(false)
+            setDeleteError(null)
+          }
+        }}
+        onConfirm={() => {
+          void doDelete()
+        }}
+        title="Delete this entry?"
+        body={
+          deleteError ??
+          "This activity entry will be soft-deleted. The AI summary will refresh on the next page render."
+        }
+        confirmLabel="Delete"
+        destructive
+        submitting={deleting}
+      />
     </article>
   )
 }

@@ -529,6 +529,11 @@ export const updateContactNote = orgAction
       )
       .returning({ id: contactNotes.id, contactId: contactNotes.contactId })
     if (result.length === 0) throw new ActionError("NOT_FOUND", "Note not found")
+    // P-activities — edits to note content feed the AI summary; bust
+    // the cache atomically so the next render auto-regens.
+    if (result[0]) {
+      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+    }
     await audit(
       {
         db: ctx.db,
@@ -560,6 +565,10 @@ export const deleteContactNote = orgAction
       )
       .returning({ id: contactNotes.id, contactId: contactNotes.contactId })
     if (result.length === 0) throw new ActionError("NOT_FOUND", "Note not found")
+    // P-activities — same cache-bust rule applies on delete.
+    if (result[0]) {
+      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+    }
     await audit(
       {
         db: ctx.db,

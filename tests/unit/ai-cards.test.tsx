@@ -3,9 +3,41 @@
  * the activity feed primitive. All pure UI; no AI calls, no server
  * actions.
  */
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+
+// P-activities — ContactActivityFeed now imports server actions
+// (update/delete on notes/calls/meetings/sms + the inline composers'
+// create paths) that transitively pull in @/lib/db. Stub the action
+// surface so jsdom doesn't try to evaluate the server-only env.
+vi.mock("@/modules/contacts/actions", () => ({
+  updateContactNote: vi.fn(),
+  deleteContactNote: vi.fn(),
+  createContactNote: vi.fn(),
+}))
+vi.mock("@/modules/calls/actions", () => ({
+  updateCall: vi.fn(),
+  deleteCall: vi.fn(),
+  logCall: vi.fn(),
+}))
+vi.mock("@/modules/meetings/actions", () => ({
+  updateMeeting: vi.fn(),
+  deleteMeeting: vi.fn(),
+  logMeeting: vi.fn(),
+}))
+vi.mock("@/modules/sms-messages/actions", () => ({
+  updateSms: vi.fn(),
+  deleteSms: vi.fn(),
+  logSms: vi.fn(),
+}))
+
+// next/navigation: the activity-card uses useRouter().refresh() on
+// edit-save. In jsdom there's no app router; stub it.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}))
+
 import { AiStatusBadge } from "@/modules/contacts/ui/ai-status-badge"
 import { AiSummaryCard } from "@/modules/contacts/ui/ai-summary-card"
 import { AiInsightsCard } from "@/modules/contacts/ui/ai-insights-card"
@@ -116,7 +148,7 @@ describe("ContactActivityFeed", () => {
   ]
 
   it("renders all entries + the locked 7-tab sub-filter strip", () => {
-    render(<ContactActivityFeed entries={entries} />)
+    render(<ContactActivityFeed contactId="test-c" entries={entries} />)
     // Polish #5 Fix 6 — title format is "{Type} by {Author}".
     expect(screen.getByText("Note by Alice")).toBeInTheDocument()
     expect(screen.getByText("Call by Bob")).toBeInTheDocument()
@@ -133,14 +165,14 @@ describe("ContactActivityFeed", () => {
 
   it("filter tab narrows the visible entries", async () => {
     const user = userEvent.setup()
-    render(<ContactActivityFeed entries={entries} />)
+    render(<ContactActivityFeed contactId="test-c" entries={entries} />)
     await user.click(screen.getByRole("tab", { name: /Calls \(1\)/ }))
     expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
     expect(screen.getByText("Call by Bob")).toBeInTheDocument()
   })
 
   it("empty state prompts the user to use Add Note / Log Call", () => {
-    render(<ContactActivityFeed entries={[]} />)
+    render(<ContactActivityFeed contactId="test-c" entries={[]} />)
     expect(screen.getByText(/No activity yet/)).toBeInTheDocument()
   })
 })

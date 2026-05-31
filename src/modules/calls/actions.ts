@@ -115,6 +115,11 @@ export const updateCall = orgAction
     if (result.length === 0) {
       throw new ActionError("NOT_FOUND", "Call not found")
     }
+    // P-activities — edits to call notes feed the AI summary; bust
+    // the cache atomically so the next render auto-regens.
+    if (result[0]?.contactId) {
+      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+    }
     await audit(
       {
         db: ctx.db,
@@ -147,6 +152,10 @@ export const deleteCall = orgAction
       .returning({ id: callLog.id, contactId: callLog.contactId })
     if (result.length === 0) {
       throw new ActionError("NOT_FOUND", "Call not found or already deleted")
+    }
+    // P-activities — same cache-bust rule applies on delete.
+    if (result[0]?.contactId) {
+      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {

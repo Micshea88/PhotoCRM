@@ -296,7 +296,16 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <AiInsightsCard insights={insights} />
           </div>
         )
-        const activityBlock = <ContactActivityFeed entries={activity} />
+        const activityBlock = (
+          <ContactActivityFeed
+            contactId={contact.id}
+            entries={activity}
+            assigneeOptions={ownerOptions.map((o) => ({
+              id: o.id,
+              label: o.name,
+            }))}
+          />
+        )
         return (
           <>
             {/* P3 (C6d) — mobile single-column tabbed shell (<lg).

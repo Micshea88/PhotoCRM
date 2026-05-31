@@ -135,6 +135,7 @@ export async function loadContactActivityWithDb(
     for (const n of notesRows) {
       entries.push({
         id: `note-${n.id}`,
+        rawId: n.id,
         kind: "note",
         timestamp: n.createdAt,
         title: "Note added",
@@ -150,6 +151,7 @@ export async function loadContactActivityWithDb(
           : ""
       entries.push({
         id: `call-${c.id}`,
+        rawId: c.id,
         kind: "call",
         timestamp: c.startedAt,
         title: `Call (${c.direction})${dur}`,
@@ -161,6 +163,7 @@ export async function loadContactActivityWithDb(
     for (const m of meetingsRows) {
       entries.push({
         id: `meeting-${m.id}`,
+        rawId: m.id,
         kind: "meeting",
         timestamp: m.startsAt,
         title: m.subject ? `Meeting — ${m.subject}` : "Meeting",
@@ -172,6 +175,7 @@ export async function loadContactActivityWithDb(
     for (const s of smsRows) {
       entries.push({
         id: `sms-${s.id}`,
+        rawId: s.id,
         kind: "sms",
         timestamp: s.sentAt,
         title: `SMS (${s.direction})`,

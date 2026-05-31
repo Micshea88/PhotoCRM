@@ -45,16 +45,23 @@ export interface SummaryResult {
 }
 
 function buildSystemPrompt(): string {
-  // Fix 9.2 — tightened. The Fix 9 prompt had 12+ DON'Ts and 5 style
-  // bullets at 600 maxTokens; Haiku 4.5 was burning its output budget
-  // on internal reasoning and returning empty text blocks (stop_reason
-  // tells us if it was max_tokens or refusal). This version mirrors
-  // the classifier's brevity — single paragraph of intent plus a
-  // short style line, then the output contract.
   return [
-    "You brief a photographer on a CRM contact in one short paragraph (~2-4 sentences) for their Overview tab.",
-    "Draw from the recent activity (notes/calls/meetings/sms) as the primary source. Facts are background context.",
-    "Style: natural prose. Open with the relationship or situation (e.g. 'Wedding lead — Jimmy and Janie...'), prefer first names, reference specifics (dates, venues, decisions). Skip absent facts. No status-field phrasing ('classified as', '1 referral(s)').",
+    "You write a single short paragraph (~2-4 natural sentences) summarizing a CRM contact for a photographer's overview tab.",
+    "",
+    "STYLE:",
+    "- Use the recent activity as your PRIMARY source for what's happening. Facts are background context.",
+    "- Open with the relationship or situation, not the contact's full name. Examples: 'Wedding lead — Jimmy and Janie...', 'Active conversation with Sarah about...', 'Vendor contact at The Vinoy...'.",
+    "- Prefer first names. Use last names only for disambiguation.",
+    "- Reference specific details from the activity (dates, venues, decisions, blockers, what was discussed).",
+    "- Write the way a photographer would brief themselves — not the way a database would render a status field.",
+    "",
+    "DON'T:",
+    "- Don't use 'is classified as', 'has been categorized as', 'has X count of Y'.",
+    "- Don't use template pluralization like '1 referral(s)' or '0 day(s) since'.",
+    "- Don't mention facts that are zero or empty — just omit them.",
+    "- Don't hallucinate dates, names, or details not in the activity or facts.",
+    "- Don't include test-data artifacts in names (if a name has a '-Test' suffix, use the first name alone).",
+    "",
     `Hard cap: ${String(MAX_SUMMARY_CHARS)} characters.`,
     "Output: ONLY the paragraph text. No JSON, no markdown, no preamble.",
   ].join("\n")
@@ -247,74 +254,42 @@ export async function generateContactSummary(
   const systemPrompt = buildSystemPrompt()
   const userPrompt = buildUserPrompt(facts, slice, classifiedStatus, recentActivity)
   try {
-    // Fix 9.2 — bumped maxTokens to 1200. The prior 600 was tight
-    // when Haiku 4.5 chose to emit a thinking block: the wrapper
-    // filters non-text blocks, leaving `raw` empty when the budget
-    // was eaten by thinking. 1200 gives 4x headroom for the 800-char
-    // paragraph output even with internal preamble.
-    const first = await callAiModel({
+    const resp = await callAiModel({
       systemPrompt,
       userPrompt,
       model: HAIKU_MODEL,
-      maxTokens: 1200,
+      maxTokens: 600,
     })
-    const firstText = first.raw.trim().slice(0, MAX_SUMMARY_CHARS)
-    if (firstText) {
+    const text = resp.raw.trim().slice(0, MAX_SUMMARY_CHARS)
+    if (!text) {
+      // Defensive diagnostic. A plain Haiku call (no `thinking` request
+      // param, no tools) returns a text block; the empty-`raw` branch
+      // is not on the known failing path but if it ever fires the
+      // stopReason / contentBlockTypes fields make it self-describing
+      // in prod logs.
+      log.warn(
+        {
+          feature: "contacts.summary",
+          stopReason: resp.stopReason,
+          contentBlockTypes: resp.contentBlockTypes,
+          tokensUsed: resp.tokensUsed,
+        },
+        "summary empty — falling back to template",
+      )
       return {
-        text: firstText,
-        source: "haiku",
-        modelUsed: first.modelName,
-        tokensUsed: first.tokensUsed,
-        errorMessage: null,
+        text: buildFallbackSummary(facts, slice, classifiedStatus),
+        source: "fallback-template",
+        modelUsed: "rules-engine@1",
+        tokensUsed: null,
+        errorMessage: "Haiku returned empty",
       }
     }
-
-    // Fix 9.2 — retry path. Mirrors the classifier's structure: when
-    // the first attempt returns empty (no text block, refusal, or
-    // max-tokens cutoff before any text was emitted), retry once with
-    // a stricter prompt. Log the diagnostic fields so prod logs name
-    // the cause without re-shipping instrumentation.
-    log.warn(
-      {
-        feature: "contacts.summary",
-        stopReason: first.stopReason,
-        contentBlockTypes: first.contentBlockTypes,
-        tokensUsed: first.tokensUsed,
-      },
-      "summary first-pass empty — retrying with stricter prompt",
-    )
-    const retry = await callAiModel({
-      systemPrompt:
-        systemPrompt +
-        "\n\nIMPORTANT: Your previous output was empty. Return ONLY the paragraph — no thinking, no preamble, no JSON, no markdown. Start writing the paragraph immediately on the next line.",
-      userPrompt,
-      model: HAIKU_MODEL,
-      maxTokens: 1200,
-    })
-    const retryText = retry.raw.trim().slice(0, MAX_SUMMARY_CHARS)
-    if (retryText) {
-      return {
-        text: retryText,
-        source: "haiku",
-        modelUsed: retry.modelName,
-        tokensUsed: retry.tokensUsed,
-        errorMessage: null,
-      }
-    }
-    log.warn(
-      {
-        feature: "contacts.summary",
-        stopReason: retry.stopReason,
-        contentBlockTypes: retry.contentBlockTypes,
-      },
-      "summary retry also empty — falling back to template",
-    )
     return {
-      text: buildFallbackSummary(facts, slice, classifiedStatus),
-      source: "fallback-template",
-      modelUsed: "rules-engine@1",
-      tokensUsed: null,
-      errorMessage: `Haiku returned empty (stop_reason=${first.stopReason ?? "null"}, blocks=${first.contentBlockTypes.join(",")})`,
+      text,
+      source: "haiku",
+      modelUsed: resp.modelName,
+      tokensUsed: resp.tokensUsed,
+      errorMessage: null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

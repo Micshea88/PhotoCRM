@@ -41,9 +41,9 @@ vi.mock("@/lib/ai-model", () => ({
       model: args.model,
     })
     // Per-call route by feature inferred from the system prompt.
-    // Fix 9.2 — the summary prompt now opens with "You brief a
-    // photographer..." (was "You write a single short paragraph").
-    if (args.systemPrompt.startsWith("You brief a photographer")) {
+    // The summary generator's system prompt starts with "You write a
+    // single short paragraph..." — return a believable summary.
+    if (args.systemPrompt.startsWith("You write a single short paragraph")) {
       return Promise.resolve({
         raw: "Wedding lead — Jimmy and Janie are getting married at the Vinoy on December 27, 2026, with 300 guests. They've agreed we should be their photographer pending mom-approval.",
         modelName: "claude-haiku-4-5-20251001",
@@ -118,7 +118,9 @@ describe("Fix 9.1 — full pipeline threads note content into the Haiku summary 
 
       // Two AI calls expected: classifier + summary.
       expect(aiCalls.length).toBeGreaterThanOrEqual(2)
-      const summaryCall = aiCalls.find((c) => c.systemPrompt.startsWith("You brief a photographer"))
+      const summaryCall = aiCalls.find((c) =>
+        c.systemPrompt.startsWith("You write a single short paragraph"),
+      )
       expect(summaryCall).toBeDefined()
 
       // The summary user prompt MUST contain the Recent activity block.

@@ -1,18 +1,19 @@
 /**
- * Push 3 polish #5 Fix 9.2 — `callAiModel` wrapper contract test.
+ * `callAiModel` wrapper contract — defensive coverage for the
+ * SDK→wrapper response-shape boundary.
  *
- * The Fix 9.1 test mocked the wrapper itself, so a real request/parse
- * failure was invisible. This test mocks the Anthropic SDK INSIDE
- * `callAiModel`'s import boundary — exercising the wrapper's request
- * build + response extraction against fixture-shaped responses that
- * mirror what the SDK actually returns.
+ * The wrapper concatenates text from "text" content blocks and
+ * surfaces `stopReason` + `contentBlockTypes` so any future
+ * empty-`raw` branch is self-describing in prod logs. These are
+ * pre-existing return-value fields whose contract is validated here
+ * — they don't change wrapper behavior for normal calls (a plain
+ * messages.create with no `thinking` request param and no tools
+ * returns a single text block, exercised by the happy-path case).
  *
- * Covers the bug Mike reported: when Haiku 4.5 returns a non-text
- * content block (thinking / refusal / tool_use), the wrapper used to
- * silently discard it, leaving `raw` empty and downstream callers
- * with no diagnostic. Fix 9.2 surfaces `stopReason` and
- * `contentBlockTypes` so the empty-raw path is debuggable from prod
- * logs.
+ * The non-text-block cases (thinking-only, mixed thinking+text,
+ * refusal) are speculative fixtures — they assert the wrapper would
+ * handle those response shapes if they ever appeared. They do not
+ * reproduce or prove any specific live failure.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -32,7 +33,7 @@ beforeEach(() => {
   createMock.mockReset()
 })
 
-describe("callAiModel — Fix 9.2 wrapper contract", () => {
+describe("callAiModel — wrapper contract", () => {
   it("happy path: extracts text from a TextBlock, exposes stopReason + types", async () => {
     createMock.mockResolvedValueOnce({
       content: [{ type: "text", text: "Wedding lead — Jimmy and Janie." }],
@@ -53,10 +54,11 @@ describe("callAiModel — Fix 9.2 wrapper contract", () => {
     expect(r.modelName).toBe("claude-haiku-4-5-20251001")
   })
 
-  it("thinking-only response (the real Fix 9.2 bug): raw is empty, stopReason + types name the cause", async () => {
-    // This is what Haiku 4.5 can return when it burns its output
-    // budget on internal thinking and hits max_tokens before any
-    // text is emitted. The wrapper now surfaces it.
+  it("thinking-only response (speculative shape): raw is empty, stopReason + types name the cause", async () => {
+    // Speculative — a plain Haiku call (no `thinking` request param,
+    // no tools) does not return this shape. The fixture asserts the
+    // wrapper would handle a thinking-only block if one ever
+    // appeared, by surfacing stopReason + contentBlockTypes.
     createMock.mockResolvedValueOnce({
       content: [{ type: "thinking", thinking: "Let me reason about this contact..." }],
       stop_reason: "max_tokens",

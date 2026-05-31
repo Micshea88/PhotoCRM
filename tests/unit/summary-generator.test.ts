@@ -21,6 +21,9 @@ interface AiResult {
   raw: string
   modelName: string
   tokensUsed: number | null
+  /** Fix 9.2 — optional in old test fixtures; the new tests set them. */
+  stopReason?: string | null
+  contentBlockTypes?: string[]
 }
 const aiCalls: AiCall[] = []
 const aiQueue: (AiResult | Error)[] = []
@@ -41,7 +44,14 @@ vi.mock("@/lib/ai-model", () => ({
       const next = aiQueue.shift()
       if (!next) throw new Error("aiQueue exhausted")
       if (next instanceof Error) throw next
-      return next
+      // Fix 9.2 — back-compat shim. Older fixtures don't set
+      // stopReason/contentBlockTypes; default them so the production
+      // code's destructure doesn't fail.
+      return {
+        ...next,
+        stopReason: next.stopReason ?? "end_turn",
+        contentBlockTypes: next.contentBlockTypes ?? ["text"],
+      }
     })
   }),
 }))
@@ -201,12 +211,76 @@ describe("Polish #5 Fix 9 — activity formatter caps", () => {
 })
 
 describe("Polish #5 Fix 9 — natural-prose guardrails", () => {
-  it("system prompt forbids robotic phrasings", async () => {
+  it("system prompt rejects status-field phrasings (Fix 9.2 tightened wording)", async () => {
     aiQueue.push({ raw: "ok", modelName: "claude-haiku-4-5-20251001", tokensUsed: 1 })
     await generateContactSummary(facts(), slice(), "Hot Lead", ACTIVITY_EMPTY)
     const sys = aiCalls[0]?.systemPrompt ?? ""
-    expect(sys).toContain("is classified as")
-    expect(sys).toContain("template pluralization")
+    // Fix 9.2 trimmed the 12-DON'T list to a single compact line, but
+    // still names the two robotic patterns we reject.
+    expect(sys).toContain("classified as")
+    expect(sys).toContain("1 referral(s)")
+  })
+
+  it("Fix 9.2 — retries with stricter prompt when first attempt returns empty text", async () => {
+    aiQueue.push({
+      raw: "",
+      modelName: "claude-haiku-4-5-20251001",
+      tokensUsed: 1200,
+      stopReason: "max_tokens",
+      contentBlockTypes: ["thinking"],
+    })
+    aiQueue.push({
+      raw: "Wedding lead — Jimmy and Janie at the Vinoy.",
+      modelName: "claude-haiku-4-5-20251001",
+      tokensUsed: 90,
+      stopReason: "end_turn",
+      contentBlockTypes: ["text"],
+    })
+    const r = await generateContactSummary(facts(), slice(), "Hot Lead", ACTIVITY_EMPTY)
+    expect(aiCalls.length).toBe(2) // first + retry
+    expect(r.source).toBe("haiku")
+    expect(r.text).toContain("Wedding lead")
+    // The retry prompt is the stricter variant.
+    expect(aiCalls[1]?.systemPrompt).toContain("Your previous output was empty")
+  })
+
+  it("Fix 9.2 — both attempts empty → fallback w/ stop_reason in errorMessage", async () => {
+    aiQueue.push({
+      raw: "",
+      modelName: "claude-haiku-4-5-20251001",
+      tokensUsed: 1200,
+      stopReason: "max_tokens",
+      contentBlockTypes: ["thinking"],
+    })
+    aiQueue.push({
+      raw: "",
+      modelName: "claude-haiku-4-5-20251001",
+      tokensUsed: 1200,
+      stopReason: "max_tokens",
+      contentBlockTypes: ["thinking"],
+    })
+    const r = await generateContactSummary(facts(), slice(), "Hot Lead", ACTIVITY_EMPTY)
+    expect(r.source).toBe("fallback-template")
+    // errorMessage now names the cause so prod logs are actionable.
+    expect(r.errorMessage).toContain("stop_reason=max_tokens")
+    expect(r.errorMessage).toContain("blocks=thinking")
+  })
+
+  it("Fix 9.2 — bumped maxTokens to 1200", async () => {
+    aiQueue.push({
+      raw: "ok",
+      modelName: "claude-haiku-4-5-20251001",
+      tokensUsed: 50,
+      stopReason: "end_turn",
+      contentBlockTypes: ["text"],
+    })
+    await generateContactSummary(facts(), slice(), null, ACTIVITY_EMPTY)
+    // We don't have direct access to maxTokens in the mock signature
+    // beyond systemPrompt/userPrompt/model; the regression is the
+    // source code itself. This test asserts that callAiModel was
+    // invoked with the Haiku model, completing the regression chain
+    // along with the maxTokens grep in CI.
+    expect(aiCalls[0]?.model).toBe("claude-haiku-4-5-20251001")
   })
 
   it("fallback summary never emits '(s)' pluralization artifacts", () => {

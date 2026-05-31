@@ -47,6 +47,21 @@ export interface CallAiModelResult {
   modelName: string
   /** Tokens consumed by this call (input + output), null if unknown. */
   tokensUsed: number | null
+  /**
+   * Anthropic's `stop_reason` — `"end_turn"`, `"max_tokens"`,
+   * `"stop_sequence"`, `"tool_use"`, `"pause_turn"`, `"refusal"`,
+   * `"model_context_window_exceeded"`. Critical for diagnosing why
+   * `raw` came back empty or truncated. See Fix 9.2.
+   */
+  stopReason: string | null
+  /**
+   * The set of `ContentBlock.type` values returned by Anthropic. The
+   * wrapper extracts text from `"text"` blocks only; when this array
+   * includes `"thinking"` / `"redacted_thinking"` and no `"text"` the
+   * model burned its token budget on thinking. Surfaced for logs so
+   * the empty-`raw` branch is debuggable.
+   */
+  contentBlockTypes: string[]
 }
 
 const NOT_CONFIGURED_MESSAGE =
@@ -74,6 +89,7 @@ export async function callAiModel(args: CallAiModelArgs): Promise<CallAiModelRes
   // arrives (tool_use, multi-block), we surface the concatenation;
   // the validation gate will reject if it's not parseable JSON.
   const raw = response.content.map((block) => (block.type === "text" ? block.text : "")).join("")
+  const contentBlockTypes = response.content.map((block) => block.type)
 
   const tokensUsed =
     typeof response.usage.input_tokens === "number" &&
@@ -81,5 +97,11 @@ export async function callAiModel(args: CallAiModelArgs): Promise<CallAiModelRes
       ? response.usage.input_tokens + response.usage.output_tokens
       : null
 
-  return { raw, modelName: model, tokensUsed }
+  return {
+    raw,
+    modelName: model,
+    tokensUsed,
+    stopReason: response.stop_reason,
+    contentBlockTypes,
+  }
 }

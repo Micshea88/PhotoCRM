@@ -305,7 +305,18 @@ function buildContactConditions(filters: ContactFilterOverrides): SQL[] {
   if (filters.companyId) push(eq(contacts.companyId, filters.companyId))
   if (filters.leadSource) push(eq(contacts.leadSource, filters.leadSource))
   if (filters.tags && filters.tags.length > 0) {
-    push(sql`${contacts.tags} && ${filters.tags}::text[]`)
+    // Push 4 followup — Drizzle binds a JS `string[]` as a quoted
+    // scalar (e.g. `"Photographer"`), so `${filters.tags}::text[]`
+    // fails with PG `22P02 malformed array literal` (array values
+    // must start with `{`). Build the postgres array explicitly so
+    // each tag lands as its own bound text parameter inside an
+    // `ARRAY[...]::text[]` literal — `&&` (overlap) then matches
+    // any contact whose tag column shares at least one element.
+    const tagParams = sql.join(
+      filters.tags.map((t) => sql`${t}`),
+      sql`, `,
+    )
+    push(sql`${contacts.tags} && ARRAY[${tagParams}]::text[]`)
   }
   if (filters.createdFrom) push(sql`${contacts.createdAt} >= ${filters.createdFrom}::date`)
   if (filters.createdTo) {

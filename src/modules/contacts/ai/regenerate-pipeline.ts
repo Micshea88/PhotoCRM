@@ -2,6 +2,7 @@ import "server-only"
 import { and, eq, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { audit } from "@/modules/audit/audit"
+import { log } from "@/lib/log"
 import type * as schema from "@/db/schema"
 import { contacts } from "../schema"
 import { loadContactActivityWithDb } from "../activity-loader"
@@ -123,6 +124,9 @@ export async function runRegeneratePipeline(
   let summary: SummaryResult
   let floor = false
   let trace: RegeneratePipelineResult["trace"]
+  let recentActivityCount = 0
+  let recentActivityCharTotal = 0
+  let summaryErrorMessage: string | null = null
 
   if (isEmptyContact(facts)) {
     floor = true
@@ -154,7 +158,35 @@ export async function runRegeneratePipeline(
     // just-committed activity (e.g. after a note insert through
     // createContactNote nulled the cache).
     const recentActivity = await loadContactActivityWithDb(db, ctx.organizationId, row.id)
+    // Fix 9.1 — diagnostic. Surface the activity-entries count + a
+    // body-char total at info level so prod logs answer "did
+    // activity reach the prompt" without re-running. The pipeline
+    // already audits classifier + summary source; this adds the one
+    // signal the earlier fix lacked.
+    recentActivityCount = recentActivity.length
+    recentActivityCharTotal = recentActivity.reduce((acc, e) => acc + (e.body?.length ?? 0), 0)
+    log.info(
+      {
+        feature: "contacts.summary",
+        contactId: row.id,
+        recentActivityEntries: recentActivityCount,
+        recentActivityCharTotal,
+      },
+      "[ai-summary] activity loaded for prompt",
+    )
     summary = await generateContactSummary(facts, slice, classifier.status, recentActivity)
+    summaryErrorMessage = summary.errorMessage
+    log.info(
+      {
+        feature: "contacts.summary",
+        contactId: row.id,
+        source: summary.source,
+        model: summary.modelUsed,
+        errorMessage: summary.errorMessage,
+        textLength: summary.text.length,
+      },
+      "[ai-summary] generator result",
+    )
     trace = {
       floor: false,
       classifier: classifier.source,
@@ -232,6 +264,13 @@ export async function runRegeneratePipeline(
         classifierSource: classifier.source,
         summarySource: summary.source,
         insightCount: insights.length,
+        // Fix 9.1 diagnostic — surface why the summary path took the
+        // branch it took. recentActivityEntries === 0 means activity
+        // didn't load; summaryErrorMessage tells you why Haiku fell
+        // back to the template.
+        recentActivityEntries: recentActivityCount,
+        recentActivityCharTotal,
+        summaryErrorMessage,
       },
     },
   )

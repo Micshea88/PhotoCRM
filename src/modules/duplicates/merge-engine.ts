@@ -7,9 +7,12 @@ import { audit } from "@/modules/audit/audit"
 import { callLog } from "@/modules/calls/schema"
 import { companies } from "@/modules/companies/schema"
 import { contactCompanyAssociations, contactNotes, contacts } from "@/modules/contacts/schema"
+import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { meetings } from "@/modules/meetings/schema"
 import { opportunities } from "@/modules/opportunities/schema"
 import { paymentInstallments } from "@/modules/invoices/schema"
 import { projectContacts, projects } from "@/modules/projects/schema"
+import { smsMessages } from "@/modules/sms-messages/schema"
 import type * as schema from "@/db/schema"
 
 /**
@@ -61,6 +64,19 @@ export const mergeContactsInput = z.object({
   winnerId: z.string().min(1),
   loserIds: z.array(z.string().min(1)).min(1).max(10),
   fieldChoices: z.record(z.string(), z.string()).optional().default({}),
+  /**
+   * P3 (C7) — per-field custom-value overrides. When the user
+   * inline-edits a field in the side-by-side merge UI, the typed
+   * value lands here. Takes precedence over `fieldChoices` for
+   * matching keys. Intrinsic field overrides write into the merged
+   * row directly; `cf:<defId>` overrides write into the merged
+   * customFields jsonb. Tags / mailingAddress accept whole-blob
+   * overrides via the field name keys (`tags`, `mailingAddress`).
+   *
+   * Backwards compatible: B2 duplicates-modal callers pass no
+   * overrides and the existing pick-only flow applies.
+   */
+  customOverrides: z.record(z.string(), z.unknown()).optional(),
   tagsMode: tagsModeSchema.default({ mode: "union" }),
   companiesMode: companiesModeSchema.default({ mode: "union" }),
 })
@@ -147,6 +163,7 @@ export async function executeContactMerge(
   input: MergeContactsInput,
 ): Promise<{ winnerId: string; mergedFromIds: string[] }> {
   const { winnerId, loserIds, fieldChoices, tagsMode, companiesMode } = input
+  const customOverrides = input.customOverrides ?? {}
   validateInput(winnerId, loserIds)
   const allIds = [winnerId, ...loserIds]
 
@@ -254,13 +271,83 @@ export async function executeContactMerge(
     mergedTags = u.length === 0 ? null : u
   }
 
-  const mergedCustom = mergeCustomFieldsJsonb(
+  let mergedCustom = mergeCustomFieldsJsonb(
     winner.customFields ?? null,
     losersById,
     winnerId,
     fieldChoices,
   )
   const oldestCreatedAt = pickOldestDate(locked)
+
+  // P3 (C7) — apply customOverrides over the pick-only result. The
+  // C7 side-by-side UI lets the user inline-edit any winning value;
+  // those typed values arrive here as customOverrides[fieldKey] and
+  // win over both `fieldChoices` and the auto-rescue defaults.
+  //
+  // Intrinsic field keys map directly onto the merged object.
+  // `tags` / `mailingAddress` accept whole-blob overrides.
+  // `cf:<defId>` keys flow into the merged customFields jsonb.
+  const intrinsicOverrideKeys = [
+    "firstName",
+    "lastName",
+    "primaryEmail",
+    "secondaryEmail",
+    "primaryPhone",
+    "secondaryPhone",
+    "contactType",
+    "lifecycleStatus",
+    "leadSource",
+    "sourceDetail",
+    "companyId",
+    "ownerUserId",
+    "instagramHandle",
+    "instagramUserId",
+    "facebookUrl",
+    "website",
+    "notes",
+    "internalNotes",
+    "dob",
+    "anniversaryDate",
+    "referredByContactId",
+  ] as const
+  type IntrinsicKey = (typeof intrinsicOverrideKeys)[number]
+  for (const key of intrinsicOverrideKeys) {
+    if (key in customOverrides) {
+      // Trust the caller's value shape — UI is the gatekeeper.
+      // Drizzle column types coerce string|null appropriately.
+      ;(merged as Record<IntrinsicKey, unknown>)[key] = customOverrides[key]
+    }
+  }
+  if ("tags" in customOverrides) {
+    const next = customOverrides.tags
+    if (Array.isArray(next)) {
+      mergedTags = next.length === 0 ? null : (next as string[])
+    } else if (next === null) {
+      mergedTags = null
+    }
+  }
+  if ("mailingAddress" in customOverrides) {
+    const next = customOverrides.mailingAddress
+    if (next === null || (typeof next === "object" && !Array.isArray(next))) {
+      merged.mailingAddress = next as typeof merged.mailingAddress
+    }
+  }
+  // Custom-field per-key overrides (`cf:<defId>`).
+  for (const [key, value] of Object.entries(customOverrides)) {
+    if (!key.startsWith("cf:")) continue
+    const defId = key.slice(3)
+    if (value === null || value === undefined) {
+      if (mergedCustom && defId in mergedCustom) {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete mergedCustom[defId]
+      }
+    } else {
+      // Promote a null mergedCustom to a real object so the override
+      // can land.
+      mergedCustom ??= {}
+      mergedCustom[defId] = value
+    }
+  }
 
   const refTarget = merged.referredByContactId
   let finalReferredBy = refTarget
@@ -408,6 +495,26 @@ export async function executeContactMerge(
       and(eq(callLog.organizationId, ctx.organizationId), inArray(callLog.contactId, loserIds)),
     )
 
+  // P3 (C7) — relink meetings + SMS messages. The C6a schema added
+  // both tables with `contact_id` FKs to contacts; without these
+  // updates the activity feed loses entries when a contact is
+  // soft-deleted via merge.
+  await db
+    .update(meetings)
+    .set({ contactId: winnerId })
+    .where(
+      and(eq(meetings.organizationId, ctx.organizationId), inArray(meetings.contactId, loserIds)),
+    )
+  await db
+    .update(smsMessages)
+    .set({ contactId: winnerId })
+    .where(
+      and(
+        eq(smsMessages.organizationId, ctx.organizationId),
+        inArray(smsMessages.contactId, loserIds),
+      ),
+    )
+
   await db
     .update(opportunities)
     .set({ contactId: winnerId })
@@ -460,6 +567,13 @@ export async function executeContactMerge(
 
   // Loser soft-delete already happened above (see P3 C4 comment) so
   // the winner UPDATE could pass the partial unique constraints.
+
+  // P3 (C7 / polish #5 Fix 8) — bust the winner's AI cache. The
+  // newly-relinked activities + the merged field values invalidate
+  // any cached classifier output / summary / insights. The next
+  // page render auto-regens with fresh facts.
+  await invalidateContactAiCache(db, ctx.organizationId, winnerId)
+
   return { winnerId, mergedFromIds: loserIds }
 }
 

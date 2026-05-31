@@ -874,6 +874,7 @@ export function ContactForm({
           matchedContactLabel={dedupLabel}
           matchedContactSubtext={dedupSubtext}
           matchedField={dedupConflict.matchedField}
+          currentContactId={initialContact?.id ?? null}
         />
       )}
     </form>

@@ -203,6 +203,27 @@ export function SelectionBanner({
           >
             Bulk edit
           </Button>
+          {/* P3 (C7) — bulk merge: only enabled when exactly 2
+              contacts are selected (V1 = pairwise). Routes to the
+              merge surface; the destination URL uses the first
+              selected id as the "this" contact and the second as
+              the "?with=" contact. */}
+          {count === 2 && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                const [first, second] = selectedIds
+                if (first && second) {
+                  window.location.href = `/contacts/${first}/merge?with=${second}`
+                }
+              }}
+              data-testid="bulk-merge"
+            >
+              Merge
+            </Button>
+          )}
           <Button
             size="sm"
             // Destructive style — red bg via inline class since the

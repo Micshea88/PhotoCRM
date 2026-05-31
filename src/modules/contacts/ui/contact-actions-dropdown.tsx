@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/modal"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { archiveContact, deleteContact } from "../actions"
+import { MergeWithPicker } from "./merge-with-picker"
 
 /**
  * Push 3 (C6c polish #2) — locked Actions dropdown.
@@ -45,18 +46,19 @@ const PLACEHOLDERS = {
     title: "Export contact data",
     body: "Single-contact export (PDF / CSV / vCard) ships in an upcoming push. Use the contacts list bulk-export when it arrives.",
   },
-  merge: {
-    title: "Merge contact",
-    body: "Manual merge entry point ships with C7 — the picker chooses which contact to merge INTO this one, then the existing merge engine runs the side-by-side flow.",
-  },
 } as const
 
 export function ContactActionsDropdown({
   contactId,
   archived,
+  mergeOptions = [],
 }: {
   contactId: string
   archived: boolean
+  /** P3 C7 — every other contact in the org, except this one. Powers
+   *  the "Merge with…" picker. Empty array → no other contacts, so
+   *  Merge stays selectable but the picker shows an empty list. */
+  mergeOptions?: { id: string; label: string; description?: string | null }[]
 }) {
   const router = useRouter()
   const [archiveBusy, setArchiveBusy] = useState(false)
@@ -64,6 +66,7 @@ export function ContactActionsDropdown({
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [placeholder, setPlaceholder] = useState<keyof typeof PLACEHOLDERS | null>(null)
+  const [mergeOpen, setMergeOpen] = useState(false)
 
   async function onArchive() {
     setArchiveBusy(true)
@@ -120,10 +123,11 @@ export function ContactActionsDropdown({
           </Item>
           <Item
             onClick={() => {
-              setPlaceholder("merge")
+              setMergeOpen(true)
             }}
+            data-testid="actions-merge-with"
           >
-            Merge
+            Merge with…
           </Item>
           <Item
             onClick={() => {
@@ -187,6 +191,15 @@ export function ContactActionsDropdown({
           </p>
         </Modal>
       )}
+
+      <MergeWithPicker
+        open={mergeOpen}
+        onClose={() => {
+          setMergeOpen(false)
+        }}
+        thisContactId={contactId}
+        options={mergeOptions}
+      />
     </>
   )
 }
@@ -197,12 +210,14 @@ function Item({
   onClick,
   disabled,
   destructive,
+  "data-testid": testId,
 }: {
   children: React.ReactNode
   href?: string
   onClick?: () => void
   disabled?: boolean
   destructive?: boolean
+  "data-testid"?: string
 }) {
   const cls = cn(
     "block w-full rounded px-2 py-1.5 text-left",
@@ -222,7 +237,14 @@ function Item({
   }
   return (
     <li>
-      <button type="button" role="menuitem" onClick={onClick} disabled={disabled} className={cls}>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onClick}
+        disabled={disabled}
+        className={cls}
+        data-testid={testId}
+      >
         {children}
       </button>
     </li>

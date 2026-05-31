@@ -483,6 +483,111 @@ ship, the modal bodies wire up without any visual rework.
 
 ---
 
+## 10. Merge UI (Push 3 C7)
+
+Dedicated full-page route at `/contacts/[id]/merge?with=[otherId]`
+for manual pairwise merges. Replaces the conflict-only B2 modal as
+the primary merge surface for user-initiated merges. The
+auto-detection scan at `/contacts/duplicates` continues to use the
+existing B2 modal for 3+ duplicate groups; pairwise auto-detected
+groups can route to this surface too.
+
+### Entry points (V1)
+
+1. Contact detail page Actions dropdown → **"Merge with…"** opens
+   `MergeWithPicker` (modal). User picks the other contact from a
+   `SearchableSelect`. On Continue → router pushes to the merge
+   route.
+2. Contacts list selection banner → when **exactly 2** contacts are
+   selected, a **Merge** button appears next to Bulk edit. Click
+   navigates to `/contacts/<first>/merge?with=<second>`. 3+
+   selected = no Merge button (multi-way merge is V1.5).
+3. Pre-write dedup hard block modal (`DedupBlockModal`) → when
+   firing from an UPDATE (currentContactId present), a **"Merge
+   with existing"** button surfaces alongside "Go to existing
+   contact". Routes the user to merge the contact they were
+   editing with the matched contact. CREATE-mode dedup hides the
+   button (there's no contact yet to merge).
+
+### Layout
+
+- **Header**: back link + page title "Merge contacts" + the
+  primary action button ("Merge X → Y") in the top-right.
+- **Body**: a single unified bordered card with `divide-y` between
+  rows (per §2 box rule). 3-column grid on lg+:
+  `[label 200px] [column A] [column B]`. Mobile (<lg) stacks rows
+  vertically.
+- **Column headers**: A's name + email subtitle, B's name + email
+  subtitle. Each carries a **"Set as primary"** button (or a
+  "Primary" badge when active). Switching primary clears local
+  picks + overrides so defaults recompute from the new winner.
+- **Field rows**: every intrinsic + custom field renders side by
+  side regardless of conflict (per memory #23 "TRUE side-by-side
+  full-record view, not conflict-only"). Default winner = primary,
+  auto-rescue to non-empty when primary is empty.
+- **Special rows**: Tags use a 3-mode radio (A / B / Merged union)
+  - a `SearchableMultiSelect` inline override; Mailing address is a
+    whole-blob pick V1; custom fields are per-key picks.
+
+### Interaction model (hybrid pick + edit)
+
+The **winning side** of each row renders the appropriate inline-edit
+primitive (`InlineEditField` / `InlineEditSelect` /
+`SearchableMultiSelect`). The non-winning side renders as a plain
+underlined click-to-select button.
+
+Three interactions per row:
+
+1. Click non-winning → swap winner; the new winning side's value
+   loads into the inline-edit primitive.
+2. Click/focus winning → enter inline edit mode. Autosave on blur
+   or Enter to local draft state (NOT a server action). Esc reverts
+   to that side's original value.
+3. Custom-edited values render an **"edited" pill** (amber, with a
+   pencil icon) so the user sees they've overridden both A and B.
+
+### Server contract
+
+The UI batches all picks + overrides into one `mergeContacts`
+action call (the Push 4 B2 engine, extended in C7):
+
+```ts
+mergeContacts({
+  winnerId,
+  loserIds: [otherId],
+  fieldChoices: Record<fieldKey, recordId>, // per-field "pick A or B"
+  customOverrides: Record<fieldKey, unknown>, // per-field typed value (wins over picks)
+  tagsMode: { mode: "union" | "use", fromId? },
+  companiesMode: { mode: "union" | "use", fromId? },
+})
+```
+
+The engine atomically:
+
+1. Locks both rows (`SELECT … FOR UPDATE`).
+2. Computes merged values from `fieldChoices` + `customOverrides`.
+3. Audits FIRST.
+4. Soft-deletes the loser (frees up unique constraints on email /
+   phone).
+5. Updates the winner.
+6. Repoints FKs on contact_notes, call_log, **meetings, sms_messages**
+   (added in C7), opportunities, project_contacts,
+   payment_installments, contact_company_associations.
+7. Busts the winner's AI cache via `invalidateContactAiCache` so
+   the next page render auto-regens with the merged record's facts
+   (polish #5 Fix 8 hook).
+
+### Tests
+
+- `tests/integration/c7-merge-pairwise.test.ts` — customOverrides
+  beat fieldChoices for intrinsic fields, tags whole-blob,
+  mailingAddress whole-blob, meetings + sms relinked, AI cache
+  busted, notes + calls regression.
+- Existing `tests/integration/duplicates-merge.test.ts` (B2 engine)
+  continues to pass — `customOverrides` is optional.
+
+---
+
 ## 8. Captured upcoming scope
 
 Recorded design decisions that aren't built yet. Each item lists
@@ -532,3 +637,17 @@ its target slot or trigger.
   The toolbar buttons (Bold / Italic / Underline / Strike / Attach /
   Sparkle) render visually complete now per the "Everything
   intentional" rule; the contenteditable pipeline lands later.
+- **3+ contact merge (multi-way)** → V1.5. The C7 engine accepts up
+  to 10 loserIds already (B2 inheritance), but the side-by-side UI
+  ships pairwise only in V1. List bulk action's Merge button hides
+  when more than 2 contacts are selected. Auto-detection scan at
+  `/contacts/duplicates` still routes 3+ groups through the existing
+  B2 modal until multi-way ships.
+- **Per-subfield address pick in merge UI** → V1.5. C7 ships
+  mailingAddress as a whole-blob pick; future polish lets the user
+  pick street / city / state / zip independently (matching the
+  contact detail About card's 3-line stacked pattern).
+- **Live merged-record preview column in merge UI** → V1.5. A 3rd
+  column showing the computed final record as the user picks /
+  edits. Today the user has to mentally compose the result; the
+  preview makes it explicit before the Merge button fires.

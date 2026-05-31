@@ -25,6 +25,7 @@ export function DedupBlockModal({
   matchedContactLabel,
   matchedContactSubtext,
   matchedField,
+  currentContactId,
 }: {
   open: boolean
   onClose: () => void
@@ -34,6 +35,13 @@ export function DedupBlockModal({
   /** Optional secondary line — typically the matched email/phone for context. */
   matchedContactSubtext?: string
   matchedField: DedupMatchField
+  /** P3 (C7) — when the dedup-block fires from an UPDATE on an
+   *  existing contact, the form passes this contact's id. Surfaces
+   *  the "Merge with existing" link that routes to the C7 merge
+   *  surface (`/contacts/<currentId>/merge?with=<matchedId>`). When
+   *  null (CREATE flow), the link is hidden — there's no contact
+   *  yet to merge with the matched one. */
+  currentContactId?: string | null
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Duplicate contact detected">
@@ -70,6 +78,16 @@ export function DedupBlockModal({
               Go to existing contact
             </Link>
           </Button>
+          {currentContactId && (
+            <Button asChild variant="outline">
+              <Link
+                href={`/contacts/${currentContactId}/merge?with=${matchedContactId}`}
+                data-testid="dedup-modal-merge-with-existing"
+              >
+                Merge with existing
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose} data-testid="dedup-modal-cancel">
             Cancel
           </Button>

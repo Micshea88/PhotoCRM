@@ -211,7 +211,15 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           >
             ← Contacts
           </Link>
-          <ContactActionsDropdown contactId={contact.id} archived={!!contact.archivedAt} />
+          <ContactActionsDropdown
+            contactId={contact.id}
+            archived={!!contact.archivedAt}
+            mergeOptions={referralOptions.map((c) => ({
+              id: c.id,
+              label: `${c.firstName} ${c.lastName}`.trim() || (c.primaryEmail ?? "") || c.id,
+              description: c.primaryEmail ?? null,
+            }))}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold">

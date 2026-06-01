@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Sparkles } from "lucide-react"
+import { AlertTriangle, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select"
@@ -15,7 +15,6 @@ import {
   buildCleanRow,
   buildCustomFieldMapping,
   buildErrorsCsv,
-  coerceImportRawToTyped,
   CSV_MAX_ROWS,
   detectFieldType,
   detectionAgreesWithMapping,
@@ -32,7 +31,10 @@ import {
   type MappingChoice,
   type ParsedCsv,
 } from "../import-spec"
-import { formatCustomFieldCell } from "@/modules/custom-fields/ui/column-helpers"
+// coerceImportRawToTyped + formatCustomFieldCell were used by the old
+// PreviewStep custom-field columns. The V2 layout drops those columns
+// (full data still imports — the action gets customValues unchanged);
+// imports removed to keep the lint-strict no-unused-vars rule happy.
 
 type Step = "upload" | "map" | "preview" | "done"
 const STEP_BY_NUM: Record<1 | 2 | 3 | 4, Step> = {
@@ -1205,8 +1207,21 @@ export function PreviewStep({
   // duplicates) from erroredRows.length so the summary banner can
   // surface "skipped due to errors" as its own red-text line.
   const previewSkipCount = previewRows.filter((p) => p.action === "skip").length
-  const warningCount = importableRows.filter((c) => c.warnings.length > 0).length
-  const duplicateCount = previewRows.filter((p) => p.duplicateOfRow !== null).length
+  // The old bulleted summary surfaced a separate "N rows have
+  // warnings" line. The V2 layout drops the bulleted summary in favor
+  // of three Create/Update/Skip metric cards; per-row warnings still
+  // surface inline in the table cell exactly as before.
+  // Two distinct counters here — both used by the V2 layout:
+  //  - dbMatchedCount: rows that match an existing DB contact (drives
+  //    the red "{N} duplicates found" header badge + the amber
+  //    warning strip).
+  //  - csvInternalDuplicateCount: rows whose IDENTIFIER matches an
+  //    earlier row in THIS CSV (surfaced inline as "Duplicate of
+  //    row N" per-row badges in the table — same Push 2c.3 surface,
+  //    just no longer counted in the top-level summary).
+  const dbMatchedCount = previewRows.filter((p) => p.matchedContactId !== null).length
+  const csvInternalDuplicateCount = previewRows.filter((p) => p.duplicateOfRow !== null).length
+  void csvInternalDuplicateCount
   const willImportCount = createCount + updateCount
 
   // Owner-from-csv preview: how many rows have an ownerUserId column
@@ -1229,49 +1244,72 @@ export function PreviewStep({
     ownerCsvResolveStats = { resolved, unresolved, missing }
   }
 
+  // CSV V2 layout — the "Skip" metric folds error rows + user-elected
+  // skips + CSV-internal duplicates into one bucket (matches what the
+  // user reads as "won't import").
+  const totalSkipCount = previewSkipCount + erroredRows.length
+  // Row total in the header — every cleanRows item, including error
+  // rows, so the user sees the real CSV row count.
+  const totalRowCount = cleanRows.length
+  // Duplicates = DB-matched rows. CSV-internal duplicates are
+  // separately surfaced via the per-row "Duplicate of row N" cell.
+  const hasDbDuplicates = dbMatchedCount > 0
+  // Used by the import button copy.
+  const importButtonLabel = busy
+    ? "Importing…"
+    : erroredRows.length > 0
+      ? `Import ${String(willImportCount)} rows (${String(erroredRows.length)} skipped due to errors)`
+      : `Import ${String(willImportCount)} rows`
+  // previewCustomFields and the per-row customValues coercion remain
+  // computed (the import action still receives + applies customValues
+  // unchanged), but the V2 layout does NOT render a custom-field column
+  // per def — full data still imports, just isn't shown in the dedupe
+  // preview to keep the table to four fixed columns per the approved
+  // mockup. void-ing previewCustomFields signals the intent without
+  // removing the computation in case downstream callers expect it.
+  void previewCustomFields
+
   return (
     <div className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
-      <div>
+      {/* 1. Header row — title left, row count + duplicate count right. */}
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-medium">Preview &amp; dedupe</h2>
+        <p className="text-xs" data-testid="csv-v2-preview-header-counts">
+          <span className="text-[var(--color-muted-foreground)]">
+            {String(totalRowCount)} {totalRowCount === 1 ? "row" : "rows"}
+          </span>
+          {hasDbDuplicates && (
+            <>
+              {" · "}
+              <span className="font-medium text-red-600 dark:text-red-400">
+                {String(dbMatchedCount)} {dbMatchedCount === 1 ? "duplicate" : "duplicates"} found
+              </span>
+            </>
+          )}
+        </p>
       </div>
 
-      {/* Push 2c.3 — validation summary. The skip-due-to-errors line
-          stands out in destructive red so users can't miss that some
-          rows won't import. Warning / duplicate lines keep amber
-          (will import; just heads-up). */}
-      <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 text-xs">
-        <p className="font-medium">Before import:</p>
-        <ul className="mt-1 list-disc space-y-0.5 pl-5">
-          <li>{String(createCount)} rows will create new contacts</li>
-          <li>{String(updateCount)} rows will update existing contacts</li>
-          {/* Skip count here excludes error rows — they get their own
-              red line below for visibility. */}
-          {previewSkipCount > 0 && <li>{String(previewSkipCount)} rows will be skipped</li>}
-          {warningCount > 0 && (
-            <li className="text-amber-700 dark:text-amber-300">
-              {String(warningCount)} rows have warnings (will import without the problem field)
-            </li>
-          )}
-          {duplicateCount > 0 && (
-            <li className="text-amber-700 dark:text-amber-300">
-              {String(duplicateCount)} rows look like duplicates of earlier rows in this CSV
-              (defaulted to Skip)
-            </li>
-          )}
-          {erroredRows.length > 0 && (
-            <li className="font-medium text-red-700 dark:text-red-400">
-              {String(erroredRows.length)} rows will be SKIPPED due to errors — fix these in your
-              CSV and re-upload to include them.
-            </li>
-          )}
-        </ul>
+      {/* 2. Three live metric cards. */}
+      <div className="grid grid-cols-3 gap-2" data-testid="csv-v2-preview-metrics">
+        <MetricCard label="Create" value={createCount} tone="success" />
+        <MetricCard label="Update" value={updateCount} tone="info" />
+        <MetricCard label="Skip" value={totalSkipCount} tone="muted" />
       </div>
 
-      {/* Bulk settings */}
-      <div className="grid grid-cols-1 gap-3 rounded-md border border-[var(--color-border)] p-3 md:grid-cols-2">
-        <fieldset className="space-y-1.5 text-sm">
-          <legend className="font-medium">Owner</legend>
-          <label className="flex items-center gap-2 text-xs">
+      {/* 3. Compact settings bar — Owner / Tag-all / Set-all-matched /
+             Set-all-unmatched in one horizontal strip with thin left-
+             border dividers. Wraps on narrow widths (each section
+             keeps its top-aligned vertical layout). */}
+      <div
+        className="flex flex-wrap items-stretch gap-x-4 gap-y-3 rounded-md border border-[var(--color-border)] p-3 text-xs"
+        data-testid="csv-v2-preview-settings-bar"
+      >
+        {/* Section 1 — Owner */}
+        <fieldset className="min-w-[200px] space-y-1.5">
+          <legend className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+            Owner
+          </legend>
+          <label className="flex items-center gap-2">
             <input
               type="radio"
               checked={ownerMode === "self"}
@@ -1281,7 +1319,7 @@ export function PreviewStep({
             />
             <span>Assign to me</span>
           </label>
-          <label className="flex items-center gap-2 text-xs">
+          <label className="flex items-center gap-2">
             <input
               type="radio"
               checked={ownerMode === "specific"}
@@ -1305,7 +1343,7 @@ export function PreviewStep({
               ))}
             </select>
           </label>
-          <label className="flex items-start gap-2 text-xs">
+          <label className="flex items-start gap-2">
             <input
               type="radio"
               checked={ownerMode === "from_csv"}
@@ -1315,10 +1353,10 @@ export function PreviewStep({
               }}
             />
             <span>
-              Use the &ldquo;Owner (by email)&rdquo; column from the CSV
+              From CSV
               {!ownerEmailColumnMapped && (
                 <span className="ml-1 text-[var(--color-muted-foreground)]">
-                  (map the column first)
+                  (map the Owner column)
                 </span>
               )}
               {ownerCsvResolveStats && (
@@ -1332,67 +1370,88 @@ export function PreviewStep({
           </label>
         </fieldset>
 
-        <fieldset className="space-y-1.5 text-sm">
-          <legend className="font-medium">Tag every imported contact</legend>
+        {/* Divider 1 → 2 */}
+        <span className="hidden w-px self-stretch bg-[var(--color-border)] md:block" aria-hidden />
+
+        {/* Section 2 — Tag every imported contact */}
+        <fieldset className="min-w-[220px] space-y-1.5">
+          <legend className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+            Tag every imported
+          </legend>
           <BulkTagPicker tags={bulkTags} onChange={onBulkTagsChange} existingTags={existingTags} />
         </fieldset>
+
+        {/* Divider 2 → 3 */}
+        <span className="hidden w-px self-stretch bg-[var(--color-border)] md:block" aria-hidden />
+
+        {/* Section 3 — Set all matched rows to */}
+        <div className="min-w-[200px] space-y-1.5">
+          <p className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+            Set all matched rows to
+          </p>
+          <CompactSetAll
+            defaultAction="skip"
+            allowedActions={["skip", "update"]}
+            onApply={onSetAllMatchedTo}
+          />
+        </div>
+
+        {/* Divider 3 → 4 */}
+        <span className="hidden w-px self-stretch bg-[var(--color-border)] md:block" aria-hidden />
+
+        {/* Section 4 — Set all unmatched rows to */}
+        <div className="min-w-[200px] space-y-1.5">
+          <p className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+            Set all unmatched rows to
+          </p>
+          <CompactSetAll
+            defaultAction="create"
+            allowedActions={["create", "skip"]}
+            onApply={onSetAllUnmatchedTo}
+          />
+        </div>
       </div>
 
-      {/* Push 2c.5 — bulk "Set all to..." controls. Apply only to rows
-          the user hasn't individually overridden via the per-row
-          dropdown. Error rows (cleanRows with errors > 0) aren't in
-          previewRows so they stay locked at "Skip — has errors". */}
-      <SetAllRow
-        label="Set all matched rows to"
-        defaultAction="skip"
-        allowedActions={["skip", "update"]}
-        onApply={onSetAllMatchedTo}
-      />
-      <SetAllRow
-        label="Set all unmatched rows to"
-        defaultAction="create"
-        allowedActions={["create", "skip"]}
-        onApply={onSetAllUnmatchedTo}
-      />
-
-      {/* P3 (C5) — red text duplicate warning above the table. Per
-          memory #24 + spec text verbatim. Renders only when there's
-          at least one matched (DB-side) duplicate to warn about;
-          internal CSV duplicates already get their own amber line in
-          the summary banner above. */}
-      {previewRows.some((p) => p.matchedContactId !== null) && (
-        <p className="text-xs text-red-600 dark:text-red-400">
-          There appear to be duplicate contacts in your CSV file that already exists as contacts.
-          These entries can be used to update current contact records but are standardly set to skip
-          on import. If you wish to change this status please change import entry to Update Contact
-          below.
-        </p>
+      {/* 4. Compact amber duplicate-warning strip. Mike's spec wording
+             verbatim — the old red paragraph was visually overweight. */}
+      {hasDbDuplicates && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          data-testid="csv-v2-preview-dup-warning"
+        >
+          <AlertTriangle
+            className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-400"
+            aria-hidden="true"
+          />
+          <span>
+            {String(dbMatchedCount)}{" "}
+            {dbMatchedCount === 1
+              ? "row matches an existing contact"
+              : "rows match existing contacts"}{" "}
+            and {dbMatchedCount === 1 ? "defaults" : "default"} to Skip. Switch any to Update to
+            overwrite — no duplicate will be created.
+          </span>
+        </div>
       )}
 
-      {/* Row preview table */}
+      {/* 5. Fixed-column row preview — Contact / Email-phone /
+             Matches existing / Action. Custom-field columns are
+             intentionally omitted per the mockup; full data still
+             imports unchanged (customValues stays on the payload). */}
       <div className="max-h-[440px] overflow-auto rounded-md border border-[var(--color-border)]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
             <tr>
-              <th className="px-3 py-2">Row</th>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Phone</th>
-              {previewCustomFields.map((d) => (
-                <th key={d.id} className="px-3 py-2">
-                  {d.name}
-                </th>
-              ))}
-              <th className="px-3 py-2">Match / dup</th>
-              <th className="px-3 py-2">Action</th>
+              <th className="px-3 py-2">Contact</th>
+              <th className="px-3 py-2">Email / phone</th>
+              <th className="px-3 py-2">Matches existing</th>
+              <th className="px-3 py-2 text-right">Action</th>
             </tr>
           </thead>
-          {/* Push 2c.3 — error rows now interleave with normal rows in
-              CSV row order, each with a destructive-tinted background
-              and a disabled "Skip — has errors" action so the user
-              sees exactly where the bad rows are in their original
-              CSV (rather than the bad rows being clumped at the end
-              of the preview list as the old layout did). */}
+          {/* Error rows still interleave with normal rows in CSV row
+              order — same Push 2c.3 contract — with the disabled
+              "Skip — has errors" action and a destructive-tinted row
+              background. */}
           <tbody>
             {cleanRows.map((c) => {
               const hasError = c.errors.length > 0
@@ -1400,25 +1459,36 @@ export function PreviewStep({
               const hasWarning = c.warnings.length > 0
               const dupOf = preview?.duplicateOfRow ?? null
               const isDup = dupOf !== null
+              const isUpdateRow = preview?.action === "update" && !hasError
+              const isSkipRow = preview?.action === "skip" && !hasError
               const bgClass = hasError
                 ? "bg-[var(--color-destructive)]/5"
                 : isDup || hasWarning
                   ? "bg-amber-500/5"
-                  : ""
+                  : isUpdateRow
+                    ? "bg-[var(--color-primary)]/5"
+                    : ""
+              const fullName =
+                [c.values.firstName, c.values.lastName].filter(Boolean).join(" ") || ""
               return (
                 <tr
                   key={c.rowIndex}
                   className={`border-t border-[var(--color-border)] ${bgClass} ${
-                    preview?.action === "skip" && !hasError ? "opacity-60" : ""
+                    isSkipRow ? "opacity-60" : ""
                   }`}
                 >
-                  <td className="px-3 py-2 align-top text-xs text-[var(--color-muted-foreground)]">
-                    {c.rowIndex}
-                  </td>
+                  {/* Contact: name + tiny row index hint. Errors /
+                      warnings still surface inline so the user sees
+                      WHICH row is bad and WHY. */}
                   <td className="px-3 py-2 align-top">
-                    {[c.values.firstName, c.values.lastName].filter(Boolean).join(" ") || (
-                      <em className="text-[var(--color-muted-foreground)]">—</em>
-                    )}
+                    <div className="flex items-baseline gap-2">
+                      <span>
+                        {fullName || <em className="text-[var(--color-muted-foreground)]">—</em>}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-muted-foreground)]">
+                        row {String(c.rowIndex)}
+                      </span>
+                    </div>
                     {hasError && (
                       <p className="mt-1 text-[11px] font-medium text-red-700 dark:text-red-400">
                         {c.errors.join("; ")}
@@ -1430,54 +1500,23 @@ export function PreviewStep({
                       </p>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top text-xs">{c.values.primaryEmail ?? "—"}</td>
-                  <td className="px-3 py-2 align-top text-xs">{c.values.primaryPhone ?? "—"}</td>
-                  {previewCustomFields.map((def) => {
-                    const raw = c.customValues[def.id]
-                    if (raw === undefined) {
-                      return (
-                        <td
-                          key={def.id}
-                          className="px-3 py-2 align-top text-xs text-[var(--color-muted-foreground)]"
-                        >
-                          —
-                        </td>
-                      )
-                    }
-                    const typed = coerceImportRawToTyped(def.fieldType, raw)
-                    // checkbox renders as ✓ for true, blank for false,
-                    // with a hover tooltip explaining the coercion rules
-                    // (yes/no/true/false/1/0 spelling tolerated).
-                    if (def.fieldType === "checkbox") {
-                      return (
-                        <td
-                          key={def.id}
-                          className="px-3 py-2 align-top text-xs"
-                          title={`Raw "${raw}" → ${typed === true ? "true" : typed === false ? "false" : "unrecognized"}. Recognized: yes/no, true/false, 1/0, y/n.`}
-                        >
-                          {typed === true ? "✓" : ""}
-                        </td>
-                      )
-                    }
-                    return (
-                      <td
-                        key={def.id}
-                        className="px-3 py-2 align-top text-xs"
-                        title={`Raw value from CSV: "${raw}"`}
-                      >
-                        {formatCustomFieldCell(
-                          {
-                            id: def.id,
-                            name: def.name,
-                            fieldType: def.fieldType,
-                            options: null,
-                            archivedAt: def.archivedAt,
-                          },
-                          typed,
-                        ) || "—"}
-                      </td>
-                    )
-                  })}
+                  {/* Email + phone stacked in one cell. */}
+                  <td className="px-3 py-2 align-top text-xs">
+                    <div>
+                      {c.values.primaryEmail ?? (
+                        <span className="text-[var(--color-muted-foreground)]">—</span>
+                      )}
+                    </div>
+                    <div className="text-[var(--color-muted-foreground)]">
+                      {c.values.primaryPhone ?? "—"}
+                    </div>
+                  </td>
+                  {/* Matches existing — shows matched record's name
+                      for DB matches, "Duplicate of row N" for CSV-
+                      internal duplicates. Per-row why ("· email" /
+                      "· phone") would need an additive field on the
+                      preview action response — flagged separately;
+                      not changed in this layout pass. */}
                   <td className="px-3 py-2 align-top text-xs">
                     {hasError ? (
                       <span className="text-red-700 dark:text-red-400">—</span>
@@ -1485,11 +1524,16 @@ export function PreviewStep({
                       <span className="text-amber-700 dark:text-amber-300">
                         Duplicate of row {String(dupOf)}
                       </span>
+                    ) : preview?.matchedContactName ? (
+                      <span>{preview.matchedContactName}</span>
                     ) : (
-                      (preview?.matchedContactName ?? "—")
+                      <span className="text-[var(--color-muted-foreground)]">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top">
+                  {/* Action dropdown — same allowed-set per row class
+                      (error / matched / unmatched). Right-aligned per
+                      mockup. */}
+                  <td className="px-3 py-2 text-right align-top">
                     {hasError ? (
                       <select
                         disabled
@@ -1500,10 +1544,10 @@ export function PreviewStep({
                         <option value="skip-error">Skip — has errors</option>
                       </select>
                     ) : preview?.matchedContactId ? (
-                      // P3 (C5) — Matched rows: Skip or Update Contact ONLY.
-                      // Memory #24: never let a CSV import create a duplicate
-                      // contact; the only safe actions for a matched row are
-                      // skip (default) or update the existing record.
+                      // Matched rows: Skip or Update Contact ONLY.
+                      // Memory #24 hard block — never let a CSV import
+                      // create a duplicate. The only safe actions are
+                      // Skip (default) and Update existing.
                       <select
                         value={preview.action === "create" ? "skip" : preview.action}
                         onChange={(e) => {
@@ -1534,61 +1578,89 @@ export function PreviewStep({
         </table>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      {/* 6. Footer — Back left; Cancel + Import right. The "skipped due
+             to errors" suffix stays on the Import button copy so the
+             commit number is honest. */}
+      <div className="flex items-center justify-between gap-2">
         <Button variant="outline" onClick={onBack} disabled={busy}>
           Back
         </Button>
-        {/* Push 2c.2.2 — co-locate Cancel with the commit button.
-            Users about to confirm a destructive-feeling import expect
-            a Cancel option right there, not just at the top of the
-            wizard. */}
-        <Button variant="outline" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button onClick={onNext} disabled={busy || willImportCount === 0}>
-          {busy
-            ? "Importing…"
-            : erroredRows.length > 0
-              ? `Import ${String(willImportCount)} rows (${String(erroredRows.length)} skipped due to errors)`
-              : `Import ${String(willImportCount)} rows`}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onNext}
+            disabled={busy || willImportCount === 0}
+            data-testid="csv-v2-preview-import"
+          >
+            {importButtonLabel}
+          </Button>
+        </div>
       </div>
     </div>
   )
 }
 
 /**
- * Push 2c.5 — single-line "Set all <bucket> rows to: [action] [Apply]"
- * control rendered twice above the Preview step's row table (once for
- * matched rows, once for unmatched). Pure UI; the wizard owns the
- * actual mutation via onSetAllMatchedTo / onSetAllUnmatchedTo.
+ * CSV V2 — three-card metric strip above the dedupe table.
+ * Pure presentation; lives next to PreviewStep because nothing else
+ * in the codebase needs this shape.
  */
-function SetAllRow({
+function MetricCard({
   label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: "success" | "info" | "muted"
+}) {
+  const toneClasses =
+    tone === "success"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
+      : tone === "info"
+        ? "border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 text-[var(--color-foreground)]"
+        : "border-[var(--color-border)] bg-[var(--color-muted)]/40 text-[var(--color-foreground)]"
+  return (
+    <div
+      className={`rounded-md border px-3 py-2 ${toneClasses}`}
+      data-testid={`csv-v2-metric-${label.toLowerCase()}`}
+    >
+      <p className="text-[10px] font-medium tracking-wide uppercase opacity-70">{label}</p>
+      <p className="mt-0.5 text-lg leading-tight font-semibold">{String(value)}</p>
+    </div>
+  )
+}
+
+/**
+ * CSV V2 — compact inline version of SetAllRow for the new horizontal
+ * settings bar. Drops the standalone "Skips rows you've already
+ * changed individually + error rows" hint (moved to the dropdown's
+ * title= tooltip) so the bar stays one row tall on wide screens.
+ * Behavior matches SetAllRow exactly — same onApply contract.
+ */
+function CompactSetAll({
   defaultAction,
   allowedActions,
   onApply,
 }: {
-  label: string
   defaultAction: "create" | "update" | "skip"
-  /** P3 (C5) — explicit list of allowed actions for this row's
-   *  context. Matched-rows caller passes ["skip", "update"] (no
-   *  Create new — memory #24); unmatched caller passes
-   *  ["create", "skip"]. */
   allowedActions: ("create" | "update" | "skip")[]
   onApply: (action: "create" | "update" | "skip") => void
 }) {
   const [action, setAction] = useState<"create" | "update" | "skip">(defaultAction)
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/30 px-3 py-2 text-xs">
-      <span className="text-[var(--color-muted-foreground)]">{label}:</span>
+    <div
+      className="flex items-center gap-2"
+      title="Skips rows you've already changed individually + error rows."
+    >
       <select
         value={action}
         onChange={(e) => {
           setAction(e.target.value as "create" | "update" | "skip")
         }}
         className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs"
-        aria-label={label}
       >
         {allowedActions.includes("create") && <option value="create">Create new</option>}
         {allowedActions.includes("update") && <option value="update">Update Contact</option>}
@@ -1603,12 +1675,14 @@ function SetAllRow({
       >
         Apply
       </Button>
-      <span className="text-[10px] text-[var(--color-muted-foreground)]">
-        Skips rows you&apos;ve already changed individually + error rows.
-      </span>
     </div>
   )
 }
+
+// SetAllRow (the old Push 2c.5 standalone "Set all <bucket> rows to"
+// control) was replaced by the inline CompactSetAll above. The
+// callbacks (onSetAllMatchedTo / onSetAllUnmatchedTo) are unchanged —
+// only the visual chrome changed. See CompactSetAll for the V2 form.
 
 function BulkTagPicker({
   tags,

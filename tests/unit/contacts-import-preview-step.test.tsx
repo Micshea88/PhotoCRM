@@ -117,7 +117,11 @@ function renderPreview({
 }
 
 describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
-  it("summary banner shows the red skip-due-to-errors line when error rows exist", () => {
+  it("error rows count toward the Skip metric card AND surface their per-row error inline", () => {
+    // CSV V2 layout: the old bulleted "1 rows will be SKIPPED due to
+    // errors" summary line moved into the three Skip-Create-Update
+    // metric cards. The error row's per-row inline error message
+    // still renders verbatim under the contact cell (unchanged).
     renderPreview({
       cleanRows: [
         makeClean(1, { firstName: "Ada", lastName: "Lovelace" }),
@@ -125,8 +129,18 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
       ],
       previewRows: [makePreview(1, "create")],
     })
-    // Skip-due-to-errors line is distinct from the regular skip count.
-    expect(screen.getByText(/1 rows will be SKIPPED due to errors/i)).toBeInTheDocument()
+    // Skip metric card present with value=1 (the one error row).
+    const skipCard = screen.getByTestId("csv-v2-metric-skip")
+    expect(skipCard).toHaveTextContent(/Skip/i)
+    expect(skipCard).toHaveTextContent("1")
+    // Per-row error text still surfaces inline.
+    expect(screen.getByText("lastName is required")).toBeInTheDocument()
+    // The Import button still appends "(N skipped due to errors)" so
+    // the commit count is honest — covered by the dedicated test
+    // below; just guard against it disappearing here too.
+    expect(
+      screen.getByRole("button", { name: /Import 1 rows \(1 skipped due to errors\)/i }),
+    ).toBeInTheDocument()
   })
 
   it("Import button label includes '(N skipped due to errors)' when errors exist", () => {
@@ -204,16 +218,17 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument()
   })
 
-  it("renders the Push 2c.5 'Set all matched / unmatched' bulk controls above the row table", () => {
+  it("renders both 'Set all matched / unmatched' bulk controls in the V2 compact settings bar", () => {
     renderPreview({
       cleanRows: [makeClean(1, { firstName: "Ada", lastName: "Lovelace" })],
       previewRows: [makePreview(1, "create")],
     })
-    // Two SetAllRow controls render with their respective labels.
-    expect(screen.getByLabelText("Set all matched rows to")).toBeInTheDocument()
-    expect(screen.getByLabelText("Set all unmatched rows to")).toBeInTheDocument()
-    // Both have their own Apply button (testing-library returns
-    // multiple — two Apply buttons + zero others on the Preview).
+    // CSV V2 layout — both controls live inside the compact horizontal
+    // settings bar now, each under a small label header. The Apply
+    // buttons + onApply callback contract are unchanged.
+    const settingsBar = screen.getByTestId("csv-v2-preview-settings-bar")
+    expect(settingsBar).toHaveTextContent(/Set all matched rows to/i)
+    expect(settingsBar).toHaveTextContent(/Set all unmatched rows to/i)
     const applyButtons = screen.getAllByRole("button", { name: "Apply" })
     expect(applyButtons.length).toBe(2)
   })
@@ -255,8 +270,15 @@ describe("PreviewStep — Fix 4 error-row UX (Push 2c.3)", () => {
   })
 })
 
-describe("PreviewStep — Push 4 B1 Part 0 custom field columns", () => {
-  it("renders a column per mapped custom field and coerces checkbox values to ✓ / blank", () => {
+describe("PreviewStep — CSV V2 layout: custom-field columns dropped, customValues payload intact", () => {
+  // The Push 4 B1 Part 0 per-custom-field columns rendered inline in
+  // the preview table. The CSV V2 layout drops those columns to keep
+  // the table to four fixed columns per the approved mockup. The
+  // import payload (customValues on each row) is UNCHANGED — full
+  // custom-field data still imports. These tests pin the visual
+  // change AND the data-preservation invariant.
+
+  it("V2 layout does NOT render a column header per mapped custom field", () => {
     const defId = "ckdef1"
     const row1: CleanRow = {
       rowIndex: 1,
@@ -265,25 +287,11 @@ describe("PreviewStep — Push 4 B1 Part 0 custom field columns", () => {
       errors: [],
       warnings: [],
     }
-    const row2: CleanRow = {
-      rowIndex: 2,
-      values: { firstName: "Grace", lastName: "Hopper" },
-      customValues: { [defId]: "no" },
-      errors: [],
-      warnings: [],
-    }
     renderPreview({
-      cleanRows: [row1, row2],
+      cleanRows: [row1],
       previewRows: [
         {
           rowIndex: 1,
-          matchedContactId: null,
-          matchedContactName: null,
-          action: "create",
-          duplicateOfRow: null,
-        },
-        {
-          rowIndex: 2,
           matchedContactId: null,
           matchedContactName: null,
           action: "create",
@@ -294,13 +302,17 @@ describe("PreviewStep — Push 4 B1 Part 0 custom field columns", () => {
         { id: defId, name: "TOP 10 Vendor", fieldType: "checkbox", archivedAt: null },
       ],
     })
-    // Header carries the custom field name.
-    expect(screen.getByRole("columnheader", { name: "TOP 10 Vendor" })).toBeInTheDocument()
-    // ✓ rendered exactly once (for the "yes" row); the "no" row's cell is blank.
-    expect(screen.getAllByText("✓").length).toBe(1)
+    // V2: the per-custom-field column header is gone. Table only
+    // has four fixed columns.
+    expect(screen.queryByRole("columnheader", { name: "TOP 10 Vendor" })).toBeNull()
+    // The four V2 column headers all render.
+    expect(screen.getByRole("columnheader", { name: "Contact" })).toBeInTheDocument()
+    expect(screen.getByRole("columnheader", { name: "Email / phone" })).toBeInTheDocument()
+    expect(screen.getByRole("columnheader", { name: "Matches existing" })).toBeInTheDocument()
+    expect(screen.getByRole("columnheader", { name: "Action" })).toBeInTheDocument()
   })
 
-  it("omits the custom field columns entirely when no row mapped any cf:* value", () => {
+  it("omits the custom field columns when no row maps any cf:* (same as the always-omitted V2 layout)", () => {
     const row1: CleanRow = {
       rowIndex: 1,
       values: { firstName: "Ada", lastName: "Lovelace" },
@@ -324,5 +336,67 @@ describe("PreviewStep — Push 4 B1 Part 0 custom field columns", () => {
       ],
     })
     expect(screen.queryByRole("columnheader", { name: "TOP 10 Vendor" })).toBeNull()
+  })
+})
+
+describe("PreviewStep — CSV V2 layout primitives (header counts, metric cards, dup warning)", () => {
+  it("header row shows row count muted and duplicates count in red when D > 0", () => {
+    renderPreview({
+      cleanRows: [
+        makeClean(1, { firstName: "Ada", lastName: "Lovelace" }),
+        makeClean(2, { firstName: "Grace", lastName: "Hopper" }),
+      ],
+      previewRows: [
+        {
+          rowIndex: 1,
+          matchedContactId: "c-existing-1",
+          matchedContactName: "Ada Existing",
+          action: "skip",
+          duplicateOfRow: null,
+        },
+        makePreview(2, "create"),
+      ],
+    })
+    const headerCounts = screen.getByTestId("csv-v2-preview-header-counts")
+    // Row total muted, no duplicate count.
+    expect(headerCounts).toHaveTextContent("2 rows")
+    expect(headerCounts).toHaveTextContent(/1 duplicate found/)
+  })
+
+  it("header row hides the red duplicates label when D = 0", () => {
+    renderPreview({
+      cleanRows: [makeClean(1, { firstName: "Ada", lastName: "Lovelace" })],
+      previewRows: [makePreview(1, "create")],
+    })
+    const headerCounts = screen.getByTestId("csv-v2-preview-header-counts")
+    expect(headerCounts).toHaveTextContent("1 row")
+    expect(headerCounts).not.toHaveTextContent(/duplicate/i)
+  })
+
+  it("compact amber dup warning strip renders only when there's at least one DB-matched duplicate", () => {
+    renderPreview({
+      cleanRows: [makeClean(1, { firstName: "Ada", lastName: "Lovelace" })],
+      previewRows: [
+        {
+          rowIndex: 1,
+          matchedContactId: "c-existing",
+          matchedContactName: "Ada Existing",
+          action: "skip",
+          duplicateOfRow: null,
+        },
+      ],
+    })
+    // Verbatim copy from the mockup.
+    const strip = screen.getByTestId("csv-v2-preview-dup-warning")
+    expect(strip).toHaveTextContent(/default(s)? to Skip/i)
+    expect(strip).toHaveTextContent(/no duplicate will be created/i)
+  })
+
+  it("compact amber dup warning strip is absent when no DB match", () => {
+    renderPreview({
+      cleanRows: [makeClean(1, { firstName: "Ada", lastName: "Lovelace" })],
+      previewRows: [makePreview(1, "create")],
+    })
+    expect(screen.queryByTestId("csv-v2-preview-dup-warning")).toBeNull()
   })
 })

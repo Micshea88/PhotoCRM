@@ -219,6 +219,44 @@ describe("ContactActivityFeed", () => {
     expect(screen.getByText("Call by Bob")).toBeInTheDocument()
   })
 
+  it("P-email-log — All-activities Type chip row includes Emails and filters in place", async () => {
+    const user = userEvent.setup()
+    const mixed: ActivityEntry[] = [
+      ...entries,
+      {
+        id: "e2",
+        rawId: "raw-e2",
+        kind: "email",
+        timestamp: new Date(Date.now() - 1000 * 60 * 2),
+        title: "Email",
+        subject: "Pricing follow-up",
+        body: "Sent the proposal — let me know.",
+        actor: "Alice",
+      },
+    ]
+    render(<ContactActivityFeed contactId="test-c" entries={mixed} />)
+    // The chip row lives under "Type:" on the All-activities tab.
+    // Bug fix audit: the chip row should include Notes / Calls /
+    // Emails / Meetings / SMS (matching the sub-tab order), not omit
+    // Emails. Each chip is a <button>; the matching sub-tabs are
+    // <tab> role. Scope to button role so we don't grab the sub-tab.
+    expect(screen.getByRole("button", { name: "Notes" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Calls" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Emails" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Meetings" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "SMS" })).toBeInTheDocument()
+    // Click the Emails chip — All-activities tab stays active; only
+    // email entries render.
+    await user.click(screen.getByRole("button", { name: "Emails" }))
+    expect(screen.getByRole("tab", { name: /All activities \(3\)/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    )
+    expect(screen.getByText("Pricing follow-up")).toBeInTheDocument()
+    expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
+    expect(screen.queryByText("Call by Bob")).not.toBeInTheDocument()
+  })
+
   it("P-email-log — logged email surfaces under the Emails sub-tab with the mockup header + subject + body", async () => {
     const user = userEvent.setup()
     const withEmail: ActivityEntry[] = [

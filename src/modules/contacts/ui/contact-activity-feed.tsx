@@ -499,7 +499,11 @@ export function ContactActivityFeed({
               setAllTabTypeFilter(null)
             }}
           />
-          {(["note", "call", "meeting", "sms"] as const).map((k) => (
+          {/* Chip order mirrors the sub-tab FILTER_ORDER so the
+              All-activities Type filter and the sub-tab strip stay
+              visually aligned. Tasks is excluded — still a Push 7
+              ship-target placeholder, not a real kind yet. */}
+          {(["note", "call", "email", "meeting", "sms"] as const).map((k) => (
             <TypeChip
               key={k}
               label={FILTER_LABEL[k]}

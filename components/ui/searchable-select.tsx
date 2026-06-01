@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 import { Check, ChevronDown, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./input"
@@ -35,6 +35,14 @@ export interface SearchableSelectItem {
   label: string
   /** Optional secondary line shown in smaller muted text. */
   description?: string
+  /**
+   * Optional category label. When ANY item has an `optgroup`, items
+   * sharing the same value render together under a small sticky
+   * header. Items without an `optgroup` render as a single
+   * unheaded group at the top of the list. Headers are visual only —
+   * search-filter and keyboard nav (arrow/Enter/Home/End) skip them.
+   */
+  optgroup?: string
 }
 
 export function SearchableSelect({
@@ -51,6 +59,7 @@ export function SearchableSelect({
   defaultOpen = false,
   inlineMode = false,
   onDismiss,
+  valuePrefix,
 }: {
   items: SearchableSelectItem[]
   value: string | null
@@ -74,6 +83,13 @@ export function SearchableSelect({
    *  (Esc or click outside) without selecting. InlineEditSelect uses
    *  this to autosave-on-blur the current draft. */
   onDismiss?: () => void
+  /**
+   * Optional ReactNode rendered BEFORE the selected label in the
+   * trigger (e.g. an "AI" pill marking an AI-suggested value). Hidden
+   * when no item is selected — placeholders show without any prefix.
+   * The node is NOT cloned, so consumers can size / style it freely.
+   */
+  valuePrefix?: ReactNode
 }) {
   const autoId = useId()
   const id = propId ?? autoId
@@ -217,8 +233,14 @@ export function SearchableSelect({
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
-        <span className={cn("truncate", !selectedItem && "text-[var(--color-muted-foreground)]")}>
-          {selectedItem ? selectedItem.label : placeholder}
+        <span
+          className={cn(
+            "flex flex-1 items-center gap-1.5 truncate",
+            !selectedItem && "text-[var(--color-muted-foreground)]",
+          )}
+        >
+          {selectedItem && valuePrefix}
+          <span className="truncate">{selectedItem ? selectedItem.label : placeholder}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {allowClear && selectedItem && !disabled && (
@@ -282,38 +304,58 @@ export function SearchableSelect({
               {visibleItems.map((item, idx) => {
                 const isActive = idx === activeIndex
                 const isSelected = item.value === value
+                // When ANY item has an optgroup, render a small
+                // sticky header row above the first item of each
+                // group. Items without an optgroup are treated as
+                // a single anonymous group at the top — no header
+                // emitted for them. Header rows are visual only:
+                // they don't enter the item index, so arrow-key
+                // nav and the activeIndex math are unaffected.
+                const groupLabel = item.optgroup ?? null
+                const prevGroupLabel = idx > 0 ? (visibleItems[idx - 1]?.optgroup ?? null) : null
+                const showHeader = groupLabel !== null && groupLabel !== prevGroupLabel
                 return (
-                  <li
-                    key={item.value}
-                    ref={(el) => {
-                      itemRefs.current[idx] = el
-                    }}
-                    id={`${id}-opt-${item.value}`}
-                    role="option"
-                    aria-selected={isSelected}
-                    onMouseEnter={() => {
-                      setActiveIndex(idx)
-                    }}
-                    onClick={() => {
-                      commitChoice(item)
-                    }}
-                    className={cn(
-                      "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm",
-                      isActive && "bg-[var(--color-accent)] text-[var(--color-accent-foreground)]",
+                  <Fragment key={item.value}>
+                    {showHeader && (
+                      <li
+                        role="presentation"
+                        className="bg-[var(--color-muted)]/40 px-3 py-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase"
+                      >
+                        {groupLabel}
+                      </li>
                     )}
-                  >
-                    <span className="flex flex-1 flex-col">
-                      <span className="truncate">{item.label}</span>
-                      {item.description && (
-                        <span className="truncate text-xs text-[var(--color-muted-foreground)]">
-                          {item.description}
-                        </span>
+                    <li
+                      ref={(el) => {
+                        itemRefs.current[idx] = el
+                      }}
+                      id={`${id}-opt-${item.value}`}
+                      role="option"
+                      aria-selected={isSelected}
+                      onMouseEnter={() => {
+                        setActiveIndex(idx)
+                      }}
+                      onClick={() => {
+                        commitChoice(item)
+                      }}
+                      className={cn(
+                        "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm",
+                        isActive &&
+                          "bg-[var(--color-accent)] text-[var(--color-accent-foreground)]",
                       )}
-                    </span>
-                    {isSelected && (
-                      <Check className="size-4 shrink-0 text-[var(--color-primary)]" />
-                    )}
-                  </li>
+                    >
+                      <span className="flex flex-1 flex-col">
+                        <span className="truncate">{item.label}</span>
+                        {item.description && (
+                          <span className="truncate text-xs text-[var(--color-muted-foreground)]">
+                            {item.description}
+                          </span>
+                        )}
+                      </span>
+                      {isSelected && (
+                        <Check className="size-4 shrink-0 text-[var(--color-primary)]" />
+                      )}
+                    </li>
+                  </Fragment>
                 )
               })}
             </ul>

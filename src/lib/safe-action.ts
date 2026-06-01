@@ -199,6 +199,15 @@ export const orgAction = authAction.use(async ({ next, ctx }) => {
     throw new ActionError("NO_ACTIVE_ORG", "Select or create an organization first.")
   }
   return ctx.db.transaction(async (tx) => {
+    // CRITICAL — hotfix 0041: the connection role in prod is
+    // BYPASSRLS (Neon's owner). Without this role switch, every
+    // org-scoped RLS policy is silently inert and writes against
+    // any org succeed regardless of context. SET LOCAL ROLE drops
+    // us into the NOBYPASSRLS app_authenticated role for the
+    // duration of THIS transaction only — commit/rollback reverts
+    // automatically. MUST come FIRST, before the member lookup +
+    // any set_config call.
+    await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
     const m = await tx.query.member.findFirst({
       where: and(eq(member.userId, ctx.session.user.id), eq(member.organizationId, activeOrgId)),
     })

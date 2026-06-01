@@ -288,6 +288,13 @@
       "when": 1780274755471,
       "tag": "0040_p_email_log",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780325980414,
+      "tag": "0041_app_authenticated_role",
+      "breakpoints": true
     }
   ]
 }

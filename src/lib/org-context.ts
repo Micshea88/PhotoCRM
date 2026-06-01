@@ -88,6 +88,16 @@ export async function withOrgContext<T>(
     )
   }
   return db.transaction(async (tx) => {
+    // CRITICAL — hotfix 0041: the connection role in prod is
+    // BYPASSRLS (Neon's owner). Without this role switch, every
+    // org-scoped RLS policy is silently inert and a user in org A
+    // can read every row in org B. SET LOCAL ROLE drops us into the
+    // NOBYPASSRLS app_authenticated role for the duration of THIS
+    // transaction only — commit/rollback automatically reverts.
+    // MUST come BEFORE the app.current_org GUC sets; otherwise the
+    // policy check on subsequent statements still runs as the
+    // bypass role.
+    await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
     await tx.execute(sql`SELECT set_config('app.current_org', ${ctx.orgId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', ${ctx.role}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_user_id', ${ctx.userId}, true)`)

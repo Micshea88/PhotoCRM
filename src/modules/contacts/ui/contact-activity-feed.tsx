@@ -29,6 +29,7 @@ import { updateContactNote, deleteContactNote } from "@/modules/contacts/actions
 import { updateCall, deleteCall } from "@/modules/calls/actions"
 import { updateMeeting, deleteMeeting } from "@/modules/meetings/actions"
 import { updateSms, deleteSms } from "@/modules/sms-messages/actions"
+import { updateEmail, deleteEmail } from "@/modules/email-log/actions"
 import {
   CallLogComposer,
   CreateEmailPopout,
@@ -70,7 +71,7 @@ import {
  * activity (now works — Anthropic key is set).
  */
 
-export type ActivityEntryKind = "note" | "call" | "meeting" | "sms" | "audit"
+export type ActivityEntryKind = "note" | "call" | "meeting" | "sms" | "email" | "audit"
 
 export interface ActivityEntry {
   id: string
@@ -78,6 +79,10 @@ export interface ActivityEntry {
   timestamp: Date
   title: string
   body?: string | null
+  /** P-email-log — email subject line. Surfaced as the bold primary
+   *  line above the body per the approved mockup. Only set for
+   *  `kind === "email"`. */
+  subject?: string | null
   actor?: string | null
   /** P-activities — passed through by the loader so the pencil-edit
    *  primitive can call the right update/delete action. */
@@ -113,7 +118,8 @@ const FILTER_LABEL: Record<FilterKey, string> = {
   sms: "SMS",
 }
 const PLACEHOLDER_FILTERS: Partial<Record<FilterKey, string>> = {
-  email: "Email logging ships in Push 5+ once the integration lands.",
+  // P-email-log shipped — Email is a real filter now; only Tasks
+  // remains as a ship-target placeholder.
   task: "Tasks ship in Push 7. Once they exist they'll surface here.",
 }
 
@@ -128,11 +134,18 @@ function entryTitleText(e: ActivityEntry): string {
         return "Meeting"
       case "sms":
         return "SMS"
+      case "email":
+        return "Email"
       case "audit":
         return "Audit"
     }
   })()
-  if (e.actor) return `${kindLabel} by ${e.actor}`
+  if (e.actor) {
+    // P-email-log mockup uses " · " for email headers; the other kinds
+    // keep the existing " by " idiom.
+    const sep = e.kind === "email" ? " · " : " by "
+    return `${kindLabel}${sep}${e.actor}`
+  }
   return e.title || kindLabel
 }
 
@@ -234,7 +247,7 @@ export function ContactActivityFeed({
       all: entries.length,
       note: entries.filter((e) => e.kind === "note").length,
       call: entries.filter((e) => e.kind === "call").length,
-      email: 0,
+      email: entries.filter((e) => e.kind === "email").length,
       task: 0,
       meeting: entries.filter((e) => e.kind === "meeting").length,
       sms: entries.filter((e) => e.kind === "sms").length,
@@ -252,11 +265,13 @@ export function ContactActivityFeed({
           ? entries.filter((e) => e.kind === "note")
           : activeTab === "call"
             ? entries.filter((e) => e.kind === "call")
-            : activeTab === "meeting"
-              ? entries.filter((e) => e.kind === "meeting")
-              : activeTab === "sms"
-                ? entries.filter((e) => e.kind === "sms")
-                : []
+            : activeTab === "email"
+              ? entries.filter((e) => e.kind === "email")
+              : activeTab === "meeting"
+                ? entries.filter((e) => e.kind === "meeting")
+                : activeTab === "sms"
+                  ? entries.filter((e) => e.kind === "sms")
+                  : []
     return applyFilters(byTab, filters)
   }, [entries, activeTab, allTabTypeFilter, filters])
 
@@ -784,6 +799,9 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
     } else if (entry.kind === "sms") {
       const r = await updateSms({ id: entry.rawId, body: next })
       serverError = r.serverError
+    } else if (entry.kind === "email") {
+      const r = await updateEmail({ id: entry.rawId, body: next })
+      serverError = r.serverError
     }
     setSaving(false)
     if (serverError) {
@@ -812,6 +830,9 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
       serverError = r.serverError
     } else if (entry.kind === "sms") {
       const r = await deleteSms({ id: entry.rawId })
+      serverError = r.serverError
+    } else if (entry.kind === "email") {
+      const r = await deleteEmail({ id: entry.rawId })
       serverError = r.serverError
     }
     setDeleting(false)
@@ -899,10 +920,24 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
           </>
         )}
       </header>
-      {isOpen && hasBody && !editing && (
-        <p className="pl-7 text-sm whitespace-pre-wrap text-[var(--color-muted-foreground)]">
-          {entry.body}
-        </p>
+      {isOpen && !editing && (entry.kind === "email" ? !!entry.subject || hasBody : hasBody) && (
+        <div className="space-y-1 pl-7">
+          {/* P-email-log — Email cards render the subject as a bold
+              primary line above the body. Other kinds stay body-only. */}
+          {entry.kind === "email" && entry.subject && (
+            <p
+              className="text-sm font-medium text-[var(--color-foreground)]"
+              data-testid={`activity-entry-${entry.kind}-subject`}
+            >
+              {entry.subject}
+            </p>
+          )}
+          {hasBody && (
+            <p className="text-sm whitespace-pre-wrap text-[var(--color-muted-foreground)]">
+              {entry.body}
+            </p>
+          )}
+        </div>
       )}
       {editing && (
         <div className="space-y-1 pl-7">
@@ -971,6 +1006,8 @@ function kindIcon(kind: ActivityEntryKind) {
       return <FileText className={cls} aria-hidden="true" />
     case "call":
       return <Phone className={cls} aria-hidden="true" />
+    case "email":
+      return <Mail className={cls} aria-hidden="true" />
     case "meeting":
       return <Video className={cls} aria-hidden="true" />
     case "sms":

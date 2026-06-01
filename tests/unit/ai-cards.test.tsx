@@ -31,6 +31,11 @@ vi.mock("@/modules/sms-messages/actions", () => ({
   deleteSms: vi.fn(),
   logSms: vi.fn(),
 }))
+vi.mock("@/modules/email-log/actions", () => ({
+  updateEmail: vi.fn(),
+  deleteEmail: vi.fn(),
+  logEmail: vi.fn(),
+}))
 
 // next/navigation: the activity-card uses useRouter().refresh() on
 // edit-save. In jsdom there's no app router; stub it.
@@ -212,6 +217,46 @@ describe("ContactActivityFeed", () => {
     // Note hidden by the in-place type filter.
     expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
     expect(screen.getByText("Call by Bob")).toBeInTheDocument()
+  })
+
+  it("P-email-log — logged email surfaces under the Emails sub-tab with the mockup header + subject + body", async () => {
+    const user = userEvent.setup()
+    const withEmail: ActivityEntry[] = [
+      ...entries,
+      {
+        id: "e1",
+        rawId: "raw-e1",
+        kind: "email",
+        timestamp: new Date(Date.now() - 1000 * 60 * 5),
+        title: "Email",
+        subject: "Quick question about your August wedding",
+        body: "Hey Ada,\n\nLoved chatting today — sending the pricing sheet through.",
+        actor: "Alice",
+      },
+    ]
+    render(<ContactActivityFeed contactId="test-c" entries={withEmail} />)
+    // Emails sub-tab shows the count (1) — proves counts.email wires.
+    const emailTab = screen.getByRole("tab", { name: /Emails \(1\)/ })
+    expect(emailTab).toBeInTheDocument()
+    await user.click(emailTab)
+    // Header uses the "Email · {person}" pattern per the approved mockup.
+    expect(screen.getByText(/Email · Alice/)).toBeInTheDocument()
+    // Subject is the bold primary line.
+    const subject = screen.getByTestId("activity-entry-email-subject")
+    expect(subject).toBeInTheDocument()
+    expect(subject).toHaveTextContent("Quick question about your August wedding")
+    // Body still renders beneath the subject.
+    expect(screen.getByText(/Loved chatting today/)).toBeInTheDocument()
+    // Calls / notes are hidden on the Emails tab.
+    expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
+    expect(screen.queryByText("Call by Bob")).not.toBeInTheDocument()
+  })
+
+  it("P-email-log — Notes / Calls keep body-only rendering (no subject line leaked onto them)", () => {
+    render(<ContactActivityFeed contactId="test-c" entries={entries} />)
+    // Notes + calls do NOT get an activity-entry-*-subject node.
+    expect(screen.queryByTestId("activity-entry-note-subject")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("activity-entry-call-subject")).not.toBeInTheDocument()
   })
 })
 

@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/modal"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { createContactNote } from "@/modules/contacts/actions"
 import { logCall } from "@/modules/calls/actions"
+import { logEmail } from "@/modules/email-log/actions"
 import { logMeeting } from "@/modules/meetings/actions"
 import { logSms } from "@/modules/sms-messages/actions"
 import type { CallDirection } from "@/modules/calls/types"
@@ -331,11 +332,12 @@ export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBasePr
 // ─── Email log composer ──────────────────────────────────────────────
 
 export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
-  // Email writes land as a note with subject prefix until the Push 5+
-  // email module ships with its own table + send/ingest pipeline.
-  // This composer collects the spec'd fields (date/time, subject,
-  // body) and routes through createContactNote so the entry shows
-  // up in the feed today.
+  // P-email-log — the manual Log-an-email path. Writes directly to the
+  // first-class email_log table via logEmail. Source is "manual";
+  // direction defaults to "outbound" (the V1 surface only logs sent
+  // mail; inbound arrives via future provider ingest). The action
+  // already busts the contact's AI cache atomically + audit() +
+  // revalidatePath — composer just calls it.
   const router = useRouter()
   const [when, setWhen] = useState(nowIso())
   const [subject, setSubject] = useState("")
@@ -349,19 +351,19 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
       saveLabel="Save email"
       saving={saving}
       error={error}
-      canSave={body.trim().length > 0}
+      canSave={body.trim().length > 0 || subject.trim().length > 0}
       onCancel={onCancel}
       onSave={async () => {
         setSaving(true)
         setError(null)
-        const lines: string[] = []
-        if (subject.trim()) lines.push(`Subject: ${subject.trim()}`)
-        lines.push(`Logged at: ${new Date(when).toLocaleString()}`)
-        lines.push("")
-        lines.push(body.trim())
-        const result = await createContactNote({
+        const trimmedSubject = subject.trim()
+        const trimmedBody = body.trim()
+        const result = await logEmail({
           contactId,
-          body: lines.join("\n"),
+          sentAt: new Date(when).toISOString(),
+          direction: "outbound",
+          subject: trimmedSubject.length > 0 ? trimmedSubject : null,
+          body: trimmedBody.length > 0 ? trimmedBody : null,
         })
         setSaving(false)
         if (result.serverError) {
@@ -411,10 +413,6 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
           className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
         />
       </Field>
-      <p className="text-[11px] text-[var(--color-muted-foreground)]">
-        Logged emails land as notes until the Push 5+ email module ships with the real send + ingest
-        pipeline.
-      </p>
     </ComposerShell>
   )
 }

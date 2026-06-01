@@ -7,6 +7,7 @@ import { contactNotes } from "@/modules/contacts/schema"
 import { callLog } from "@/modules/calls/schema"
 import { meetings } from "@/modules/meetings/schema"
 import { smsMessages } from "@/modules/sms-messages/schema"
+import { emailLog } from "@/modules/email-log/schema"
 import { user } from "@/modules/auth/schema"
 import type { ActivityEntry } from "./ui/contact-activity-feed"
 
@@ -126,6 +127,28 @@ export async function loadContactActivityWithDb(
         ),
       )
 
+    // Emails (P-email-log). sentAt is the email date/time; body is plain
+    // text for V1 (HTML lands when provider ingest does).
+    const emailRows = await db
+      .select({
+        id: emailLog.id,
+        sentAt: emailLog.sentAt,
+        direction: emailLog.direction,
+        subject: emailLog.subject,
+        body: emailLog.body,
+        actorName: user.name,
+        actorEmail: user.email,
+      })
+      .from(emailLog)
+      .leftJoin(user, eq(user.id, emailLog.userId))
+      .where(
+        and(
+          eq(emailLog.organizationId, orgId),
+          eq(emailLog.contactId, contactId),
+          isNull(emailLog.deletedAt),
+        ),
+      )
+
     function actor(name: string | null, email: string | null | undefined): string | null {
       return name ?? email ?? null
     }
@@ -181,6 +204,19 @@ export async function loadContactActivityWithDb(
         title: `SMS (${s.direction})`,
         body: s.body,
         actor: actor(s.actorName, s.actorEmail),
+      })
+    }
+
+    for (const m of emailRows) {
+      entries.push({
+        id: `email-${m.id}`,
+        rawId: m.id,
+        kind: "email",
+        timestamp: m.sentAt,
+        title: "Email",
+        subject: m.subject,
+        body: m.body,
+        actor: actor(m.actorName, m.actorEmail),
       })
     }
 

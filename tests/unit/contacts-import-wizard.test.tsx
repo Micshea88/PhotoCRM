@@ -38,6 +38,15 @@ vi.mock("@/modules/contacts/import-actions", () => ({
   runContactsImport: vi.fn(),
 }))
 
+// CSV V2 — import-ai.ts has "use server" + transitively pulls
+// @/lib/db. Stub the action surface so jsdom doesn't try to
+// evaluate the server-only env. The wizard's AI handler always
+// runs the safe-fallback path under this mock (no suggestions),
+// which matches the AI-unavailable runtime behavior.
+vi.mock("@/modules/contacts/import-ai", () => ({
+  scanColumnsWithAi: vi.fn(() => Promise.resolve({ data: null, serverError: "mocked" })),
+}))
+
 beforeEach(() => {
   routerPush.mockClear()
   routerReplace.mockClear()

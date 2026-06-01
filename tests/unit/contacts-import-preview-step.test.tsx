@@ -39,6 +39,14 @@ vi.mock("@/modules/contacts/import-actions", () => ({
   runContactsImport: vi.fn(),
 }))
 
+// CSV V2 — import-ai.ts has "use server" + transitively pulls
+// @/lib/db. Stub the action surface so jsdom doesn't try to
+// evaluate the server-only env. PreviewStep doesn't call the
+// scanner directly, but it lives in the same wizard module.
+vi.mock("@/modules/contacts/import-ai", () => ({
+  scanColumnsWithAi: vi.fn(() => Promise.resolve({ data: null, serverError: "mocked" })),
+}))
+
 beforeEach(() => {
   if (typeof window === "undefined") return
   Object.defineProperty(Element.prototype, "hasPointerCapture", {

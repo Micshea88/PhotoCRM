@@ -71,7 +71,12 @@ export function parseColumnScanResponse(
     return { suggestions: allSkipFallback(headers), ok: false }
   }
 
-  const byHeader = new Map<string, ColumnScanSuggestion>()
+  // Build the response lookup keyed by a normalized form of the
+  // column so cosmetic differences (trailing space, smart quotes,
+  // case) don't silently drop a suggestion to skip. The OUTPUT
+  // still uses the user's exact input header text — only the match
+  // is normalization-aware.
+  const byNormalized = new Map<string, { target: string; confidence: ScanConfidence }>()
   for (const entry of arr) {
     if (!entry || typeof entry !== "object") continue
     const obj = entry as Record<string, unknown>
@@ -82,19 +87,40 @@ export function parseColumnScanResponse(
     const safeTarget = allowedTargets.has(tgt) ? tgt : "skip"
     const safeConfidence: ScanConfidence =
       conf === "high" || conf === "medium" || conf === "low" ? conf : "low"
-    byHeader.set(col, { column: col, target: safeTarget, confidence: safeConfidence })
+    byNormalized.set(normalizeHeaderForMatch(col), {
+      target: safeTarget,
+      confidence: safeConfidence,
+    })
   }
 
   let validCount = 0
   const suggestions: ColumnScanSuggestion[] = headers.map((h) => {
-    const s = byHeader.get(h)
+    const s = byNormalized.get(normalizeHeaderForMatch(h))
     if (s) {
       if (s.target !== "skip") validCount++
-      return s
+      return { column: h, target: s.target, confidence: s.confidence }
     }
     return { column: h, target: "skip", confidence: "low" }
   })
   return { suggestions, ok: validCount > 0 }
+}
+
+/**
+ * Normalize a header string for AI-response alignment. Handles the
+ * common cosmetic drift Haiku introduces when echoing user-supplied
+ * headers: trim, collapse internal whitespace, fold curly quotes to
+ * ASCII, lowercase. Intentionally NOT a fully-Unicode-normalizing
+ * function — we only need to absorb the small set of mutations real
+ * models actually emit. A genuine mismatch (different header text)
+ * still falls through to "skip" per the conservative default.
+ */
+function normalizeHeaderForMatch(s: string): string {
+  return s
+    .replace(/[‘’ʼ′]/g, "'")
+    .replace(/[“”″]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
 }
 
 function stripJsonNoise(raw: string): string {

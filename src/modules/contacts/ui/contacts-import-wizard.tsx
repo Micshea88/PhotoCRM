@@ -3,9 +3,13 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select"
 import { previewContactsImport, runContactsImport } from "../import-actions"
+import { scanColumnsWithAi } from "../import-ai"
+import type { ColumnScanSuggestion } from "../import-ai-parser"
 import {
   autoMapHeaders,
   buildCleanRow,
@@ -160,6 +164,25 @@ export function ContactsImportWizard({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // ─── CSV V2 — AI column-scan state ──────────────────────────────────
+  // Cached on the import session: scanColumnsWithAi is called ONCE on
+  // entry to step=map; result lives here so re-renders don't re-call.
+  // Survives Back/Forward (state is in React); lost on full reload
+  // along with the parsed CSV itself (the upload-step guard redirects
+  // to step=1 anyway when parsed is null).
+  const [aiSuggestions, setAiSuggestions] = useState<ColumnScanSuggestion[] | null>(null)
+  const [aiState, setAiState] = useState<"idle" | "loading" | "done" | "failed">("idle")
+  const [aiConfirmed, setAiConfirmed] = useState(false)
+  // Set of column indices the user has explicitly changed in the Map
+  // step. Pills hide for these rows; the "Confirm all" affordance also
+  // skips them. Reset when the user uploads a new CSV.
+  const [userTouchedColumns, setUserTouchedColumns] = useState<Set<number>>(new Set())
+  // Set of column indices where the user picked "Create new custom
+  // field" but hasn't created it yet. Stored separately from mapping
+  // (mapping[i] stays null) so the import action contract is unchanged
+  // until the inline-create-field commit wires it through.
+  const [createNewIntent, setCreateNewIntent] = useState<Set<number>>(new Set())
+
   // Preview-step bulk settings
   const [ownerMode, setOwnerMode] = useState<OwnerMode>("self")
   const [specificOwnerId, setSpecificOwnerId] = useState<string>(currentUserId)
@@ -203,6 +226,9 @@ export function ContactsImportWizard({
   }, [parsed])
 
   // ─── Step 1: upload ───────────────────────────────────────────────────
+  // V2: file pick parses the CSV but does NOT auto-advance — user
+  // confirms via the explicit "Next: Map columns →" button so the
+  // Haiku column-scan timing lines up cleanly with the Map step entry.
   async function onFileChange(file: File) {
     setError(null)
     setBusy(true)
@@ -224,8 +250,16 @@ export function ContactsImportWizard({
         return
       }
       setParsed(next)
+      // V2: alias-based defaults applied INSTANTLY for instant feedback;
+      // AI scan kicks in on Map-step entry and updates only the columns
+      // the user hasn't touched.
       setMapping(autoMapHeaders(next.headers, customFieldDefs))
-      goToStep("map")
+      // Reset AI state for the new upload.
+      setAiSuggestions(null)
+      setAiState("idle")
+      setAiConfirmed(false)
+      setUserTouchedColumns(new Set())
+      setCreateNewIntent(new Set())
     } catch {
       setError(
         "Couldn't parse this CSV — re-export from your editor as standard UTF-8 CSV and try again.",
@@ -233,6 +267,139 @@ export function ContactsImportWizard({
     } finally {
       setBusy(false)
     }
+  }
+
+  /**
+   * CSV V2 — fire the AI column scan and advance to the Map step in
+   * one user gesture. Called from the Upload step's "Next: Map
+   * columns →" button. Putting the trigger in the handler (not a
+   * reactive useEffect) keeps the one-shot semantics explicit and
+   * avoids the react-hooks/set-state-in-effect lint trap (any
+   * setState in an effect body would flag, even after await).
+   *
+   * The action is RLS-safe (orgAction wraps SET LOCAL ROLE) and never
+   * throws — failure modes (no API key, malformed JSON, network
+   * error) return ok=false + an all-skip suggestion array, and the
+   * wizard falls through to the alias-based defaults already in
+   * `mapping`.
+   */
+  function continueToMap() {
+    if (!parsed) return
+    setError(null)
+    goToStep("map")
+    if (aiState !== "idle") return
+    setAiState("loading")
+    void runAiScan()
+  }
+
+  async function runAiScan() {
+    if (!parsed) return
+    const sampleRows = parsed.rows
+      .slice(0, 8)
+      .map((row) => parsed.headers.map((_, c) => row[c] ?? ""))
+    const result = await scanColumnsWithAi({
+      headers: parsed.headers,
+      sampleRows,
+    })
+    if (result.serverError || !result.data) {
+      setAiState("failed")
+      return
+    }
+    const data = result.data
+    setAiSuggestions(data.suggestions)
+    setAiState(data.ok ? "done" : "failed")
+    // Snapshot the user-touched set ONCE so the suggestions only
+    // apply to columns the user hasn't already changed during the
+    // (brief) loading window.
+    const touchedAtScan = userTouchedColumns
+    setMapping((prev) => {
+      const next = [...prev]
+      data.suggestions.forEach((s, i) => {
+        if (touchedAtScan.has(i)) return
+        if (s.target === "skip") {
+          // Leave the alias default in place — a "skip" from AI is
+          // "we don't have a confident pick", not "ignore this
+          // column"; the alias may still be right.
+          return
+        }
+        if (s.target === "create_new") {
+          // Inline-create lands in a follow-up commit. For now the
+          // wizard records the intent + clears the mapping.
+          next[i] = null
+          return
+        }
+        // cf:<id> or an IMPORTABLE_FIELDS id — both are valid
+        // MappingChoice values per the existing wizard contract.
+        next[i] = s.target as MappingChoice
+      })
+      return next
+    })
+    setCreateNewIntent((prev) => {
+      const next = new Set(prev)
+      data.suggestions.forEach((s, i) => {
+        if (touchedAtScan.has(i)) return
+        if (s.target === "create_new") next.add(i)
+      })
+      return next
+    })
+  }
+
+  function setMappingAt(i: number, choice: MappingChoice | null) {
+    setMapping((prev) => {
+      const next = [...prev]
+      next[i] = choice
+      return next
+    })
+    setUserTouchedColumns((prev) => {
+      const n = new Set(prev)
+      n.add(i)
+      return n
+    })
+    setCreateNewIntent((prev) => {
+      if (!prev.has(i)) return prev
+      const n = new Set(prev)
+      n.delete(i)
+      return n
+    })
+  }
+
+  function markCreateNewAt(i: number) {
+    // Intent only — the actual definition is created in a follow-up
+    // commit's inline modal. For now this clears the mapping and flags
+    // the row so Next is disabled until the user resolves it.
+    setMapping((prev) => {
+      const next = [...prev]
+      next[i] = null
+      return next
+    })
+    setCreateNewIntent((prev) => {
+      const n = new Set(prev)
+      n.add(i)
+      return n
+    })
+    setUserTouchedColumns((prev) => {
+      const n = new Set(prev)
+      n.add(i)
+      return n
+    })
+  }
+
+  function confirmAllAiSuggestions() {
+    // Hides all AI pills + dismisses the banner. The mapping values are
+    // already in place (applied when scan returned); this is purely a
+    // visual acknowledgement.
+    setAiConfirmed(true)
+  }
+
+  function clearAiSuggestions() {
+    // Reverts mapping to the alias-based defaults from the original
+    // upload. createNewIntent + touched set are also reset so the
+    // user starts from the alias baseline.
+    if (!parsed) return
+    setMapping(autoMapHeaders(parsed.headers, customFieldDefs))
+    setUserTouchedColumns(new Set())
+    setCreateNewIntent(new Set())
+    setAiConfirmed(true)
   }
 
   // ─── Step 2 → 3: map + run server dedupe ─────────────────────────────
@@ -472,9 +639,11 @@ export function ContactsImportWizard({
       {step === "upload" && (
         <UploadStep
           busy={busy}
+          parsed={parsed}
           onFile={(f) => {
             void onFileChange(f)
           }}
+          onContinue={continueToMap}
         />
       )}
 
@@ -482,11 +651,19 @@ export function ContactsImportWizard({
         <MapStep
           headers={parsed.headers}
           mapping={mapping}
-          onChange={setMapping}
+          onChangeAt={setMappingAt}
+          onMarkCreateNewAt={markCreateNewAt}
           rowCount={parsed.rows.length}
           sampleValues={sampleValues}
           detectedTypes={detectedTypes}
           customFieldDefs={customFieldDefs}
+          aiSuggestions={aiSuggestions}
+          aiState={aiState}
+          aiConfirmed={aiConfirmed}
+          userTouchedColumns={userTouchedColumns}
+          createNewIntent={createNewIntent}
+          onConfirmAllAi={confirmAllAiSuggestions}
+          onClearAi={clearAiSuggestions}
           busy={busy}
           onBack={() => {
             goToStep("upload")
@@ -583,7 +760,19 @@ function Stepper({ current }: { current: Step }) {
   )
 }
 
-function UploadStep({ busy, onFile }: { busy: boolean; onFile: (f: File) => void }) {
+function UploadStep({
+  busy,
+  onFile,
+  parsed,
+  onContinue,
+}: {
+  busy: boolean
+  onFile: (f: File) => void
+  /** Set once the picked file has been parsed. Drives the summary
+   *  block + enables the "Next: Map columns →" button. */
+  parsed: ParsedCsv | null
+  onContinue: () => void
+}) {
   return (
     <div className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
       <div>
@@ -602,53 +791,220 @@ function UploadStep({ busy, onFile }: { busy: boolean; onFile: (f: File) => void
           if (file) onFile(file)
         }}
       />
+      {parsed && (
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 px-3 py-2 text-xs">
+          <p className="font-medium">
+            Parsed {String(parsed.rows.length)} data row
+            {parsed.rows.length === 1 ? "" : "s"} · {String(parsed.headers.length)} column
+            {parsed.headers.length === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 text-[var(--color-muted-foreground)]">
+            On the next step we&apos;ll scan your columns with AI and pre-fill the field mapping.
+          </p>
+        </div>
+      )}
+      <div className="flex justify-end">
+        <Button onClick={onContinue} disabled={busy || !parsed}>
+          Next: Map columns →
+        </Button>
+      </div>
     </div>
   )
 }
 
+// ─── CSV V2 — sentinel values for the SearchableSelect ─────────────
+// MappingChoice is `ImportableField | cf:${string}` — null in the
+// wizard's array represents "Don't import." The dropdown surface
+// needs string sentinels so SearchableSelect's value/onChange can
+// distinguish, then we translate at the boundary in onChangeAt.
+const SKIP_VALUE = "__skip__"
+const CREATE_NEW_VALUE = "__create_new__"
+
+const SPECIAL_OPTGROUP = "Special"
+const STANDARD_OPTGROUP = "Standard fields"
+const CUSTOM_OPTGROUP = "Custom fields"
+
 function MapStep({
   headers,
   mapping,
-  onChange,
+  onChangeAt,
+  onMarkCreateNewAt,
   rowCount,
   sampleValues,
   detectedTypes,
+  customFieldDefs,
+  aiSuggestions,
+  aiState,
+  aiConfirmed,
+  userTouchedColumns,
+  createNewIntent,
+  onConfirmAllAi,
+  onClearAi,
   busy,
   onBack,
   onNext,
-  customFieldDefs,
 }: {
   headers: string[]
   mapping: (MappingChoice | null)[]
-  onChange: (next: (MappingChoice | null)[]) => void
+  onChangeAt: (i: number, choice: MappingChoice | null) => void
+  onMarkCreateNewAt: (i: number) => void
   rowCount: number
   sampleValues: string[]
   detectedTypes: DetectedType[]
+  customFieldDefs: ImportCustomFieldDef[]
+  aiSuggestions: ColumnScanSuggestion[] | null
+  aiState: "idle" | "loading" | "done" | "failed"
+  aiConfirmed: boolean
+  userTouchedColumns: Set<number>
+  createNewIntent: Set<number>
+  onConfirmAllAi: () => void
+  onClearAi: () => void
   busy: boolean
   onBack: () => void
   onNext: () => void
-  customFieldDefs: ImportCustomFieldDef[]
 }) {
   const mapped = new Set(
     mapping.filter((m): m is ImportableField => typeof m === "string" && !isCustomFieldMapping(m)),
   )
-  // Push 2c.1 — preview enables when at least one identifier-shaped
-  // field is mapped. lastName preferred, fullName equivalent, email
-  // also works (HubSpot pattern: email-only leads are common).
+  // Preview enables when at least one identifier-shaped field is
+  // mapped. lastName preferred, fullName equivalent, email also works
+  // (HubSpot pattern: email-only leads are common). Plus: no row can
+  // be left in "Create new custom field" intent — the inline-create
+  // modal commit will resolve this, but for now block Next on it.
+  const unresolvedCreateNew = createNewIntent.size > 0
   const canContinue =
-    !busy && (mapped.has("fullName") || mapped.has("lastName") || mapped.has("primaryEmail"))
+    !busy &&
+    !unresolvedCreateNew &&
+    (mapped.has("fullName") || mapped.has("lastName") || mapped.has("primaryEmail"))
+
+  // Build the SearchableSelect item list ONCE — items are stable
+  // across rows so we can reuse the same array. Order within each
+  // optgroup is alphabetical by label for the standard fields (with
+  // the identifier-y ones first) and CSV-order for custom fields
+  // (preserves the org's intentional ordering).
+  const dropdownItems: SearchableSelectItem[] = useMemo(() => {
+    const items: SearchableSelectItem[] = []
+    for (const f of IMPORTABLE_FIELDS) {
+      items.push({ value: f, label: FIELD_LABELS[f], optgroup: STANDARD_OPTGROUP })
+    }
+    for (const def of customFieldDefs) {
+      items.push({
+        value: buildCustomFieldMapping(def.id),
+        label: def.name,
+        description: def.fieldType,
+        optgroup: CUSTOM_OPTGROUP,
+      })
+    }
+    // Special: Don't import + Create new custom field (last commit
+    // adds the inline modal; the option is selectable now and shows
+    // the in-flight intent state).
+    items.push({
+      value: SKIP_VALUE,
+      label: "Don't import",
+      optgroup: SPECIAL_OPTGROUP,
+    })
+    items.push({
+      value: CREATE_NEW_VALUE,
+      label: "+ Create new custom field",
+      description: "Add a new field for this column",
+      optgroup: SPECIAL_OPTGROUP,
+    })
+    return items
+  }, [customFieldDefs])
+
+  // Track which columns have a currently-active AI suggestion that
+  // the user hasn't overridden — drives the pill render.
+  function isAiSuggestedActive(i: number): boolean {
+    if (aiConfirmed) return false
+    if (userTouchedColumns.has(i)) return false
+    if (!aiSuggestions) return false
+    const s = aiSuggestions[i]
+    if (!s) return false
+    // Pill only on non-skip suggestions — "skip" suggestions don't
+    // override the mapping, so showing an AI badge on a row whose
+    // value came from the alias autoMapper would be misleading.
+    if (s.target === "skip") return false
+    if (s.target === "create_new") return createNewIntent.has(i)
+    // For a real target, the suggestion is "active" iff it equals
+    // the current mapping value (i.e., the AI pre-fill still stands).
+    const current = mapping[i]
+    return current !== null && current === s.target
+  }
+
+  // Count of currently-active AI suggestions for the banner copy.
+  const activeAiCount = aiSuggestions
+    ? aiSuggestions.reduce((n, _s, i) => (isAiSuggestedActive(i) ? n + 1 : n), 0)
+    : 0
 
   return (
     <div className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
       <div>
         <h2 className="text-base font-medium">Map columns to contact fields</h2>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-          {rowCount === 1 ? "1 data row found." : `${String(rowCount)} data rows found.`} We&apos;ve
-          auto-mapped familiar headers — confirm or change below. Each row needs at least one of{" "}
-          <strong>Full name</strong>, <strong>Last name</strong>, or <strong>Primary email</strong>{" "}
-          mapped.
+          {rowCount === 1 ? "1 data row found." : `${String(rowCount)} data rows found.`} Confirm or
+          change the field mapping below. Each row needs at least one of <strong>Full name</strong>,{" "}
+          <strong>Last name</strong>, or <strong>Primary email</strong> mapped.
         </p>
       </div>
+
+      {/* CSV V2 — AI scan banner. Three states: loading / done / failed.
+          aiConfirmed dismisses the done banner (user clicked Confirm
+          all). The failed-state copy makes it clear manual mapping is
+          fully supported. */}
+      {aiState === "loading" && (
+        <div
+          className="flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 px-3 py-2 text-xs"
+          data-testid="csv-v2-ai-banner-loading"
+        >
+          <Sparkles
+            className="size-3.5 animate-pulse text-[var(--color-primary)]"
+            aria-hidden="true"
+          />
+          <span>Scanning columns with AI…</span>
+        </div>
+      )}
+      {aiState === "done" && !aiConfirmed && activeAiCount > 0 && (
+        <div
+          className="flex items-center justify-between gap-2 rounded-md border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 px-3 py-2 text-xs"
+          data-testid="csv-v2-ai-banner-done"
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-3.5 text-[var(--color-primary)]" aria-hidden="true" />
+            <span>
+              AI suggested mappings for {String(activeAiCount)} column
+              {activeAiCount === 1 ? "" : "s"}. Review and confirm, or change individually.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onClearAi}
+              data-testid="csv-v2-ai-clear"
+            >
+              Clear AI
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={onConfirmAllAi}
+              data-testid="csv-v2-ai-confirm-all"
+            >
+              Confirm all
+            </Button>
+          </div>
+        </div>
+      )}
+      {aiState === "failed" && (
+        <div
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          data-testid="csv-v2-ai-banner-failed"
+        >
+          AI mapping wasn&apos;t available for this upload — map columns manually below.
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
         <table className="w-full text-sm">
           <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
@@ -662,15 +1018,28 @@ function MapStep({
             {headers.map((h, i) => {
               const chosen = mapping[i] ?? null
               const detected = detectedTypes[i] ?? null
-              // Custom-field mappings (cf:*) skip the detection-mismatch
-              // warning since the wizard's coerceCustomFieldCell already
-              // surfaced any type concerns row-by-row.
               const intrinsic: ImportableField | null =
                 chosen !== null && !isCustomFieldMapping(chosen) ? chosen : null
               const agrees = intrinsic ? detectionAgreesWithMapping(detected, intrinsic) : true
               const detectedMismatch =
                 detected !== null && intrinsic !== null && !agrees ? intrinsic : null
-              const showSuggestionCheck = detected !== null && intrinsic !== null && agrees
+              const showAiPill = isAiSuggestedActive(i)
+              const isCreateNew = createNewIntent.has(i)
+
+              // SearchableSelect value: null mapping → null
+              // (placeholder), SKIP_VALUE when user explicitly picked
+              // Don't import, CREATE_NEW_VALUE for the in-flight
+              // create-field intent, otherwise the mapping value
+              // (intrinsic field id or cf:<id>).
+              let selectValue: string | null
+              if (isCreateNew) {
+                selectValue = CREATE_NEW_VALUE
+              } else if (chosen === null && userTouchedColumns.has(i)) {
+                selectValue = SKIP_VALUE
+              } else {
+                selectValue = chosen
+              }
+
               return (
                 <tr key={h + String(i)} className="border-t border-[var(--color-border)] align-top">
                   <td className="px-3 py-2 font-mono text-xs">{h}</td>
@@ -678,45 +1047,44 @@ function MapStep({
                     {sampleValues[i] === "" ? <em>empty</em> : sampleValues[i]}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={chosen ?? ""}
-                        onChange={(e) => {
-                          const next = [...mapping]
-                          const v = e.target.value
-                          next[i] = v ? (v as MappingChoice) : null
-                          onChange(next)
-                        }}
-                        className="h-9 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm"
+                    <SearchableSelect
+                      items={dropdownItems}
+                      value={selectValue}
+                      onChange={(v) => {
+                        if (v === null || v === SKIP_VALUE) {
+                          onChangeAt(i, null)
+                          return
+                        }
+                        if (v === CREATE_NEW_VALUE) {
+                          onMarkCreateNewAt(i)
+                          return
+                        }
+                        onChangeAt(i, v as MappingChoice)
+                      }}
+                      placeholder="— Don't include in import —"
+                      aria-label={`Map column ${h}`}
+                      valuePrefix={
+                        showAiPill ? (
+                          <span
+                            className="inline-flex items-center gap-0.5 rounded-sm bg-[var(--color-primary)]/15 px-1 py-0 text-[10px] font-medium tracking-wide text-[var(--color-primary)]"
+                            title="AI-suggested mapping"
+                            data-testid={`csv-v2-ai-pill-${String(i)}`}
+                          >
+                            <Sparkles className="size-2.5" aria-hidden="true" />
+                            AI
+                          </span>
+                        ) : undefined
+                      }
+                    />
+                    {isCreateNew && (
+                      <p
+                        className="mt-1 text-xs text-amber-700 dark:text-amber-300"
+                        data-testid={`csv-v2-create-new-pending-${String(i)}`}
                       >
-                        <option value="">— Don&apos;t include in import —</option>
-                        <optgroup label="Standard fields">
-                          {IMPORTABLE_FIELDS.map((f) => (
-                            <option key={f} value={f}>
-                              {FIELD_LABELS[f]}
-                            </option>
-                          ))}
-                        </optgroup>
-                        {customFieldDefs.length > 0 && (
-                          <optgroup label="Custom fields">
-                            {customFieldDefs.map((def) => (
-                              <option key={def.id} value={buildCustomFieldMapping(def.id)}>
-                                {def.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      {showSuggestionCheck && (
-                        <span
-                          aria-label="Detected type matches mapping"
-                          title="Detected type matches mapping"
-                          className="text-green-600 dark:text-green-400"
-                        >
-                          ✓
-                        </span>
-                      )}
-                    </div>
+                        New custom field for this column — inline create lands in the next push.
+                        Pick an existing field or &quot;Don&apos;t import&quot; to continue.
+                      </p>
+                    )}
                     {detectedMismatch && (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                         This column looks like {humanizeType(detected)} but is mapped to{" "}
@@ -734,8 +1102,16 @@ function MapStep({
         <Button variant="outline" onClick={onBack} disabled={busy}>
           Back
         </Button>
-        <Button onClick={onNext} disabled={!canContinue}>
-          {busy ? "Checking…" : "Preview"}
+        <Button
+          onClick={onNext}
+          disabled={!canContinue}
+          title={
+            unresolvedCreateNew
+              ? "Resolve the 'Create new custom field' selection(s) before continuing"
+              : undefined
+          }
+        >
+          {busy ? "Checking…" : "Next: Review & dedupe →"}
         </Button>
       </div>
     </div>

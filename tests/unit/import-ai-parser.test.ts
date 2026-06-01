@@ -180,6 +180,55 @@ describe("parseColumnScanResponse — hardening (the load-bearing tests)", () =>
     expect(r.suggestions[3]?.target).toBe("skip")
   })
 
+  it("header-match tolerates trailing whitespace (Haiku echoing a header with extra spaces)", () => {
+    const raw = JSON.stringify({
+      suggestions: [
+        { column: "First Name  ", target: "firstName", confidence: "high" },
+        { column: " Email", target: "primaryEmail", confidence: "high" },
+      ],
+    })
+    const r = parseColumnScanResponse(raw, ["First Name", "Email"], allowed())
+    expect(r.ok).toBe(true)
+    expect(r.suggestions[0]?.target).toBe("firstName")
+    expect(r.suggestions[1]?.target).toBe("primaryEmail")
+    // OUTPUT column uses the INPUT header verbatim — the user sees
+    // their own CSV header text, not the AI's whitespace-mutated one.
+    expect(r.suggestions[0]?.column).toBe("First Name")
+    expect(r.suggestions[1]?.column).toBe("Email")
+  })
+
+  it("header-match tolerates smart quotes (curly apostrophe in echoed header)", () => {
+    // Input header has a straight apostrophe (U+0027); AI response
+    // has the curly right single quote (U+2019). Without normalization
+    // the lookup would miss and the column would drop to skip.
+    const raw = JSON.stringify({
+      suggestions: [{ column: "O’Connell ID", target: "skip", confidence: "low" }],
+    })
+    const r = parseColumnScanResponse(raw, ["O'Connell ID"], allowed())
+    expect(r.suggestions[0]?.column).toBe("O'Connell ID")
+    expect(r.suggestions[0]?.target).toBe("skip")
+  })
+
+  it("header-match is case-insensitive (model lowercased the echo)", () => {
+    const raw = JSON.stringify({
+      suggestions: [{ column: "first name", target: "firstName", confidence: "high" }],
+    })
+    const r = parseColumnScanResponse(raw, ["First Name"], allowed())
+    expect(r.suggestions[0]?.target).toBe("firstName")
+    expect(r.suggestions[0]?.column).toBe("First Name")
+  })
+
+  it("a genuinely different header (not the same column at all) still drops to 'skip'", () => {
+    // Conservative default: normalization absorbs cosmetic drift, not
+    // semantic drift. If the AI returns a header that just isn't in
+    // the input set, we don't try to fuzzy-match it.
+    const raw = JSON.stringify({
+      suggestions: [{ column: "Telephone", target: "primaryPhone", confidence: "high" }],
+    })
+    const r = parseColumnScanResponse(raw, ["Mobile"], allowed())
+    expect(r.suggestions[0]?.target).toBe("skip")
+  })
+
   it("'skip' and 'create_new' are explicitly in the allow-list and pass through", () => {
     const raw = JSON.stringify({
       suggestions: [

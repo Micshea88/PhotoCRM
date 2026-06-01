@@ -1,0 +1,59 @@
+-- ============================================================================
+-- 0039 — SNAPSHOT-RECOVERY ANCHOR — NO-OP at the SQL layer.
+-- ============================================================================
+--
+-- Why this migration exists
+-- -------------------------
+-- The hand-written migrations 0035 → 0038 (ai cache columns on contacts,
+-- meetings, sms_messages, ai_usage_log) were applied to every environment
+-- via `pnpm db:migrate`, but their `meta/NNNN_snapshot.json` files were
+-- never regenerated. So drizzle-kit's snapshot view of the world froze at
+-- 0033, and every subsequent `db:generate` would re-propose those four
+-- objects as "missing" — exactly what bit Item 2's email_log build.
+--
+-- What this migration does
+-- ------------------------
+-- DDL-wise: NOTHING. The SQL body is intentionally empty (modulo this
+-- comment). The drizzle-orm migrator records a row in
+-- `__drizzle_migrations` with this file's content hash, but the schema
+-- is not touched.
+--
+-- The point is the COMPANION `meta/0039_snapshot.json` — auto-generated
+-- by `drizzle-kit generate` (NOT hand-edited), it now correctly captures
+-- the live schema state after 0035-0038, including:
+--   - contacts.ai_lead_status / ai_lead_status_reasoning / ai_summary_text
+--     / ai_insights_json / ai_generated_at / ai_generation_model
+--   - meetings table
+--   - sms_messages table
+--   - ai_usage_log table
+-- After this anchor, the next `db:generate` will only emit deltas that
+-- are truly new (e.g. the email_log table that lands in 0040).
+--
+-- Production-safety analysis
+-- --------------------------
+-- `drizzle migrate` (which runs on every Vercel deploy) hashes the SQL
+-- by content and records applied migrations in `__drizzle_migrations`.
+-- It does NOT read the snapshot files — those are dev-time tooling for
+-- `db:generate`. So:
+--
+--   * Prod runs this empty SQL once → adds a row to __drizzle_migrations
+--     with hash(0039) → no schema mutation.
+--   * Subsequent deploys see hash(0039) already in __drizzle_migrations
+--     and skip it.
+--   * The CORRECT 0039 snapshot is what `db:generate` uses going forward
+--     so it stops re-proposing things that already exist.
+--
+-- This is the "anchor snapshot" pattern: a single content-hashed no-op
+-- migration paired with a regenerated snapshot. Zero risk to prod, zero
+-- changes to the immutable 0000-0038 chain.
+--
+-- Going forward
+-- -------------
+-- Convention (codified in AGENTS.md by this branch): declare tables AND
+-- RLS together in the TS schema (pgPolicy + enableRLS), then run
+-- `db:generate` — never hand-write a migration .sql from scratch, and
+-- never hand-edit a snapshot. A CI guard in the verify path catches
+-- snapshot/TS drift before it can be committed.
+-- ============================================================================
+
+SELECT 1 WHERE FALSE;

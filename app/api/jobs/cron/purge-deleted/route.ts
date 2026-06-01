@@ -6,6 +6,7 @@ import { files } from "@/modules/files/schema"
 import { paymentInstallments } from "@/modules/invoices/schema"
 import { contacts, contactNotes } from "@/modules/contacts/schema"
 import { callLog } from "@/modules/calls/schema"
+import { emailLog } from "@/modules/email-log/schema"
 import { faqEntries } from "@/modules/help/schema"
 import { audit } from "@/modules/audit/audit"
 import { blob } from "@/lib/blob"
@@ -218,6 +219,34 @@ export async function GET(request: Request) {
   // SET NULL. Orphan recordings are reaped by the files purge above
   // once the file itself is soft-deleted.
 
+  // -------- Email log (Backlog Item 2) --------
+  const emailRows = await db
+    .select({ id: emailLog.id, organizationId: emailLog.organizationId })
+    .from(emailLog)
+    .where(and(isNotNull(emailLog.deletedAt), lt(emailLog.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const emailOrgCounts = new Map<string, number>()
+  for (const r of emailRows) {
+    emailOrgCounts.set(r.organizationId, (emailOrgCounts.get(r.organizationId) ?? 0) + 1)
+  }
+  for (const [orgId, count] of emailOrgCounts) {
+    await audit({ db, organizationId: orgId, actorUserId: null }, "purge.email_log", {
+      metadata: { count, retentionDays: RETENTION_DAYS },
+    })
+  }
+  if (emailRows.length > 0) {
+    await db.delete(emailLog).where(
+      inArray(
+        emailLog.id,
+        emailRows.map((r) => r.id),
+      ),
+    )
+  }
+  // Email attachments (when they land via blob upload) follow the same
+  // pattern as call recordings — their lifecycle is owned by the
+  // `files` purge above; we don't cascade from email_log.
+
   // -------- FAQ entries (P4.2 — global, no organization_id) --------
   // FAQ entries are product-level, not org-scoped. Audit rows here
   // would have organizationId=null, which the audit() helper accepts
@@ -245,6 +274,7 @@ export async function GET(request: Request) {
       contacts: contactRows.length,
       contactNotes: contactNoteRows.length,
       callLog: callRows.length,
+      emailLog: emailRows.length,
       faqEntries: faqRows.length,
     },
     cutoff: cutoff.toISOString(),
@@ -256,6 +286,7 @@ export async function GET(request: Request) {
       contactRows.length === BATCH_LIMIT ||
       contactNoteRows.length === BATCH_LIMIT ||
       callRows.length === BATCH_LIMIT ||
+      emailRows.length === BATCH_LIMIT ||
       faqRows.length === BATCH_LIMIT,
   })
 }

@@ -29,6 +29,10 @@ const TIER1 = [
   { name: "typecheck", cmd: "pnpm", args: ["typecheck"] },
   { name: "lint", cmd: "pnpm", args: ["lint"] },
   { name: "check-actions", cmd: "node", args: ["scripts/check-actions.mjs"] },
+  // Snapshot-drift guard — journal/snapshot integrity + sandbox generate.
+  // VERIFY PATH ONLY. NEVER add to the Vercel build command — a false
+  // positive there would block prod deploys. See AGENTS.md hard-rule 10a.
+  { name: "check-drizzle-drift", cmd: "node", args: ["scripts/check-drizzle-drift.mjs"] },
   { name: "test:unit", cmd: "pnpm", args: ["test:unit"] },
 ]
 const TIER2 = [

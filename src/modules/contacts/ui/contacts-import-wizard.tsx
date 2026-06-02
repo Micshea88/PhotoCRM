@@ -81,6 +81,14 @@ export interface PreviewRow {
   rowIndex: number
   matchedContactId: string | null
   matchedContactName: string | null
+  /**
+   * CSV V2 — which field on the row caused the DB match. Drives the
+   * red highlight on the matching value in the Email/phone cell.
+   * null when there's no DB match OR when the match came from
+   * CSV-internal duplication (duplicateOfRow), which has no
+   * server-side field reason.
+   */
+  matchedField: "email" | "phone" | null
   action: "create" | "update" | "skip"
   duplicateOfRow: number | null
 }
@@ -449,6 +457,10 @@ export function ContactsImportWizard({
         rowIndex: r.rowIndex,
         matchedContactId: r.matchedContactId,
         matchedContactName: r.matchedContactName,
+        // CSV V2 — additive preview-response field, nullable when
+        // the server didn't surface a match reason. Drives the red
+        // highlight on the matching value in the Email/phone cell.
+        matchedField: r.matchedField,
         action,
         duplicateOfRow: dupOf,
       }
@@ -1500,23 +1512,42 @@ export function PreviewStep({
                       </p>
                     )}
                   </td>
-                  {/* Email + phone stacked in one cell. */}
+                  {/* Email + phone stacked in one cell. The single
+                      field that caused the DB match is highlighted in
+                      the same danger red used by the header duplicate
+                      count, so the user sees exactly which value
+                      collided. matchedField is null for CSV-internal
+                      duplicates (no server-side field reason) — both
+                      values stay normal in that case. */}
                   <td className="px-3 py-2 align-top text-xs">
-                    <div>
+                    <div
+                      className={
+                        preview?.matchedField === "email"
+                          ? "font-medium text-red-600 dark:text-red-400"
+                          : undefined
+                      }
+                      data-testid={`csv-v2-preview-email-${String(c.rowIndex)}`}
+                    >
                       {c.values.primaryEmail ?? (
                         <span className="text-[var(--color-muted-foreground)]">—</span>
                       )}
                     </div>
-                    <div className="text-[var(--color-muted-foreground)]">
+                    <div
+                      className={
+                        preview?.matchedField === "phone"
+                          ? "font-medium text-red-600 dark:text-red-400"
+                          : "text-[var(--color-muted-foreground)]"
+                      }
+                      data-testid={`csv-v2-preview-phone-${String(c.rowIndex)}`}
+                    >
                       {c.values.primaryPhone ?? "—"}
                     </div>
                   </td>
                   {/* Matches existing — shows matched record's name
                       for DB matches, "Duplicate of row N" for CSV-
-                      internal duplicates. Per-row why ("· email" /
-                      "· phone") would need an additive field on the
-                      preview action response — flagged separately;
-                      not changed in this layout pass. */}
+                      internal duplicates. The reason (which field
+                      matched) is conveyed by the red highlight in the
+                      Email/phone cell to the left — no inline label. */}
                   <td className="px-3 py-2 align-top text-xs">
                     {hasError ? (
                       <span className="text-red-700 dark:text-red-400">—</span>

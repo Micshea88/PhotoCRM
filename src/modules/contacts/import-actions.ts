@@ -215,12 +215,27 @@ export const previewContactsImport = orgAction
         const phone = normalizePhone(r.values.primaryPhone)
         const emailMatch = email ? (byEmail.get(email) ?? null) : null
         const phoneMatch = phone ? (byPhone.get(phone) ?? null) : null
+        // Existing match decision — UNCHANGED. emailMatch ?? phoneMatch
+        // means email takes precedence when both hit; same logic that
+        // drives matchedContactId / matchedContactName / proposedAction.
         const match = emailMatch ?? phoneMatch
+        // CSV V2 — surface WHICH field hit, derived from the same
+        // existing emailMatch/phoneMatch values. Purely additive; the
+        // match decision itself is unchanged. Email-first ordering
+        // matches the `match = emailMatch ?? phoneMatch` precedence
+        // above so the field shown can never disagree with the
+        // matched record.
+        const matchedField: "email" | "phone" | null = emailMatch
+          ? "email"
+          : phoneMatch
+            ? "phone"
+            : null
         const proposedAction: "create" | "update" | "skip" = match ? "update" : "create"
         return {
           rowIndex: r.rowIndex,
           matchedContactId: match?.id ?? null,
           matchedContactName: match ? `${match.firstName} ${match.lastName}` : null,
+          matchedField,
           proposedAction,
         }
       }),

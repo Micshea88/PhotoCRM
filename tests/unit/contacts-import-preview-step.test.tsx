@@ -76,6 +76,7 @@ function makePreview(
     rowIndex,
     matchedContactId: null,
     matchedContactName: null,
+    matchedField: null,
     action,
     duplicateOfRow,
   }
@@ -294,6 +295,7 @@ describe("PreviewStep — CSV V2 layout: custom-field columns dropped, customVal
           rowIndex: 1,
           matchedContactId: null,
           matchedContactName: null,
+          matchedField: null,
           action: "create",
           duplicateOfRow: null,
         },
@@ -327,6 +329,7 @@ describe("PreviewStep — CSV V2 layout: custom-field columns dropped, customVal
           rowIndex: 1,
           matchedContactId: null,
           matchedContactName: null,
+          matchedField: null,
           action: "create",
           duplicateOfRow: null,
         },
@@ -351,6 +354,7 @@ describe("PreviewStep — CSV V2 layout primitives (header counts, metric cards,
           rowIndex: 1,
           matchedContactId: "c-existing-1",
           matchedContactName: "Ada Existing",
+          matchedField: "email",
           action: "skip",
           duplicateOfRow: null,
         },
@@ -381,6 +385,7 @@ describe("PreviewStep — CSV V2 layout primitives (header counts, metric cards,
           rowIndex: 1,
           matchedContactId: "c-existing",
           matchedContactName: "Ada Existing",
+          matchedField: "email",
           action: "skip",
           duplicateOfRow: null,
         },
@@ -398,5 +403,122 @@ describe("PreviewStep — CSV V2 layout primitives (header counts, metric cards,
       previewRows: [makePreview(1, "create")],
     })
     expect(screen.queryByTestId("csv-v2-preview-dup-warning")).toBeNull()
+  })
+})
+
+describe("PreviewStep — CSV V2 matched-field highlight (red on the colliding value)", () => {
+  // The danger red used by the header duplicate count is
+  // text-red-600 dark:text-red-400 — same token used by the
+  // V2 matched-field highlight so the visual ties together.
+  const DANGER_RED = "text-red-600"
+
+  it("matchedField='email' colors the email red and leaves the phone normal", () => {
+    renderPreview({
+      cleanRows: [
+        makeClean(1, {
+          firstName: "Ada",
+          lastName: "Lovelace",
+          primaryEmail: "ada@example.com",
+          primaryPhone: "+1-555-0101",
+        }),
+      ],
+      previewRows: [
+        {
+          rowIndex: 1,
+          matchedContactId: "c-existing-email",
+          matchedContactName: "Ada Existing",
+          matchedField: "email",
+          action: "skip",
+          duplicateOfRow: null,
+        },
+      ],
+    })
+    const emailCell = screen.getByTestId("csv-v2-preview-email-1")
+    const phoneCell = screen.getByTestId("csv-v2-preview-phone-1")
+    expect(emailCell).toHaveTextContent("ada@example.com")
+    expect(phoneCell).toHaveTextContent("+1-555-0101")
+    expect(emailCell.className).toContain(DANGER_RED)
+    expect(phoneCell.className).not.toContain(DANGER_RED)
+  })
+
+  it("matchedField='phone' colors the phone red and leaves the email normal", () => {
+    renderPreview({
+      cleanRows: [
+        makeClean(1, {
+          firstName: "Grace",
+          lastName: "Hopper",
+          primaryEmail: "grace@example.com",
+          primaryPhone: "+1-555-0202",
+        }),
+      ],
+      previewRows: [
+        {
+          rowIndex: 1,
+          matchedContactId: "c-existing-phone",
+          matchedContactName: "Grace Existing",
+          matchedField: "phone",
+          action: "skip",
+          duplicateOfRow: null,
+        },
+      ],
+    })
+    const emailCell = screen.getByTestId("csv-v2-preview-email-1")
+    const phoneCell = screen.getByTestId("csv-v2-preview-phone-1")
+    expect(emailCell).toHaveTextContent("grace@example.com")
+    expect(phoneCell).toHaveTextContent("+1-555-0202")
+    expect(emailCell.className).not.toContain(DANGER_RED)
+    expect(phoneCell.className).toContain(DANGER_RED)
+  })
+
+  it("unmatched row leaves BOTH email and phone in normal color", () => {
+    renderPreview({
+      cleanRows: [
+        makeClean(1, {
+          firstName: "Alan",
+          lastName: "Turing",
+          primaryEmail: "alan@example.com",
+          primaryPhone: "+1-555-0303",
+        }),
+      ],
+      previewRows: [makePreview(1, "create")],
+    })
+    const emailCell = screen.getByTestId("csv-v2-preview-email-1")
+    const phoneCell = screen.getByTestId("csv-v2-preview-phone-1")
+    expect(emailCell.className).not.toContain(DANGER_RED)
+    expect(phoneCell.className).not.toContain(DANGER_RED)
+  })
+
+  it("matchedField=null on a CSV-internal duplicate leaves both fields uncolored", () => {
+    // CSV-internal duplicates (duplicateOfRow !== null) have no
+    // server-side field reason — the matcher uses identifier+identifier
+    // comparison across the SAME CSV upload, not DB lookups. Both
+    // values stay normal in that case.
+    renderPreview({
+      cleanRows: [
+        makeClean(1, {
+          firstName: "John",
+          lastName: "Doe",
+          primaryEmail: "dup@example.com",
+        }),
+        makeClean(2, {
+          firstName: "John",
+          lastName: "Doe",
+          primaryEmail: "dup@example.com",
+        }),
+      ],
+      previewRows: [
+        makePreview(1, "create"),
+        {
+          rowIndex: 2,
+          matchedContactId: null,
+          matchedContactName: null,
+          matchedField: null,
+          action: "skip",
+          duplicateOfRow: 1,
+        },
+      ],
+    })
+    const emailCell = screen.getByTestId("csv-v2-preview-email-2")
+    expect(emailCell.className).not.toContain(DANGER_RED)
   })
 })

@@ -10,6 +10,7 @@ import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/sea
 import { previewContactsImport, runContactsImport } from "../import-actions"
 import { scanColumnsWithAi } from "../import-ai"
 import type { ColumnScanSuggestion } from "../import-ai-parser"
+import { CsvImportCreateFieldModal } from "./csv-import-create-field-modal"
 import {
   autoMapHeaders,
   buildCleanRow,
@@ -188,10 +189,30 @@ export function ContactsImportWizard({
   // skips them. Reset when the user uploads a new CSV.
   const [userTouchedColumns, setUserTouchedColumns] = useState<Set<number>>(new Set())
   // Set of column indices where the user picked "Create new custom
-  // field" but hasn't created it yet. Stored separately from mapping
-  // (mapping[i] stays null) so the import action contract is unchanged
-  // until the inline-create-field commit wires it through.
+  // field" but hasn't created it yet. The inline create modal
+  // (opened via markCreateNewAt below) resolves this set on success;
+  // switching the dropdown to an existing field OR "Don't import"
+  // also clears it (setMappingAt does the cleanup).
   const [createNewIntent, setCreateNewIntent] = useState<Set<number>>(new Set())
+
+  // CSV V2 — local mirror of the customFieldDefs prop so the inline
+  // create-field modal can append a newly created def and have it
+  // immediately show up in the MapStep dropdown (and the PreviewStep
+  // surfacing) without a full page reload. Initialized from the
+  // prop; the prop itself isn't mutated. The wizard re-renders when
+  // this state changes — useMemo'd dropdown items in MapStep pick up
+  // the new def automatically.
+  const [liveCustomFieldDefs, setLiveCustomFieldDefs] =
+    useState<ImportCustomFieldDef[]>(customFieldDefs)
+
+  // CSV V2 — which column the inline create-field modal is anchored
+  // to. null = modal closed. Setting to a column index opens the
+  // modal; the modal's onCreated callback resolves the row to the
+  // new field. Cancel/close leaves the row in its create_new pending
+  // state (markCreateNewAt has already set createNewIntent + cleared
+  // mapping[i]) — the row keeps blocking Next until resolved another
+  // way.
+  const [createFieldModalForColumn, setCreateFieldModalForColumn] = useState<number | null>(null)
 
   // Preview-step bulk settings
   const [ownerMode, setOwnerMode] = useState<OwnerMode>("self")
@@ -263,7 +284,7 @@ export function ContactsImportWizard({
       // V2: alias-based defaults applied INSTANTLY for instant feedback;
       // AI scan kicks in on Map-step entry and updates only the columns
       // the user hasn't touched.
-      setMapping(autoMapHeaders(next.headers, customFieldDefs))
+      setMapping(autoMapHeaders(next.headers, liveCustomFieldDefs))
       // Reset AI state for the new upload.
       setAiSuggestions(null)
       setAiState("idle")
@@ -374,9 +395,14 @@ export function ContactsImportWizard({
   }
 
   function markCreateNewAt(i: number) {
-    // Intent only — the actual definition is created in a follow-up
-    // commit's inline modal. For now this clears the mapping and flags
-    // the row so Next is disabled until the user resolves it.
+    // The dropdown's "+ Create new custom field" option fires this:
+    // record the intent (mapping cleared, row flagged so Next stays
+    // disabled until resolved), then open the inline create-field
+    // modal anchored to this column. If the user cancels the modal,
+    // the row STAYS in pending — the intent isn't auto-cleared just
+    // because they backed out; they have to actively resolve it by
+    // (a) creating the field, (b) switching to an existing field, or
+    // (c) picking "Don't import".
     setMapping((prev) => {
       const next = [...prev]
       next[i] = null
@@ -392,6 +418,34 @@ export function ContactsImportWizard({
       n.add(i)
       return n
     })
+    setCreateFieldModalForColumn(i)
+  }
+
+  /**
+   * Fires after the inline modal's createFieldDefinition call
+   * succeeds. Three coupled state changes execute in one shot so
+   * the next render shows the resolved row:
+   *   1. Append the new def to liveCustomFieldDefs so the dropdown
+   *      lists it under Custom fields immediately.
+   *   2. Map THIS row to cf:<newId> so the user sees the create
+   *      land where they invoked it.
+   *   3. Clear createNewIntent for this row so Next re-enables.
+   *   4. Close the modal.
+   */
+  function handleFieldCreated(columnIndex: number, newDef: ImportCustomFieldDef) {
+    setLiveCustomFieldDefs((prev) => [...prev, newDef])
+    setMapping((prev) => {
+      const next = [...prev]
+      next[columnIndex] = `cf:${newDef.id}`
+      return next
+    })
+    setCreateNewIntent((prev) => {
+      if (!prev.has(columnIndex)) return prev
+      const n = new Set(prev)
+      n.delete(columnIndex)
+      return n
+    })
+    setCreateFieldModalForColumn(null)
   }
 
   function confirmAllAiSuggestions() {
@@ -406,7 +460,7 @@ export function ContactsImportWizard({
     // upload. createNewIntent + touched set are also reset so the
     // user starts from the alias baseline.
     if (!parsed) return
-    setMapping(autoMapHeaders(parsed.headers, customFieldDefs))
+    setMapping(autoMapHeaders(parsed.headers, liveCustomFieldDefs))
     setUserTouchedColumns(new Set())
     setCreateNewIntent(new Set())
     setAiConfirmed(true)
@@ -416,7 +470,9 @@ export function ContactsImportWizard({
   async function continueToPreview() {
     if (!parsed) return
     setError(null)
-    const cleaned = parsed.rows.map((row, i) => buildCleanRow(i + 1, row, mapping, customFieldDefs))
+    const cleaned = parsed.rows.map((row, i) =>
+      buildCleanRow(i + 1, row, mapping, liveCustomFieldDefs),
+    )
     setCleanRows(cleaned)
     const sendable = cleaned.filter((c) => c.errors.length === 0)
     if (sendable.length === 0) {
@@ -670,7 +726,7 @@ export function ContactsImportWizard({
           rowCount={parsed.rows.length}
           sampleValues={sampleValues}
           detectedTypes={detectedTypes}
-          customFieldDefs={customFieldDefs}
+          customFieldDefs={liveCustomFieldDefs}
           aiSuggestions={aiSuggestions}
           aiState={aiState}
           aiConfirmed={aiConfirmed}
@@ -688,6 +744,30 @@ export function ContactsImportWizard({
         />
       )}
 
+      {/* CSV V2 — inline create-field modal. Opened by MapStep's
+          "+ Create new custom field" dropdown option (via
+          markCreateNewAt above). The modal lives at wizard level so
+          its render + state survive MapStep re-renders. */}
+      <CsvImportCreateFieldModal
+        open={createFieldModalForColumn !== null}
+        onClose={() => {
+          setCreateFieldModalForColumn(null)
+        }}
+        onCreated={(newDef) => {
+          if (createFieldModalForColumn === null) return
+          handleFieldCreated(createFieldModalForColumn, newDef)
+        }}
+        options={
+          createFieldModalForColumn !== null && parsed
+            ? {
+                columnHeader: parsed.headers[createFieldModalForColumn] ?? "",
+                suggestedName: parsed.headers[createFieldModalForColumn] ?? "",
+                orderHint: liveCustomFieldDefs.length,
+              }
+            : null
+        }
+      />
+
       {step === "preview" && (
         <PreviewStep
           cleanRows={cleanRows}
@@ -695,7 +775,7 @@ export function ContactsImportWizard({
           orgMembers={orgMembers}
           orgMemberEmails={orgMemberEmails}
           existingTags={existingTags}
-          customFieldDefs={customFieldDefs}
+          customFieldDefs={liveCustomFieldDefs}
           ownerMode={ownerMode}
           onOwnerModeChange={setOwnerMode}
           specificOwnerId={specificOwnerId}
@@ -1095,8 +1175,8 @@ function MapStep({
                         className="mt-1 text-xs text-amber-700 dark:text-amber-300"
                         data-testid={`csv-v2-create-new-pending-${String(i)}`}
                       >
-                        New custom field for this column — inline create lands in the next push.
-                        Pick an existing field or &quot;Don&apos;t import&quot; to continue.
+                        New custom field for this column — finish creating it in the dialog, pick an
+                        existing field, or choose &quot;Don&apos;t import&quot; to continue.
                       </p>
                     )}
                     {detectedMismatch && (

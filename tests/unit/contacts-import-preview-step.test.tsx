@@ -47,6 +47,15 @@ vi.mock("@/modules/contacts/import-ai", () => ({
   scanColumnsWithAi: vi.fn(() => Promise.resolve({ data: null, serverError: "mocked" })),
 }))
 
+// CSV V2 — the inline create-field modal (loaded transitively via the
+// wizard module) imports createFieldDefinition from "use server"
+// custom-fields/actions which transitively pulls @/lib/db. Stub it
+// here so jsdom doesn't evaluate the server-only env. PreviewStep
+// doesn't drive the modal.
+vi.mock("@/modules/custom-fields/actions", () => ({
+  createFieldDefinition: vi.fn(() => Promise.resolve({ data: null, serverError: "mocked" })),
+}))
+
 beforeEach(() => {
   if (typeof window === "undefined") return
   Object.defineProperty(Element.prototype, "hasPointerCapture", {

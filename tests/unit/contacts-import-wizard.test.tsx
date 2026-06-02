@@ -47,6 +47,15 @@ vi.mock("@/modules/contacts/import-ai", () => ({
   scanColumnsWithAi: vi.fn(() => Promise.resolve({ data: null, serverError: "mocked" })),
 }))
 
+// CSV V2 — the inline create-field modal imports createFieldDefinition
+// from "use server" custom-fields/actions which transitively pulls
+// @/lib/db. Stub it for unit tests so jsdom doesn't evaluate the
+// server-only env. These tests don't drive the modal; the dedicated
+// gate-transition tests in csv-v2-create-field-resolution.test.tsx do.
+vi.mock("@/modules/custom-fields/actions", () => ({
+  createFieldDefinition: vi.fn(() => Promise.resolve({ data: null, serverError: "mocked" })),
+}))
+
 beforeEach(() => {
   routerPush.mockClear()
   routerReplace.mockClear()

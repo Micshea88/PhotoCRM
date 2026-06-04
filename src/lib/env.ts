@@ -86,6 +86,26 @@ export const env = createEnv({
     AI_ASSISTANT_HOURLY_USER: z.coerce.number().int().min(1).default(300),
     AI_ASSISTANT_HOURLY_ORG: z.coerce.number().int().min(1).default(1500),
     AI_ASSISTANT_DAILY_ORG: z.coerce.number().int().min(1).default(6000),
+    // Telephony — RingCentral OAuth token encryption at rest. 32 bytes,
+    // hex-encoded (64 chars). Generate with `openssl rand -hex 32`.
+    // REQUIRED — src/lib/crypto.ts cannot operate without it. The regex
+    // is the strong invariant; productionGradeSecret() does not apply to
+    // a binary key. Losing or changing this value renders every existing
+    // ciphertext permanently undecryptable (see src/lib/crypto.ts header
+    // for the recovery path).
+    TELEPHONY_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/i, "TELEPHONY_ENCRYPTION_KEY must be 64 hex chars (32 bytes)"),
+    // RingCentral OAuth credentials. Optional in step 1 (table-only) so a
+    // fresh dev clone without RC access still boots; step 2 (OAuth flow)
+    // will read them at request time and error if missing. Not gated by
+    // productionGradeSecret() — these are third-party-issued credentials,
+    // not ones we generate; RC controls their entropy.
+    RINGCENTRAL_CLIENT_ID: z.string().min(1).optional(),
+    RINGCENTRAL_CLIENT_SECRET: z.string().min(1).optional(),
+    // Sandbox: https://platform.devtest.ringcentral.com
+    // Production: https://platform.ringcentral.com
+    RINGCENTRAL_SERVER_URL: z.url().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -117,6 +137,10 @@ export const env = createEnv({
     AI_ASSISTANT_HOURLY_USER: process.env.AI_ASSISTANT_HOURLY_USER,
     AI_ASSISTANT_HOURLY_ORG: process.env.AI_ASSISTANT_HOURLY_ORG,
     AI_ASSISTANT_DAILY_ORG: process.env.AI_ASSISTANT_DAILY_ORG,
+    TELEPHONY_ENCRYPTION_KEY: process.env.TELEPHONY_ENCRYPTION_KEY,
+    RINGCENTRAL_CLIENT_ID: process.env.RINGCENTRAL_CLIENT_ID,
+    RINGCENTRAL_CLIENT_SECRET: process.env.RINGCENTRAL_CLIENT_SECRET,
+    RINGCENTRAL_SERVER_URL: process.env.RINGCENTRAL_SERVER_URL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

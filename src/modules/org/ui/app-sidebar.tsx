@@ -17,6 +17,7 @@ type SidebarLeafId =
   | "tasks_list"
   | "settings_account"
   | "settings_custom_fields"
+  | "settings_integrations"
 
 /**
  * Icon-key map. Strings only — actual Lucide components are imported
@@ -31,6 +32,7 @@ const ICON_KEYS: Record<SidebarLeafId, SidebarIconKey> = {
   tasks_list: "tasks",
   settings_account: "settings",
   settings_custom_fields: "customFields",
+  settings_integrations: "plug",
 }
 
 /**
@@ -54,6 +56,11 @@ const NAV_ROLE_VISIBILITY: Record<SidebarLeafId, ReadonlySet<ExtendedRole>> = {
   // permission but must NOT reshape the per-org schema; same gate as
   // /settings/organization/members in the existing codebase pattern.
   settings_custom_fields: new Set(["owner", "admin"]),
+  // Integrations admin: Owner + Admin only. Same gate as
+  // settings_custom_fields — managing org-level integrations is an
+  // admin action; per-user "use phone as yourself" is a per-member
+  // capability granted separately (deferred to a later push).
+  settings_integrations: new Set(["owner", "admin"]),
 }
 
 /**
@@ -99,6 +106,7 @@ const SIDEBAR_TREE: readonly SidebarTreeEntry[] = [
     children: [
       { kind: "leaf", id: "settings_account" },
       { kind: "leaf", id: "settings_custom_fields" },
+      { kind: "leaf", id: "settings_integrations" },
     ],
   },
 ] as const

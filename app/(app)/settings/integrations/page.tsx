@@ -1,0 +1,71 @@
+import { redirect } from "next/navigation"
+import { runWithOrgContext } from "@/lib/org-context"
+import { getSession } from "@/modules/auth/session"
+import { getCurrentMember } from "@/modules/org/queries"
+import { getExtendedMemberRole } from "@/modules/rbac/queries"
+import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
+import { IntegrationsBrowser } from "@/modules/integrations/ui/integrations-browser"
+import {
+  IntegrationsPageTabs,
+  type IntegrationsTabId,
+} from "@/modules/integrations/ui/integrations-page-tabs"
+import { ConnectedAppsEmpty } from "@/modules/integrations/ui/connected-apps-empty"
+
+/**
+ * /settings/integrations — Browse + Connected Apps tabbed view.
+ *
+ * Owner + Admin only. Mirrors the /settings/custom-fields guard
+ * pattern: session → org → member → extended role; redirect to
+ * /dashboard for non-owner/admin.
+ *
+ * The active tab is driven by ?view=<id>. Falls back to "browse"
+ * when missing or unknown. Connected Apps is always-empty this push
+ * (the real `getConnectedProviders()` query lands in the next push).
+ */
+
+function resolveActiveTab(raw: string | undefined): IntegrationsTabId {
+  if (raw === "connected" || raw === "browse") return raw
+  return "browse"
+}
+
+export default async function IntegrationsSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>
+}) {
+  const session = await getSession()
+  if (!session?.user) redirect("/sign-in")
+  const orgId = session.session.activeOrganizationId
+  if (!orgId) redirect("/onboarding/create-organization")
+
+  const member = await getCurrentMember(orgId, session.user.id)
+  if (!member) redirect("/dashboard")
+  const baRole = member.role as BetterAuthRole
+  const tentativeRole = extendedFromBetterAuth(baRole)
+
+  const extendedRole =
+    (await runWithOrgContext({ orgId, role: tentativeRole, userId: session.user.id }, async () =>
+      getExtendedMemberRole(session.user.id),
+    )) ?? tentativeRole
+
+  if (extendedRole !== "owner" && extendedRole !== "admin") {
+    redirect("/dashboard")
+  }
+
+  const params = await searchParams
+  const active = resolveActiveTab(params.view)
+
+  return (
+    <div className="space-y-6 p-6">
+      <header>
+        <h1 className="text-2xl font-semibold">Integrations</h1>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
+          Connect phone, calendar, email, and payment providers so the CRM can talk to the tools you
+          already use.
+        </p>
+      </header>
+      <IntegrationsPageTabs active={active} />
+      {active === "browse" ? <IntegrationsBrowser /> : <ConnectedAppsEmpty />}
+    </div>
+  )
+}

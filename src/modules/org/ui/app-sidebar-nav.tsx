@@ -11,6 +11,7 @@ import {
   ChevronRight,
   LayoutDashboard,
   ListChecks,
+  Plug,
   Settings,
   SlidersHorizontal,
   TrendingUp,
@@ -35,6 +36,7 @@ export type SidebarIconKey =
   | "tasks"
   | "settings"
   | "customFields"
+  | "plug"
 
 const ICONS: Record<SidebarIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -44,6 +46,7 @@ const ICONS: Record<SidebarIconKey, LucideIcon> = {
   tasks: CheckSquare,
   settings: Settings,
   customFields: SlidersHorizontal,
+  plug: Plug,
 }
 
 /**

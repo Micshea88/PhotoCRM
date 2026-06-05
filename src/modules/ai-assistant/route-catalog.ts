@@ -122,6 +122,13 @@ export const ROUTE_CATALOG: readonly CatalogRoute[] = [
     description: "Per-record-type custom field definitions for this studio.",
     requiresPermission: "manage_settings",
   },
+  {
+    id: "settings_integrations",
+    path: "/settings/integrations",
+    title: "Integrations",
+    description: "Connect phone, calendar, email, and payment providers.",
+    requiresPermission: "manage_settings",
+  },
 ] as const
 
 const ROUTE_BY_ID = new Map(ROUTE_CATALOG.map((r) => [r.id, r]))

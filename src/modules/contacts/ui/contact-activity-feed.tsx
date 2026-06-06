@@ -30,11 +30,11 @@ import { updateCall, deleteCall } from "@/modules/calls/actions"
 import { updateMeeting, deleteMeeting } from "@/modules/meetings/actions"
 import { updateSms, deleteSms } from "@/modules/sms-messages/actions"
 import { updateEmail, deleteEmail } from "@/modules/email-log/actions"
+import { NoPhoneProviderPicker } from "@/modules/integrations/ui/no-phone-provider-picker"
 import {
   CallLogComposer,
   CreateEmailPopout,
   EmailLogComposer,
-  MakeCallPopout,
   MeetingLogComposer,
   NoteComposer,
   ScheduleMeetingPopout,
@@ -224,11 +224,20 @@ export function ContactActivityFeed({
   entries,
   assigneeOptions = [],
   className,
+  hasConnectedPhoneProvider = false,
+  primaryPhone = null,
 }: {
   contactId: string
   entries: ActivityEntry[]
   assigneeOptions?: AssigneeOption[]
   className?: string
+  /** Server-side boolean from the contact page. Drives the "Make a
+   *  call" button's branch between picker (no provider) and the
+   *  connected-path placeholder. */
+  hasConnectedPhoneProvider?: boolean
+  /** Threaded through to NoPhoneProviderPicker so picking tel: from
+   *  the picker fires tel:${primaryPhone} immediately. */
+  primaryPhone?: string | null
 }) {
   const [activeTab, setActiveTab] = useState<FilterKey>("all")
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS)
@@ -240,7 +249,11 @@ export function ContactActivityFeed({
   const [composer, setComposer] = useState<null | "note" | "call" | "email" | "meeting" | "sms">(
     null,
   )
-  const [popout, setPopout] = useState<null | "email" | "meeting" | "call">(null)
+  // "call" removed from the popout union — the "Make a call" button
+  // now opens NoPhoneProviderPicker (when not connected) or fires the
+  // connected-path placeholder (when connected).
+  const [popout, setPopout] = useState<null | "email" | "meeting">(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const counts = useMemo(() => {
     return {
@@ -404,7 +417,13 @@ export function ContactActivityFeed({
               variant="outline"
               size="sm"
               onClick={() => {
-                setPopout("call")
+                if (hasConnectedPhoneProvider) {
+                  // INSERTION POINT — next push wires the in-app
+                  // dialer here. No-op today; the picker is only the
+                  // entry point for users WITHOUT an in-app provider.
+                  return
+                }
+                setPickerOpen(true)
               }}
               data-testid="activity-make-call"
             >
@@ -606,11 +625,12 @@ export function ContactActivityFeed({
           setPopout(null)
         }}
       />
-      <MakeCallPopout
-        open={popout === "call"}
+      <NoPhoneProviderPicker
+        open={pickerOpen}
         onClose={() => {
-          setPopout(null)
+          setPickerOpen(false)
         }}
+        primaryPhone={primaryPhone}
       />
     </div>
   )

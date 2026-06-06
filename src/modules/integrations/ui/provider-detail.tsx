@@ -2,6 +2,7 @@ import Link from "next/link"
 import {
   Calendar,
   ChevronLeft,
+  CheckCircle2,
   CreditCard,
   Mail,
   Phone,
@@ -19,24 +20,27 @@ import type {
   IntegrationProvider,
 } from "@/modules/integrations/types"
 import { ProviderConnectButton } from "./provider-connect-button"
+import { ProviderDisconnectButton } from "./provider-disconnect-button"
 
 /**
  * Provider wizard shell — server component. Renders the provider
- * header, the "how to connect" steps, the trust line, and the
- * Connect / Use-as-dialer / Always-available affordance.
+ * header, the "how to connect" steps, and the connect / disconnect
+ * affordance.
  *
- * The Connect button itself is a CLIENT subcomponent
- * (`ProviderConnectButton`) so it can render a clearly-stubbed
- * inline message on click. The actual OAuth handoff lands in the
- * next push.
+ * The provider's `connectState` here is driven by LIVE data passed
+ * down from the page (which queries the user's
+ * telephony_connections row). The static registry value is
+ * always overridden before render — it's only the default for
+ * provider types we don't store at all (tel: which stays
+ * "always_available").
  *
- * Gating:
- *   - The whole route is owner/admin-only (the page guard redirects
- *     other roles to /dashboard).
- *   - `canManage` is passed in by the route as belt-and-suspenders;
- *     when false (a future loosening of the route gate could allow
- *     other roles to *view* this page), we render an explainer
- *     block instead of the affordance.
+ * Branches:
+ *   - "connected"          → Connected badge + Disconnect (canManage)
+ *                            OR Connected badge alone (no canManage).
+ *   - "not_connected"      → ProviderConnectButton (Connect / Use as
+ *                            dialer, gated on canManage).
+ *   - "always_available"   → "Always available" notice + disabled
+ *                            CTA (tel: pseudo-provider).
  *
  * Capability chips render ONLY for flags the provider declares as
  * true — "absent never broken."
@@ -95,6 +99,18 @@ function CapabilityChip({ label }: { label: string }) {
   )
 }
 
+function ConnectedBadge({ providerId }: { providerId: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+      data-testid={`integrations-provider-${providerId}-connected-badge`}
+    >
+      <CheckCircle2 className="size-3.5" aria-hidden="true" />
+      Connected
+    </span>
+  )
+}
+
 export function ProviderDetail({
   category,
   provider,
@@ -110,6 +126,7 @@ export function ProviderDetail({
 
   const { ctaLabel, ctaHint } = CONNECT_KIND_COPY[provider.connectKind]
   const ctaDisabled = provider.connectKind === "none"
+  const isConnected = provider.connectState === "connected"
 
   return (
     <div className="space-y-6" data-testid={`integrations-provider-${provider.id}`}>
@@ -126,7 +143,10 @@ export function ProviderDetail({
       <header className="flex items-start gap-4">
         <ProviderIcon iconKey={provider.iconKey} />
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold">{provider.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold">{provider.name}</h1>
+            {isConnected ? <ConnectedBadge providerId={provider.id} /> : null}
+          </div>
           <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
             {provider.description}
           </p>
@@ -143,30 +163,43 @@ export function ProviderDetail({
         </div>
       </header>
 
-      <Card className="p-6">
-        <h2 className="text-sm font-semibold">How to connect</h2>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
-          {provider.howToConnectSteps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </Card>
+      {!isConnected ? (
+        <Card className="p-6">
+          <h2 className="text-sm font-semibold">How to connect</h2>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
+            {provider.howToConnectSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </Card>
+      ) : null}
 
       <Card className={cn("p-6", canManage ? null : "bg-[var(--color-muted)]/40")}>
         {canManage ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <ProviderConnectButton
-                providerId={provider.id}
-                providerName={provider.name}
-                connectKind={provider.connectKind}
-                ctaLabel={ctaLabel}
-                disabled={ctaDisabled}
-              />
-              <span className="text-xs text-[var(--color-muted-foreground)]">{ctaHint}</span>
+          isConnected ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <ProviderDisconnectButton providerId={provider.id} providerName={provider.name} />
+                <span className="text-xs text-[var(--color-muted-foreground)]">
+                  Disconnecting stops {provider.name} from being available for calls and SMS.
+                </span>
+              </div>
             </div>
-            <p className="text-xs text-[var(--color-muted-foreground)]">{provider.trustLine}</p>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <ProviderConnectButton
+                  providerId={provider.id}
+                  providerName={provider.name}
+                  connectKind={provider.connectKind}
+                  ctaLabel={ctaLabel}
+                  disabled={ctaDisabled}
+                />
+                <span className="text-xs text-[var(--color-muted-foreground)]">{ctaHint}</span>
+              </div>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{provider.trustLine}</p>
+            </div>
+          )
         ) : (
           <p
             className="text-sm text-[var(--color-muted-foreground)]"

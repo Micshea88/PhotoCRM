@@ -16,6 +16,7 @@ import { loadContactActivity } from "@/modules/contacts/activity-loader"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
+import { userHasConnectedPhoneProvider } from "@/modules/telephony/queries"
 import { ContactActionsDropdown } from "@/modules/contacts/ui/contact-actions-dropdown"
 import { ContactDetailLeft } from "@/modules/contacts/ui/contact-detail-left"
 import { ContactDetailCenter } from "@/modules/contacts/ui/contact-detail-center"
@@ -93,6 +94,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           hiddenSources,
           allContacts,
           allTags,
+          hasConnectedPhoneProvider,
         ] = await Promise.all([
           listContactCompanyAssociations(id),
           loadContactActivity(orgId, id),
@@ -101,6 +103,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           listHiddenLeadSources(),
           listContactsForOrg(),
           listDistinctContactTags(),
+          // Drives the contact-card affordances (action-icon-row Phone
+          // branch + activity-feed "Make a call" branch). Cheap
+          // select-1 existence check; inherits the inner runWithOrgContext
+          // ALS ctx so RLS role + GUCs are already set.
+          userHasConnectedPhoneProvider(session.user.id),
         ])
         return {
           row,
@@ -109,6 +116,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           companyOptions: companiesRows.map((c) => ({ id: c.id, name: c.name })),
           leadSourceValues: leadSources,
           hiddenLeadSources: hiddenSources,
+          hasConnectedPhoneProvider,
           // P3 (C6c polish #2) — referrals = every contact in the org
           // except this one. ContactRefPicker filters client-side.
           referralOptions: allContacts
@@ -135,6 +143,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     hiddenLeadSources,
     referralOptions,
     tagOptions,
+    hasConnectedPhoneProvider,
   } = data
   const { contact, company } = row
   // P3 (C6c polish #2) — find the referred-by contact's display name
@@ -284,6 +293,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           tagOptions,
           associationContactOptions,
           associationCompanyOptions,
+          hasConnectedPhoneProvider,
         }
         const aiBlock = (
           <div className="space-y-4">
@@ -304,6 +314,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               id: o.id,
               label: o.name,
             }))}
+            hasConnectedPhoneProvider={hasConnectedPhoneProvider}
+            primaryPhone={contact.primaryPhone}
           />
         )
         return (
@@ -320,6 +332,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
                   primaryEmail={contact.primaryEmail}
                   primaryPhone={contact.primaryPhone}
+                  hasConnectedPhoneProvider={hasConnectedPhoneProvider}
                   contactOptions={associationContactOptions}
                   companyOptions={associationCompanyOptions}
                 />

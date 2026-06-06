@@ -6,66 +6,99 @@ import { getProvidersByCategory } from "@/modules/integrations/registry"
 import type { IntegrationProvider } from "@/modules/integrations/types"
 
 /**
- * Contextual popout for the "no phone provider connected yet" case.
+ * Contextual popout for the "no phone provider connected" case.
  *
- * STANDALONE this push — exported but NOT wired into any contact-card
- * affordance. The next push (the one that queries
- * `telephony_connections`) will conditionally open this from the
- * Call/SMS Log buttons in the contact's More menu when zero live
- * connections exist for the user. The existing tel: behavior on the
- * Phone icon itself is preserved unchanged.
+ * Rendered by the contact-card affordances (the Phone icon in
+ * action-icon-row, and the "Make a call" button in the activity
+ * feed) when the current user has no live phone-category connection.
+ * Lists ALL three providers from the Phone category, including the
+ * `tel:` pseudo-provider, so the menu is honest about every option
+ * the user has — not just the OAuth ones.
  *
- * Renders the Phone category's providers from the SAME registry the
- * Integrations Hub uses, so the user sees the identical set of
- * options no matter where they land.
+ * Pick semantics:
+ *   - `tel:` (connectKind="none") — fires tel:`${primaryPhone}`
+ *     IMMEDIATELY via window.location.href. No wizard, no OAuth.
+ *     If no primaryPhone is available, the option renders but does
+ *     nothing on click (it's "always available" but needs a number).
+ *   - `ringcentral` / `google_voice` — routes to the provider's
+ *     wizard at /settings/integrations/phone/<id>.
  *
- * `onPick` is optional — when provided, called BEFORE the navigation
- * (the parent can do e.g., setOpen(false) cleanup). When omitted, we
- * just route to the wizard.
+ * `onPick` runs BEFORE the navigation/handoff so the parent can
+ * close the modal or clear state cleanly.
  */
 export function NoPhoneProviderPicker({
   open,
   onClose,
   onPick,
+  primaryPhone,
 }: {
   open: boolean
   onClose: () => void
   onPick?: (provider: IntegrationProvider) => void
+  /**
+   * The contact's primary phone, used when `tel:` is picked. Optional
+   * because the picker may also fire from contexts without a contact
+   * in scope (a future "Make a call" from the global header, for
+   * example).
+   */
+  primaryPhone?: string | null
 }) {
   const router = useRouter()
   const phoneProviders = getProvidersByCategory("phone")
 
-  function handlePick(provider: IntegrationProvider) {
-    onPick?.(provider)
-    onClose()
-    router.push(`/settings/integrations/${provider.categoryId}/${provider.id}`)
-  }
+  // No `handlePick` named function — react-hooks/immutability flags
+  // `window.location.href = ...` inside a named function-body, but
+  // accepts it inside an inline event-handler arrow (precedent:
+  // src/modules/contacts/ui/selection-banner.tsx:217-219). The pick
+  // logic lives directly in the option's onClick below.
 
   return (
-    <Modal open={open} onClose={onClose} title="No phone provider connected" className="max-w-md">
+    <Modal open={open} onClose={onClose} title="Pick a phone provider" className="max-w-md">
       <div className="space-y-4" data-testid="no-phone-provider-picker">
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          Pick a phone provider to enable calling and SMS for this workspace. You can change this
-          later in Settings → Integrations.
+          Choose how to make calls and send texts. You can change this later in Settings →
+          Integrations.
         </p>
         <ul className="space-y-2" role="list">
-          {phoneProviders.map((provider) => (
-            <li key={provider.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  handlePick(provider)
-                }}
-                data-testid={`no-phone-picker-option-${provider.id}`}
-                className="w-full rounded-md border border-[var(--color-border)] p-3 text-left transition-colors hover:bg-[var(--color-accent)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-              >
-                <span className="block text-sm font-medium">{provider.name}</span>
-                <span className="block text-xs text-[var(--color-muted-foreground)]">
-                  {provider.description}
-                </span>
-              </button>
-            </li>
-          ))}
+          {phoneProviders.map((provider) => {
+            const isTel = provider.connectKind === "none"
+            const telDisabled = isTel && !primaryPhone
+            return (
+              <li key={provider.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick?.(provider)
+                    onClose()
+                    if (isTel) {
+                      if (primaryPhone) {
+                        // Preserves the existing tel: handoff. The
+                        // picker is the new top-level affordance; tel:
+                        // is the in-picker preservation.
+                        window.location.href = `tel:${primaryPhone}`
+                      }
+                      // No primaryPhone → no-op; button label conveys
+                      // the "needs a number" state.
+                      return
+                    }
+                    router.push(`/settings/integrations/${provider.categoryId}/${provider.id}`)
+                  }}
+                  disabled={telDisabled}
+                  data-testid={`no-phone-picker-option-${provider.id}`}
+                  className="w-full rounded-md border border-[var(--color-border)] p-3 text-left transition-colors hover:bg-[var(--color-accent)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span className="block text-sm font-medium">{provider.name}</span>
+                  <span className="block text-xs text-[var(--color-muted-foreground)]">
+                    {isTel
+                      ? telDisabled
+                        ? "Your device's dialer — needs a phone number on file."
+                        : "Your device's dialer, no setup."
+                      : provider.description}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </div>
     </Modal>

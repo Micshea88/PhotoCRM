@@ -20,13 +20,31 @@ import {
  * Six circular icon buttons, in this order:
  *   1. Note      → opens AddNoteModal (HubSpot-style redesign)
  *   2. Email     → mailto:${primaryEmail} (real outbound)
- *   3. Call      → tel:${primaryPhone}
+ *   3. Call      → BRANCHES on phone-on-file + in-app provider:
+ *                    - no primaryPhone (any provider state)    → disabled
+ *                      + "No phone on file" tooltip
+ *                      (BYTE-FOR-BYTE preserved — the Call icon's
+ *                      contract is "call THIS contact"; setting up
+ *                      calling globally lives in Settings → Integrations)
+ *                    - primaryPhone + NOT connected             → tel:${primaryPhone}
+ *                      (BYTE-FOR-BYTE preserved — the existing one-click
+ *                      handoff stays for the majority state)
+ *                    - primaryPhone + connected                 → onClick no-op
+ *                      INSERTION POINT for the next push's in-app dialer
  *   4. Task      → disabled, tooltip "Tasks ship in Push 7"
  *   5. Meeting   → disabled, tooltip "Meetings ship in Push 6"
  *   6. More      → dropdown
  *
- * More dropdown (polish #4 — "Log note" removed; redundant with the
- * Note icon. Upload file added at the bottom.):
+ * `hasConnectedPhoneProvider` is computed server-side at the page
+ * (userHasConnectedPhoneProvider via withOrgContext) and passed in.
+ * This component does NOT query the DB itself.
+ *
+ * NoPhoneProviderPicker is intentionally NOT wired here — it's
+ * reachable from the activity feed's "Make a call" button (a
+ * sibling entry point with broader semantics than "call THIS
+ * contact").
+ *
+ * More dropdown (polish #4):
  *   - Log call → opens LogCallModal
  *   - Log email → placeholder LogEmailModal
  *   - Log meeting → placeholder LogMeetingModal
@@ -39,6 +57,7 @@ export function ActionIconRow({
   contactLabel,
   primaryEmail,
   primaryPhone,
+  hasConnectedPhoneProvider = false,
   contactOptions = [],
   companyOptions = [],
 }: {
@@ -47,6 +66,9 @@ export function ActionIconRow({
   contactLabel: string
   primaryEmail: string | null
   primaryPhone: string | null
+  /** Server-side boolean: does the current user have a live phone-category
+   *  connection (RingCentral / Google Voice) for this org? */
+  hasConnectedPhoneProvider?: boolean
   /** Forwarded to AssociationsPicker in every modal that supports it. */
   contactOptions?: AssociationOption[]
   companyOptions?: AssociationOption[]
@@ -60,6 +82,16 @@ export function ActionIconRow({
 
   const canEmail = !!primaryEmail && primaryEmail.length > 0
   const canCall = !!primaryPhone && primaryPhone.length > 0
+  // Branch selection for the Phone icon. Order matters: the
+  // no-primaryPhone branch (disabled + "No phone on file") wins
+  // regardless of provider-connection state — the Call icon is
+  // "call THIS contact," not "set up calling globally."
+  const useTelHref = canCall && !hasConnectedPhoneProvider
+
+  function handleConnectedCall() {
+    // INSERTION POINT — next push wires the in-app dialer here for
+    // the connected-state branch. No-op today.
+  }
 
   return (
     <div className="flex items-start justify-around gap-1" data-testid="contact-detail-action-row">
@@ -80,7 +112,8 @@ export function ActionIconRow({
       <IconButton
         icon={<Phone className="size-4" aria-hidden="true" />}
         label="Call"
-        href={canCall ? `tel:${primaryPhone}` : undefined}
+        href={useTelHref ? `tel:${primaryPhone}` : undefined}
+        onClick={canCall && hasConnectedPhoneProvider ? handleConnectedCall : undefined}
         disabled={!canCall}
         disabledTitle={canCall ? undefined : "No phone on file"}
       />
@@ -109,9 +142,6 @@ export function ActionIconRow({
         )}
       >
         <ul className="min-w-[200px] space-y-0.5 text-sm" role="menu">
-          {/* P3 (C6c polish #4) — "Log note" removed (redundant with
-              the Note icon above). Items grouped as: Log X stack /
-              divider / Upload file. */}
           <MoreItem
             label="Log call"
             onClick={() => {

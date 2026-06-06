@@ -191,12 +191,3 @@ export function filterProviders(
     return tokens.every((t) => haystack.includes(t))
   })
 }
-
-/**
- * For the Connected Apps view — STUB this push. Always returns [].
- * The wired version (next push) queries telephony_connections + future
- * provider tables and returns the live set.
- */
-export function getConnectedProviders(): readonly IntegrationProvider[] {
-  return []
-}

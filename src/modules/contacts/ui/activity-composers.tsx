@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Calendar, Mail, Paperclip, Phone as PhoneIcon, X } from "lucide-react"
+import { Calendar, Mail, Paperclip, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
@@ -30,7 +30,6 @@ import type { CallDirection } from "@/modules/calls/types"
  * Connect-gate pop-outs (V1.5 integrations stubbed):
  *   - CreateEmailPopout
  *   - ScheduleMeetingPopout
- *   - MakeCallPopout
  * Each shows a "Connect a <provider>" empty state; the action
  * button is disabled with a ship-target tooltip until the
  * integration lands.
@@ -583,19 +582,6 @@ export function ScheduleMeetingPopout({ open, onClose }: ConnectGateModalProps) 
         title="Connect a calendar"
         body="Connect Google Calendar or Outlook to send invites and auto-log meetings."
         shipTarget="Calendar integration ships in Push 8."
-      />
-    </Modal>
-  )
-}
-
-export function MakeCallPopout({ open, onClose }: ConnectGateModalProps) {
-  return (
-    <Modal open={open} onClose={onClose} title="Make a call">
-      <ConnectGate
-        icon={<PhoneIcon className="size-5" aria-hidden="true" />}
-        title="Set up calling"
-        body="Connect a telephony provider to dial from the browser. Inbound and outbound calls auto-log."
-        shipTarget="Telephony integration ships in Push 5+."
       />
     </Modal>
   )

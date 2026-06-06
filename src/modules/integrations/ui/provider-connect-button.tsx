@@ -1,20 +1,28 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import type { ConnectKind } from "@/modules/integrations/types"
+import { beginRingCentralConnect } from "@/modules/telephony/actions"
 
 /**
- * Connect / Use-as-dialer / Always-available button — STUB this push.
+ * Connect / Use-as-dialer / Always-available button.
  *
- * The actual handoff (OAuth redirect for `oauth`, dialer-pref write
- * for `handoff_only`) lands in the next push. Today, clicking the
- * button reveals an inline "Connect flow ships in the next push"
- * notice so the user can see the affordance is real but the wiring
- * is pending.
+ * - `oauth` (RingCentral) — calls beginRingCentralConnect server
+ *   action. On success, the server sets the PKCE + state cookies and
+ *   returns an authorize URL; the browser does a FULL navigation to
+ *   leave the app and land at platform.ringcentral.com.
  *
- * `none` providers (e.g., `tel:`) render the button as disabled —
- * there is no real "connect" action.
+ * - `handoff_only` (Google Voice) — STILL stubbed. The dialer-pref
+ *   write lands in a later push.
+ *
+ * - `none` (tel:) — button rendered disabled. Nothing to set up;
+ *   tel: is always available.
+ *
+ * The action's serverError (e.g. "Only owners and admins can connect
+ * integrations...") is surfaced inline as a status message. The
+ * client never sees raw error_description from RingCentral — those
+ * land in pino on the server side only.
  */
 export function ProviderConnectButton({
   providerId,
@@ -29,7 +37,31 @@ export function ProviderConnectButton({
   ctaLabel: string
   disabled?: boolean
 }) {
-  const [showStub, setShowStub] = useState(false)
+  const [pending, startTransition] = useTransition()
+  const [stubNotice, setStubNotice] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function handleClick() {
+    setError(null)
+    if (connectKind === "oauth") {
+      startTransition(async () => {
+        const result = await beginRingCentralConnect({})
+        const url = result.data?.authorizeUrl
+        if (typeof url === "string" && url.length > 0) {
+          window.location.href = url
+          return
+        }
+        const message =
+          (typeof result.serverError === "string" && result.serverError) ||
+          "Could not start the RingCentral connect flow. Please try again."
+        setError(message)
+      })
+      return
+    }
+    // handoff_only stays stubbed; none never reaches here (button is
+    // disabled), but defensively show the same stub notice if it does.
+    setStubNotice(true)
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -37,25 +69,30 @@ export function ProviderConnectButton({
         type="button"
         variant={connectKind === "oauth" ? "default" : "outline"}
         size="default"
-        disabled={disabled}
-        onClick={() => {
-          setShowStub(true)
-        }}
+        disabled={disabled || pending}
+        onClick={handleClick}
         data-testid={`integrations-provider-${providerId}-cta`}
       >
-        {ctaLabel}
+        {pending ? "Redirecting…" : ctaLabel}
       </Button>
-      {showStub ? (
+      {error ? (
+        <p
+          role="alert"
+          className="text-xs text-[var(--color-destructive)]"
+          data-testid={`integrations-provider-${providerId}-error`}
+        >
+          {error}
+        </p>
+      ) : null}
+      {stubNotice ? (
         <p
           role="status"
           className="text-xs text-[var(--color-muted-foreground)]"
           data-testid={`integrations-provider-${providerId}-stub-notice`}
         >
-          {connectKind === "oauth"
-            ? `${providerName} OAuth flow ships in the next push.`
-            : connectKind === "handoff_only"
-              ? `${providerName} dialer hand-off ships in the next push.`
-              : `${providerName} requires no setup.`}
+          {connectKind === "handoff_only"
+            ? `${providerName} dialer hand-off ships in the next push.`
+            : `${providerName} requires no setup.`}
         </p>
       ) : null}
     </div>

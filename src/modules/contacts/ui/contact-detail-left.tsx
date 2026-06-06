@@ -78,6 +78,11 @@ export interface ContactDetailLeftProps {
    *  options. */
   associationContactOptions?: { id: string; label: string; sub?: string | null }[]
   associationCompanyOptions?: { id: string; label: string; sub?: string | null }[]
+  /** Server-side boolean — does the current user have a live phone-
+   *  category connection? Forwarded to the inner ActionIconRow so the
+   *  desktop Phone icon branches identically to the mobile-shell one
+   *  on the contact page. */
+  hasConnectedPhoneProvider?: boolean
 }
 
 export function ContactDetailLeft({
@@ -94,6 +99,7 @@ export function ContactDetailLeft({
   panes = DEFAULT_PANES,
   associationContactOptions = [],
   associationCompanyOptions = [],
+  hasConnectedPhoneProvider = false,
 }: ContactDetailLeftProps) {
   const showIdentity = panes.includes("identity")
   const showActions = panes.includes("actions")
@@ -281,6 +287,7 @@ export function ContactDetailLeft({
               contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
               primaryEmail={contact.primaryEmail}
               primaryPhone={contact.primaryPhone}
+              hasConnectedPhoneProvider={hasConnectedPhoneProvider}
               contactOptions={associationContactOptions}
               companyOptions={associationCompanyOptions}
             />

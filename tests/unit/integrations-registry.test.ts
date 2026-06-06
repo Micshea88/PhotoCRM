@@ -3,7 +3,6 @@ import {
   getAllCategories,
   getAllProviders,
   getCategoryById,
-  getConnectedProviders,
   getProviderById,
   getProvidersByCategory,
 } from "@/modules/integrations/registry"
@@ -97,9 +96,5 @@ describe("integrations registry — lookup helpers", () => {
       .map((p) => p.id)
       .sort()
     expect(ids).toEqual(["google_voice", "ringcentral", "tel"])
-  })
-
-  it("getConnectedProviders is stubbed to [] this push", () => {
-    expect(getConnectedProviders()).toEqual([])
   })
 })

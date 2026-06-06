@@ -5,7 +5,9 @@ import { getCurrentMember } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { getCategoryById, getProviderById } from "@/modules/integrations/registry"
+import type { IntegrationProvider } from "@/modules/integrations/types"
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
+import { listConnectedProvidersForUser } from "@/modules/telephony/queries"
 
 /**
  * /settings/integrations/[categoryId]/[providerId] — provider wizard.
@@ -20,10 +22,18 @@ import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
  *     (so /email/ringcentral 404s instead of rendering RingCentral
  *     under the wrong category header).
  *
- * `canManage` is passed to ProviderDetail. With the current guard
- * redirecting non-owner/admin, it's always true here — but the
- * component is the single source of truth on what's gated, so the
- * route forwards the computed value rather than hard-coding it.
+ * Live connection state is read at PER-USER scope. The wizard is
+ * the per-user connect/disconnect surface — RingCentral tokens are
+ * issued per user, telephony_connections is keyed by (org, user,
+ * provider), and disconnectTelephony filters by ctx.session.user.id.
+ * If we used the org-level read here, User B would see "Connected"
+ * because User A connected, then Disconnect would NOT_FOUND on
+ * User B's own (missing) row. The integrations Connected Apps tab
+ * is the org-level roll-up; this page is the per-user grant view.
+ *
+ * `canManage` is `true` here — the guard above narrowed extendedRole
+ * to "owner" | "admin". The constant is passed through so
+ * ProviderDetail stays the single source of truth on what's gated.
  */
 export default async function IntegrationsProviderPage({
   params,
@@ -52,14 +62,23 @@ export default async function IntegrationsProviderPage({
   const { categoryId, providerId } = await params
   const category = getCategoryById(categoryId)
   if (!category) notFound()
-  const provider = getProviderById(providerId)
-  if (!provider) notFound()
-  if (provider.categoryId !== category.id) notFound()
+  const staticProvider = getProviderById(providerId)
+  if (!staticProvider) notFound()
+  if (staticProvider.categoryId !== category.id) notFound()
 
-  // After the guard above, extendedRole is narrowed to "owner" | "admin".
-  // The constant is passed through so ProviderDetail stays the single
-  // source of truth on what's gated — if the route ever loosens, this
-  // flag becomes the load-bearing one.
+  // Per-user scope: matches disconnectTelephony's where-clause.
+  const rows = await runWithOrgContext(
+    { orgId, role: extendedRole, userId: session.user.id },
+    async () => listConnectedProvidersForUser(session.user.id),
+  )
+  const hasLiveRow = rows.some((r) => r.provider === staticProvider.id)
+  // tel: has connectKind "none" and is never written to
+  // telephony_connections (upsert.ts only writes "ringcentral"), so
+  // hasLiveRow can never be true for tel:. No defensive guard needed.
+  const provider: IntegrationProvider = hasLiveRow
+    ? { ...staticProvider, connectState: "connected" }
+    : staticProvider
+
   const canManage = true
 
   return (

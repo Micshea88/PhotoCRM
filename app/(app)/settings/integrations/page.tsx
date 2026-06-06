@@ -10,6 +10,8 @@ import {
   type IntegrationsTabId,
 } from "@/modules/integrations/ui/integrations-page-tabs"
 import { ConnectedAppsEmpty } from "@/modules/integrations/ui/connected-apps-empty"
+import { ConnectedAppsList } from "@/modules/integrations/ui/connected-apps-list"
+import { listConnectedProvidersForOrg } from "@/modules/telephony/queries"
 
 /**
  * /settings/integrations — Browse + Connected Apps tabbed view.
@@ -19,8 +21,9 @@ import { ConnectedAppsEmpty } from "@/modules/integrations/ui/connected-apps-emp
  * /dashboard for non-owner/admin.
  *
  * The active tab is driven by ?view=<id>. Falls back to "browse"
- * when missing or unknown. Connected Apps is always-empty this push
- * (the real `getConnectedProviders()` query lands in the next push).
+ * when missing or unknown. Connected Apps renders the live list
+ * when telephony_connections has rows for this org; the empty
+ * state when not.
  */
 
 function resolveActiveTab(raw: string | undefined): IntegrationsTabId {
@@ -55,6 +58,15 @@ export default async function IntegrationsSettingsPage({
   const params = await searchParams
   const active = resolveActiveTab(params.view)
 
+  // Live read — only when the user is actually on the Connected tab.
+  // Browse doesn't need it.
+  const connectedRows =
+    active === "connected"
+      ? await runWithOrgContext({ orgId, role: extendedRole, userId: session.user.id }, async () =>
+          listConnectedProvidersForOrg(),
+        )
+      : []
+
   return (
     <div className="space-y-6 p-6">
       <header>
@@ -65,7 +77,13 @@ export default async function IntegrationsSettingsPage({
         </p>
       </header>
       <IntegrationsPageTabs active={active} />
-      {active === "browse" ? <IntegrationsBrowser /> : <ConnectedAppsEmpty />}
+      {active === "browse" ? (
+        <IntegrationsBrowser />
+      ) : connectedRows.length > 0 ? (
+        <ConnectedAppsList rows={connectedRows} />
+      ) : (
+        <ConnectedAppsEmpty />
+      )}
     </div>
   )
 }

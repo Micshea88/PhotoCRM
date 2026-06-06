@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
+
+// ProviderDetail now imports ProviderConnectButton + ProviderDisconnectButton,
+// which import the telephony server actions; those transitively pull in
+// @/lib/auth → @/lib/db → @/lib/env, and the t3-env client guard refuses
+// the env access in jsdom. Stub the action surface that ProviderDetail's
+// children call. Mirrors tests/unit/contacts-bulk-edit-drawer.test.tsx.
+vi.mock("@/modules/telephony/actions", () => ({
+  beginRingCentralConnect: vi.fn(() => Promise.resolve({ data: { authorizeUrl: "stub" } })),
+  disconnectTelephony: vi.fn(() => Promise.resolve({ data: { ok: true } })),
+}))
+
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
 import { getCategoryById, getProviderById } from "@/modules/integrations/registry"
 

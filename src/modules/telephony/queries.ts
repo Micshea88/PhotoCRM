@@ -5,6 +5,14 @@ import type * as schema from "@/db/schema"
 import { withOrgContext } from "@/lib/org-context"
 import { getProvidersByCategory } from "@/modules/integrations/registry"
 import { telephonyConnections } from "@/modules/telephony/schema"
+import { env } from "@/lib/env"
+import { log } from "@/lib/log"
+import { RingCentralOAuthNotConfigured } from "@/modules/telephony/ringcentral-oauth"
+import {
+  RingCentralAuthError,
+  RingCentralTransientError,
+  getValidAccessToken,
+} from "@/modules/telephony/token-refresh"
 
 /**
  * Org-scoped read of live telephony connections. Used by the
@@ -133,4 +141,191 @@ export async function userHasConnectedPhoneProviderImpl(
  */
 export async function userHasConnectedPhoneProvider(userId: string): Promise<boolean> {
   return withOrgContext((tx) => userHasConnectedPhoneProviderImpl(tx, userId))
+}
+
+/**
+ * Bootstrap payload returned by `getDialerBootstrap`; consumed by
+ * `app/dialer/page.tsx` (server component) and passed as a prop to
+ * `<DialerShell />`.
+ *
+ * Wire format: every field is JSON-serializable (sipInfo is typed
+ * `unknown` to keep the server SDK-agnostic — the client narrows it
+ * at the `new WebPhone({ sipInfo })` call boundary).
+ *
+ * `accessTokenExpiresAt` is for the client's mid-call refresh
+ * scheduler — the shell sets a setTimeout for
+ * `expiresAt - 10min - now` and calls `refreshAccessTokenForDialer`
+ * when it fires.
+ *
+ * `sipInfo` is the SIP-provisioning grant from RingCentral; consumed
+ * by `new WebPhone({ sipInfo })`. RC's docs note it's reusable for a
+ * long time — v1 fetches fresh on each boot; a future optimization
+ * may cache it in DB.
+ *
+ * Contains SIP digest credentials (sipInfo) and an OAuth access token.
+ * Never log either; never expose to anyone but the dialer popup
+ * authenticated as the org member who owns the connection.
+ */
+export interface DialerBootstrap {
+  accessToken: string
+  accessTokenExpiresAt: Date
+  sipInfo: unknown
+  externalUserId: string
+}
+
+/**
+ * Inner-tx variant of `getDialerBootstrap`. Takes a Drizzle tx that is
+ * already inside `withOrgContext` (or an equivalent transactional
+ * RLS-context wrapper) — `getValidAccessToken` runs `SELECT FOR
+ * UPDATE` against the connection row, which requires the tx and the
+ * `app.current_org` GUC to be set.
+ *
+ * Throws `RingCentralAuthError("no_active_connection")` when the org
+ * has no live RingCentral connection (matches the
+ * `getValidAccessToken` contract). Throws `RingCentralAuthError` /
+ * `RingCentralTransientError` from `fetchSipProvisioning` on
+ * RC-side errors. Callers up the stack catch and render inline
+ * (no silent self-healing at boot — see module-header note).
+ */
+export async function getDialerBootstrapImpl(
+  tx: DbHandle,
+  args: { organizationId: string; userId: string },
+): Promise<DialerBootstrap> {
+  // 1. Get a usable access token. Ignore `rotated` — bootstrap is a
+  //    read; the dialer action handles audit on mid-call rotations.
+  const { token: accessToken } = await getValidAccessToken(
+    { organizationId: args.organizationId, userId: args.userId },
+    tx,
+  )
+
+  // 2. Read the row for accessTokenExpiresAt + externalUserId.
+  //    getValidAccessToken's contract returns just the token + rotation
+  //    flag; we read these fields here rather than expanding its shape.
+  const [row] = await tx
+    .select({
+      accessTokenExpiresAt: telephonyConnections.accessTokenExpiresAt,
+      externalUserId: telephonyConnections.externalUserId,
+    })
+    .from(telephonyConnections)
+    .where(
+      and(
+        eq(telephonyConnections.organizationId, args.organizationId),
+        eq(telephonyConnections.userId, args.userId),
+        eq(telephonyConnections.provider, "ringcentral"),
+        isNull(telephonyConnections.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!row) {
+    // Defensive: getValidAccessToken should have thrown
+    // RingCentralAuthError("no_active_connection") above. Re-throw
+    // with the same code so callers see one consistent contract.
+    throw new RingCentralAuthError("no_active_connection")
+  }
+
+  // 3. Fetch SIP provisioning from RingCentral with the fresh token.
+  const sipInfo = await fetchSipProvisioning(accessToken)
+
+  return {
+    accessToken,
+    accessTokenExpiresAt: row.accessTokenExpiresAt,
+    sipInfo,
+    externalUserId: row.externalUserId,
+  }
+}
+
+/**
+ * Public wrapper for `getDialerBootstrapImpl`. Opens its own org-
+ * context tx via `withOrgContext`; the page (`app/dialer/page.tsx`)
+ * supplies `organizationId` + `userId` from `withPageOrgContext`'s
+ * resolved `OrgContext`.
+ */
+export async function getDialerBootstrap(args: {
+  organizationId: string
+  userId: string
+}): Promise<DialerBootstrap> {
+  return withOrgContext((tx) => getDialerBootstrapImpl(tx, args))
+}
+
+/**
+ * Raw POST to `/restapi/v1.0/client-info/sip-provision` with WSS
+ * transport. Same fetch-with-typed-error-mapping pattern as
+ * `performRefresh` in token-refresh.ts. No @ringcentral/sdk
+ * dependency on the server side — one round-trip, one Bearer header,
+ * a structured-clone-safe JSON response we can pass straight through
+ * the server→client serialization boundary.
+ *
+ * NEVER logs the accessToken (input) or the sipInfo response body —
+ * the latter contains SIP digest credentials that act as a password
+ * for the duration of the session. Only RC's error code + HTTP
+ * status hit pino, with `feature: "telephony.sip-provision"`.
+ */
+async function fetchSipProvisioning(accessToken: string): Promise<unknown> {
+  const { RINGCENTRAL_SERVER_URL } = env
+  if (!RINGCENTRAL_SERVER_URL) {
+    throw new RingCentralOAuthNotConfigured()
+  }
+  const url = `${RINGCENTRAL_SERVER_URL.replace(/\/$/, "")}/restapi/v1.0/client-info/sip-provision`
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ sipInfo: [{ transport: "WSS" }] }),
+      cache: "no-store",
+    })
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    log.warn(
+      { feature: "telephony.sip-provision", err: detail },
+      "[sip-provision] network error reaching RingCentral",
+    )
+    throw new RingCentralTransientError("network_error", detail)
+  }
+
+  if (res.ok) {
+    const body = (await res.json()) as { sipInfo?: unknown[] }
+    if (!Array.isArray(body.sipInfo) || body.sipInfo.length === 0) {
+      log.warn(
+        { feature: "telephony.sip-provision", status: res.status },
+        "[sip-provision] response missing sipInfo array",
+      )
+      throw new RingCentralTransientError("malformed_response")
+    }
+    return body.sipInfo[0]
+  }
+
+  let providerCode = "unknown"
+  let providerDetail = ""
+  try {
+    const errBody = (await res.json()) as {
+      error?: string
+      error_description?: string
+      message?: string
+    }
+    if (typeof errBody.error === "string") providerCode = errBody.error
+    if (typeof errBody.error_description === "string") providerDetail = errBody.error_description
+    else if (typeof errBody.message === "string") providerDetail = errBody.message
+  } catch {
+    // Fall through with generic code.
+  }
+
+  if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+    log.warn(
+      { feature: "telephony.sip-provision", providerCode, status: res.status },
+      "[sip-provision] auth error from RingCentral",
+    )
+    throw new RingCentralAuthError(providerCode)
+  }
+
+  log.warn(
+    { feature: "telephony.sip-provision", providerCode, status: res.status },
+    "[sip-provision] transient error from RingCentral",
+  )
+  throw new RingCentralTransientError(providerCode, providerDetail)
 }

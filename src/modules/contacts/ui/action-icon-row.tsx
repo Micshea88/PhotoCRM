@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react"
 import { Calendar, CheckSquare, Mail, MoreHorizontal, Phone, StickyNote } from "lucide-react"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { openDialer } from "@/lib/open-dialer"
 import type { AssociationOption } from "@/components/ui/activity-modal-chrome"
 import { AddNoteModal } from "./add-note-modal"
 import { LogCallModal } from "./log-call-modal"
@@ -89,8 +90,8 @@ export function ActionIconRow({
   const useTelHref = canCall && !hasConnectedPhoneProvider
 
   function handleConnectedCall() {
-    // INSERTION POINT — next push wires the in-app dialer here for
-    // the connected-state branch. No-op today.
+    if (!primaryPhone) return
+    openDialer({ phoneNumber: primaryPhone, contactId, contactLabel })
   }
 
   return (

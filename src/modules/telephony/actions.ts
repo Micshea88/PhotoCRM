@@ -11,6 +11,10 @@ import {
   buildAuthorizeUrl,
   RingCentralOAuthNotConfigured,
 } from "@/modules/telephony/ringcentral-oauth"
+import { and, eq, isNull } from "drizzle-orm"
+import { audit } from "@/modules/audit/audit"
+import { telephonyConnections } from "@/modules/telephony/schema"
+import { getValidAccessToken } from "@/modules/telephony/token-refresh"
 
 /**
  * Telephony server actions — connect initiation + disconnect.
@@ -143,4 +147,104 @@ export const disconnectTelephony = orgAction
     revalidatePath("/settings/integrations")
     revalidatePath(`/settings/integrations/phone/${parsedInput.provider}`)
     return { ok: true }
+  })
+
+const refreshAccessTokenForDialerInput = z.object({})
+
+/**
+ * Refresh the active user's RingCentral access token on demand.
+ *
+ * **NOT consumed by the v1 dialer-shell.** The popup dialer is
+ * OAuth-token-independent post-boot — `ringcentral-web-phone`'s
+ * WebPhone authenticates the live SIP session via the SipInfo's
+ * embedded SIP digest credentials (username + password fields), not
+ * via the OAuth access token. The token is used ONCE at popup boot
+ * by `getDialerBootstrap` (to call `/restapi/v1.0/client-info/sip-
+ * provision`) and then drops out of scope. A long call does NOT
+ * need mid-call OAuth refresh; the SIP session keeps running on
+ * sipInfo alone regardless of access-token expiry.
+ *
+ * This action exists for FUTURE REST-consuming features that will
+ * need a valid token on demand:
+ *   - Step 3b: inbound-call webhook fan-out
+ *   - Step 3c: call-recording fetch (GET /restapi/v1.0/...)
+ *
+ * Audit-on-rotation contract: on a real rotation (within the 10-min
+ * buffer) we audit `telephony.dialer_token_refreshed`; on a cache
+ * hit (a concurrent caller already refreshed; the row is still
+ * fresh) we skip the audit. The `rotated` flag returned by
+ * `getValidAccessToken` is the contract that lets us audit
+ * selectively without a separate "did we actually refresh?" query.
+ *
+ * NO owner/admin gate: any authenticated org member with a live
+ * RingCentral connection may trigger refreshes against THEIR OWN
+ * grant. The SELECT FOR UPDATE inside `getValidAccessToken`
+ * constrains the row to `(ctx.activeOrg.id, ctx.session.user.id)`,
+ * so the action cannot rotate another user's tokens.
+ *
+ * NO revalidatePath — token rotation doesn't affect any rendered
+ * page.
+ *
+ * Errors thrown by `getValidAccessToken`
+ * (`RingCentralAuthError` / `RingCentralTransientError`) propagate
+ * to next-safe-action's `serverError` surface; consumers handle the
+ * silent-self-healing UX appropriately for their context.
+ */
+export const refreshAccessTokenForDialer = orgAction
+  .metadata({ actionName: "telephony.refresh_access_token_for_dialer" })
+  .inputSchema(refreshAccessTokenForDialerInput)
+  .action(async ({ ctx }) => {
+    const { token, rotated } = await getValidAccessToken(
+      {
+        organizationId: ctx.activeOrg.id,
+        userId: ctx.session.user.id,
+      },
+      ctx.db,
+    )
+
+    // Audit only on actual rotation — token rotation is a forensic
+    // event; a cache hit is not. This selective-audit pattern is the
+    // whole point of the { token, rotated } contract change in
+    // token-refresh.ts: the cron handler (always rotates) doesn't
+    // audit at all; THIS action audits only when the rotation
+    // actually fired.
+    if (rotated) {
+      await audit(
+        {
+          db: ctx.db,
+          organizationId: ctx.activeOrg.id,
+          actorUserId: ctx.session.user.id,
+        },
+        "telephony.dialer_token_refreshed",
+        {},
+      )
+    }
+
+    // Read the (possibly-just-updated) expiry so the client knows
+    // when to schedule the next refresh. Inside the same orgAction
+    // tx, the read sees the upsert from above if rotation occurred.
+    const [row] = await ctx.db
+      .select({
+        expiresAt: telephonyConnections.accessTokenExpiresAt,
+      })
+      .from(telephonyConnections)
+      .where(
+        and(
+          eq(telephonyConnections.organizationId, ctx.activeOrg.id),
+          eq(telephonyConnections.userId, ctx.session.user.id),
+          eq(telephonyConnections.provider, "ringcentral"),
+          isNull(telephonyConnections.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!row) {
+      // Defensive: getValidAccessToken would have thrown above with
+      // RingCentralAuthError("no_active_connection") if the row were
+      // missing. Re-throw with a consistent action-layer error so the
+      // client sees one stable error code rather than a typed-error
+      // class name.
+      throw new ActionError("NOT_FOUND", "RingCentral connection not found")
+    }
+
+    return { accessToken: token, expiresAt: row.expiresAt }
   })

@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { cn } from "@/lib/utils"
+import { openDialer } from "@/lib/open-dialer"
 import { updateContactNote, deleteContactNote } from "@/modules/contacts/actions"
 import { updateCall, deleteCall } from "@/modules/calls/actions"
 import { updateMeeting, deleteMeeting } from "@/modules/meetings/actions"
@@ -418,9 +419,9 @@ export function ContactActivityFeed({
               size="sm"
               onClick={() => {
                 if (hasConnectedPhoneProvider) {
-                  // INSERTION POINT — next push wires the in-app
-                  // dialer here. No-op today; the picker is only the
-                  // entry point for users WITHOUT an in-app provider.
+                  if (primaryPhone) {
+                    openDialer({ phoneNumber: primaryPhone, contactId })
+                  }
                   return
                 }
                 setPickerOpen(true)

@@ -478,6 +478,35 @@ async function fetchTransferTarget(accessToken: string): Promise<string | undefi
     return undefined
   }
 
+  // ─── TEMPORARY DIAGNOSTIC — remove in follow-up fix ─────────────
+  // Post-deploy 2026-06-07: Transfer button still grayed out for
+  // Mike even after the userMobile → DirectNumber switch. To debug
+  // WHY (no DirectNumber records? different usageType casing?
+  // different field shape entirely?) without leaking the phone
+  // number itself, log only the response SHAPE — counts, usageType
+  // values present, and whether the phoneNumber field exists.
+  // Phone number values themselves are NEVER logged; privacy
+  // contract holds. Remove this entire block (and the
+  // `feature: "telephony.transfer-target.diag"` import-grep if any)
+  // in the follow-up fix once Vercel Logs surface Mike's actual
+  // response shape.
+  log.info(
+    {
+      feature: "telephony.transfer-target.diag",
+      recordCount: body.records?.length ?? 0,
+      sampleRecord: body.records?.[0]
+        ? {
+            usageType: body.records[0].usageType,
+            primary: body.records[0].primary,
+            hasPhoneNumber: typeof body.records[0].phoneNumber === "string",
+          }
+        : null,
+      allUsageTypes: body.records?.map((r) => r.usageType) ?? [],
+    },
+    "[transfer-target diagnostic] RC response shape",
+  )
+  // ─── END TEMPORARY DIAGNOSTIC ───────────────────────────────────
+
   const directNumbers = (body.records ?? []).filter(
     (r) =>
       r.usageType === "DirectNumber" &&

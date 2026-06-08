@@ -29,8 +29,12 @@ const REDIRECT_PATH = "/api/telephony/ringcentral/callback"
  * Existing connected users retain their OLD scope grant until they
  * disconnect + reconnect — their new token will include ReadAccounts
  * automatically because we always pass `SCOPES` in the authorize URL
- * and use `prompt=consent` to force RC to re-display the consent
- * screen (so the user sees + grants the new scope explicitly).
+ * and use `prompt=login consent` to force RC to re-display BOTH the
+ * login page AND the consent screen (so the user sees + grants the
+ * new scope explicitly). `"login consent"` is the RC-specific
+ * required value for external apps — RC's authorize endpoint does
+ * NOT accept the OIDC-standard `prompt=consent` alone. See
+ * memory:ringcentral-oauth-scopes for the prompt-value gotcha.
  */
 const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling ReadAccounts"
 
@@ -70,15 +74,27 @@ export function buildAuthorizeUrl(args: { state: string; codeChallenge: string }
     code_challenge: args.codeChallenge,
     code_challenge_method: "S256",
     scope: SCOPES,
-    // Force RC to re-display the consent screen even for users who
-    // previously authorized this app. Critical when SCOPES changes:
-    // without prompt=consent, RC may silently re-grant the user's
-    // PRIOR scope set (missing the newly-added one), and the new
-    // feature would stay broken for existing users until they revoke
-    // at RC's side. With prompt=consent, every reconnect surfaces the
-    // current SCOPES list explicitly. Net friction for first-time
-    // users: zero (RC always shows consent on first connect anyway).
-    prompt: "consent",
+    // Force RC to re-display BOTH the login page AND the consent
+    // screen on every authorize call. Critical when SCOPES changes:
+    // without prompt, RC may silently re-grant the user's PRIOR scope
+    // set (missing newly-added ones) — the new feature would stay
+    // broken for existing users until they manually revoke at RC's
+    // side.
+    //
+    // IMPORTANT: RC's authorize endpoint requires the RC-specific
+    // value `"login consent"` for external apps. The OIDC-standard
+    // `prompt=consent` alone returns "Parameter [prompt] value is
+    // invalid" and RC redirects back to the callback with an
+    // error=invalid_request param (bug introduced 2026-06-08, fixed
+    // same day). RC's permission docs and OIDC docs are NOT
+    // interchangeable for this parameter; always check RC's
+    // authorize-endpoint docs specifically. See
+    // memory:ringcentral-oauth-scopes.
+    //
+    // URLSearchParams URL-encodes the space; RC accepts both `+` and
+    // `%20`. Net friction for first-time users: zero (RC always
+    // shows login+consent on first connect anyway).
+    prompt: "login consent",
   })
   return `${serverUrl}/restapi/oauth/authorize?${params.toString()}`
 }

@@ -212,7 +212,9 @@ function TransferButton({ enabled, onClick }: { enabled: boolean; onClick: () =>
       disabled={!enabled}
       aria-label="Transfer call to phone"
       title={
-        enabled ? "Transfer to phone" : "Set a mobile number in RingCentral to enable transfer."
+        enabled
+          ? "Transfer to phone"
+          : "Configure your RingCentral business number to enable transfer."
       }
       className="flex size-10 items-center justify-center rounded-full bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-secondary)]/80 disabled:cursor-not-allowed disabled:opacity-60"
     >

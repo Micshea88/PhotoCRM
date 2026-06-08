@@ -172,10 +172,21 @@ export interface DialerBootstrap {
   accessTokenExpiresAt: Date
   sipInfo: unknown
   externalUserId: string
-  /** RC-registered mobile number for the user, used as the
-   *  transfer-to-mobile target. Undefined when the user has no
-   *  mobile on their RC profile OR the user-mobile probe failed
-   *  (graceful degradation: transfer button renders disabled). */
+  /** The transfer target for the dialer's "Transfer to phone"
+   *  action. Field name is `userMobile` for historical reasons
+   *  (3a originally targeted the user's personal cell); the
+   *  ACTUAL VALUE is now the user's RingCentral DirectNumber
+   *  (their personal business DID). RC's call-handling rules on
+   *  that DID delegate ringing to all the user's RC endpoints
+   *  (mobile app, desktop app, desk phone), so a transfer here
+   *  reaches the user wherever they're configured to be reachable
+   *  — without exposing their personal cell number to Pathway and
+   *  without consuming carrier minutes (it stays VoIP).
+   *
+   *  See `fetchTransferTarget` below for the discovery path.
+   *  Undefined when the user has no DirectNumber assigned OR the
+   *  probe failed (graceful degradation: transfer button renders
+   *  disabled). */
   userMobile?: string
 }
 
@@ -255,11 +266,11 @@ export async function getDialerBootstrapImpl(
       .where(eq(telephonyConnections.id, row.id))
   }
 
-  // 4. User mobile — fetched fresh on every boot for v1 (mobile
-  //    numbers change rarely but unpredictably; caching is a future
-  //    optimization). Errors degrade gracefully to undefined →
-  //    transfer button disabled with the "set a mobile number" copy.
-  const userMobile = await fetchUserMobile(accessToken)
+  // 4. Transfer target — the user's RC DirectNumber (their personal
+  //    business DID). Fetched fresh on every boot for v1. Errors
+  //    degrade gracefully to undefined → transfer button disabled
+  //    with the "configure your RC business number" copy.
+  const userMobile = await fetchTransferTarget(accessToken)
 
   return {
     accessToken,
@@ -367,33 +378,65 @@ async function fetchSipProvisioning(accessToken: string): Promise<unknown> {
 }
 
 /**
- * GET `/restapi/v1.0/account/~/extension/~` — returns the
- * authenticated user's extension. Probes for the user's registered
- * mobile number, used as the target of the dialer's
- * "Transfer to phone" action (D9).
+ * GET `/restapi/v1.0/account/~/extension/~/phone-number` — returns
+ * the inventory of phone numbers assigned to the authenticated
+ * user's extension. Probes for the user's RingCentral
+ * **DirectNumber** — their personal business DID, used as the
+ * target of the dialer's "Transfer to phone" action.
  *
- * Robust to RC's response-shape ambiguity: tries the documented
- * `contact.mobilePhone` field first; falls back to scanning the
- * `phoneNumbers` array for a `type === "MobileNumber"` or
- * `usageType === "MobileNumber"` entry. Returns `undefined` when
- * neither path yields a value OR when the RC call fails — this
- * is the graceful-degradation contract: the transfer button
- * disables itself when userMobile is undefined.
+ * Why business DID, not personal cell:
+ *   - RC's call-handling rules on the user's DID delegate routing
+ *     to all their configured endpoints (mobile app, desktop app,
+ *     desk phone) per their simultaneous-ring config. Transferring
+ *     to the DID lets the user pick up wherever they want.
+ *   - No carrier minutes used; quality stays end-to-end VoIP. No
+ *     need to read or store the user's personal cell number in
+ *     Pathway.
+ *   - Matches best-in-class CRM "Transfer to my business line"
+ *     semantics (HubSpot, Aircall, Dialpad).
  *
- * Unlike `fetchSipProvisioning`, errors here do NOT throw. The
- * dialer functions fine without a transfer target; failing the
- * whole bootstrap because we couldn't probe the mobile would be
- * incorrect UX.
+ * Why `/extension/~/phone-number`, not `/extension/~` /
+ * `contact.businessPhone`:
+ *   - RC's own docs note `contact.businessPhone` is "the best
+ *     contact phone number" and is "blank for most records" —
+ *     unreliable as a discovery source.
+ *   - `/phone-number` is the canonical inventory of numbers
+ *     assigned to the extension. Filter `records[]` where
+ *     `usageType === "DirectNumber"`; prefer `primary === true` if
+ *     multiple DirectNumber records exist on the user.
  *
- * NEVER logs the access token. NEVER logs the mobile number
- * itself — only the existence-or-not signal and any RC error code.
+ * Why DirectNumber, not MainCompanyNumber:
+ *   - `MainCompanyNumber` is the company's shared main DID. Routing
+ *     there goes through the company auto-attendant rules, not the
+ *     individual user's call-handling. We want the user's personal
+ *     endpoint routing.
+ *
+ * OAuth scope: `ReadAccounts` (already granted via the existing
+ * bootstrap's other RC calls). No new scope grant; no reconnect
+ * flow needed.
+ *
+ * API stability: the `/phone-number` endpoint is NOT part of RC's
+ * v1.0 → v2 user-call-handling migration (that migration covers
+ * answering-rules / forwarding-number / call-handling RULES, a
+ * different family). v1.0 phone-number is safe for the long term
+ * as of 2026-06.
+ *
+ * Like the previous `fetchUserMobile`, errors here do NOT throw —
+ * any failure (network, RC error, no DirectNumber assigned) returns
+ * undefined → transfer button stays disabled. The dialer functions
+ * fine without a transfer target; failing the whole bootstrap
+ * because we couldn't probe the DID would be incorrect UX.
+ *
+ * NEVER logs the access token. NEVER logs the phone number
+ * itself — only "found" / "not found" / RC error code signals at
+ * pino warn level with `feature: "telephony.transfer-target"`.
  */
-async function fetchUserMobile(accessToken: string): Promise<string | undefined> {
+async function fetchTransferTarget(accessToken: string): Promise<string | undefined> {
   const { RINGCENTRAL_SERVER_URL } = env
   if (!RINGCENTRAL_SERVER_URL) {
     return undefined
   }
-  const url = `${RINGCENTRAL_SERVER_URL.replace(/\/$/, "")}/restapi/v1.0/account/~/extension/~`
+  const url = `${RINGCENTRAL_SERVER_URL.replace(/\/$/, "")}/restapi/v1.0/account/~/extension/~/phone-number`
 
   let res: Response
   try {
@@ -408,42 +451,47 @@ async function fetchUserMobile(accessToken: string): Promise<string | undefined>
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
     log.warn(
-      { feature: "telephony.user-mobile", err: detail },
-      "[user-mobile] network error reaching RingCentral; transfer disabled this session",
+      { feature: "telephony.transfer-target", err: detail },
+      "[transfer-target] network error reaching RingCentral; transfer disabled this session",
     )
     return undefined
   }
 
   if (!res.ok) {
     log.warn(
-      { feature: "telephony.user-mobile", status: res.status },
-      "[user-mobile] RC returned non-OK; transfer disabled this session",
+      { feature: "telephony.transfer-target", status: res.status },
+      "[transfer-target] RC returned non-OK; transfer disabled this session",
     )
     return undefined
   }
 
   let body: {
-    contact?: { mobilePhone?: string }
-    phoneNumbers?: { type?: string; usageType?: string; phoneNumber?: string }[]
+    records?: { phoneNumber?: string; usageType?: string; primary?: boolean }[]
   }
   try {
     body = (await res.json()) as typeof body
   } catch {
     log.warn(
-      { feature: "telephony.user-mobile", status: res.status },
-      "[user-mobile] response body did not parse as JSON; transfer disabled this session",
+      { feature: "telephony.transfer-target", status: res.status },
+      "[transfer-target] response body did not parse as JSON; transfer disabled this session",
     )
     return undefined
   }
 
-  if (typeof body.contact?.mobilePhone === "string" && body.contact.mobilePhone.length > 0) {
-    return body.contact.mobilePhone
-  }
-  const mobileEntry = body.phoneNumbers?.find(
-    (p) => p.type === "MobileNumber" || p.usageType === "MobileNumber",
+  const directNumbers = (body.records ?? []).filter(
+    (r) =>
+      r.usageType === "DirectNumber" &&
+      typeof r.phoneNumber === "string" &&
+      r.phoneNumber.length > 0,
   )
-  if (mobileEntry?.phoneNumber) {
-    return mobileEntry.phoneNumber
+  if (directNumbers.length === 0) {
+    return undefined
   }
-  return undefined
+
+  // Prefer primary === true if multiple DirectNumber records exist
+  // (e.g., users with vanity numbers assigned alongside their main
+  // DID). Falls back to the first record when no explicit primary
+  // flag is set on any record.
+  const primary = directNumbers.find((r) => r.primary === true) ?? directNumbers[0]
+  return primary?.phoneNumber
 }

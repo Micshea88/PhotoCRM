@@ -188,6 +188,14 @@ export interface DialerBootstrap {
    *  probe failed (graceful degradation: transfer button renders
    *  disabled). */
   userMobile?: string
+  /** True iff `fetchTransferTarget` got a 403 from RC, meaning the
+   *  user's OAuth grant doesn't include `ReadAccounts` (a scope
+   *  added 2026-06-08 — existing connections from before that point
+   *  don't have it). The UI surfaces this via a "Reconnect RingCentral…"
+   *  tooltip on the disabled Transfer button. Mutually exclusive with
+   *  `userMobile` being set — a 403 means we never got a value.
+   *  See memory:ringcentral-oauth-scopes. */
+  userMobileNeedsReconnect?: boolean
 }
 
 /**
@@ -266,18 +274,20 @@ export async function getDialerBootstrapImpl(
       .where(eq(telephonyConnections.id, row.id))
   }
 
-  // 4. Transfer target — the user's RC DirectNumber (their personal
-  //    business DID). Fetched fresh on every boot for v1. Errors
-  //    degrade gracefully to undefined → transfer button disabled
-  //    with the "configure your RC business number" copy.
-  const userMobile = await fetchTransferTarget(accessToken)
+  // 4. Transfer target — the user's RC DirectNumber. Result
+  //    discriminates between (a) success → value set, (b) silent
+  //    failure → both fields undefined → tooltip says "Configure your
+  //    RC business number…", and (c) 403 → needsReconnect → tooltip
+  //    says "Reconnect RingCentral in Settings → Integrations…".
+  const transferResult = await fetchTransferTarget(accessToken)
 
   return {
     accessToken,
     accessTokenExpiresAt: row.accessTokenExpiresAt,
     sipInfo,
     externalUserId: row.externalUserId,
-    userMobile,
+    userMobile: transferResult.value,
+    userMobileNeedsReconnect: transferResult.needsReconnect,
   }
 }
 
@@ -411,9 +421,16 @@ async function fetchSipProvisioning(accessToken: string): Promise<unknown> {
  *     individual user's call-handling. We want the user's personal
  *     endpoint routing.
  *
- * OAuth scope: `ReadAccounts` (already granted via the existing
- * bootstrap's other RC calls). No new scope grant; no reconnect
- * flow needed.
+ * OAuth scope: `ReadAccounts`. The Telephony 3a OAuth flow's
+ * original SCOPES list did NOT include this — existing connected
+ * users will see this endpoint return 403 until they reconnect
+ * (the new token grant will include ReadAccounts because we added
+ * it to SCOPES on 2026-06-08, and `prompt=consent` on the authorize
+ * URL guarantees the user sees + grants the new scope explicitly).
+ * We detect 403 specifically and return `{ needsReconnect: true }`
+ * so the UI surfaces a "Reconnect RingCentral…" tooltip on the
+ * disabled Transfer button. See memory:ringcentral-oauth-scopes for
+ * the scope-vs-endpoint matrix.
  *
  * API stability: the `/phone-number` endpoint is NOT part of RC's
  * v1.0 → v2 user-call-handling migration (that migration covers
@@ -421,20 +438,28 @@ async function fetchSipProvisioning(accessToken: string): Promise<unknown> {
  * different family). v1.0 phone-number is safe for the long term
  * as of 2026-06.
  *
- * Like the previous `fetchUserMobile`, errors here do NOT throw —
- * any failure (network, RC error, no DirectNumber assigned) returns
- * undefined → transfer button stays disabled. The dialer functions
- * fine without a transfer target; failing the whole bootstrap
- * because we couldn't probe the DID would be incorrect UX.
+ * Like `fetchSipProvisioning`, errors here do NOT throw — any
+ * failure (network, non-403 RC error, no DirectNumber assigned)
+ * returns `{}` → transfer button stays disabled with the
+ * "Configure your RC business number…" tooltip. The dialer
+ * functions fine without a transfer target; failing the whole
+ * bootstrap because we couldn't probe the DID would be incorrect UX.
  *
- * NEVER logs the access token. NEVER logs the phone number
- * itself — only "found" / "not found" / RC error code signals at
- * pino warn level with `feature: "telephony.transfer-target"`.
+ * Return shape — discriminated:
+ *   - `{ value: string }`        → DirectNumber found
+ *   - `{ needsReconnect: true }` → 403 from RC (scope gap)
+ *   - `{}`                       → any other failure / no DirectNumber
+ *
+ * NEVER logs the access token. NEVER logs the phone number itself —
+ * only "found" / "not found" / RC error code signals at pino warn
+ * level with `feature: "telephony.transfer-target"`.
  */
-async function fetchTransferTarget(accessToken: string): Promise<string | undefined> {
+async function fetchTransferTarget(
+  accessToken: string,
+): Promise<{ value?: string; needsReconnect?: boolean }> {
   const { RINGCENTRAL_SERVER_URL } = env
   if (!RINGCENTRAL_SERVER_URL) {
-    return undefined
+    return {}
   }
   const url = `${RINGCENTRAL_SERVER_URL.replace(/\/$/, "")}/restapi/v1.0/account/~/extension/~/phone-number`
 
@@ -454,7 +479,21 @@ async function fetchTransferTarget(accessToken: string): Promise<string | undefi
       { feature: "telephony.transfer-target", err: detail },
       "[transfer-target] network error reaching RingCentral; transfer disabled this session",
     )
-    return undefined
+    return {}
+  }
+
+  // 403 is structurally distinct from other non-OK statuses: it means
+  // our OAuth grant doesn't include ReadAccounts. The fix is for the
+  // user to disconnect+reconnect RC (the new token's scope will
+  // include ReadAccounts since we added it to SCOPES). Surface this
+  // up the stack so the UI can render the "Reconnect…" tooltip
+  // instead of the generic "Configure your RC business number…" one.
+  if (res.status === 403) {
+    log.warn(
+      { feature: "telephony.transfer-target", status: 403 },
+      "[transfer-target] RC returned 403 — OAuth grant missing ReadAccounts; user must reconnect",
+    )
+    return { needsReconnect: true }
   }
 
   if (!res.ok) {
@@ -462,7 +501,7 @@ async function fetchTransferTarget(accessToken: string): Promise<string | undefi
       { feature: "telephony.transfer-target", status: res.status },
       "[transfer-target] RC returned non-OK; transfer disabled this session",
     )
-    return undefined
+    return {}
   }
 
   let body: {
@@ -475,37 +514,8 @@ async function fetchTransferTarget(accessToken: string): Promise<string | undefi
       { feature: "telephony.transfer-target", status: res.status },
       "[transfer-target] response body did not parse as JSON; transfer disabled this session",
     )
-    return undefined
+    return {}
   }
-
-  // ─── TEMPORARY DIAGNOSTIC — remove in follow-up fix ─────────────
-  // Post-deploy 2026-06-07: Transfer button still grayed out for
-  // Mike even after the userMobile → DirectNumber switch. To debug
-  // WHY (no DirectNumber records? different usageType casing?
-  // different field shape entirely?) without leaking the phone
-  // number itself, log only the response SHAPE — counts, usageType
-  // values present, and whether the phoneNumber field exists.
-  // Phone number values themselves are NEVER logged; privacy
-  // contract holds. Remove this entire block (and the
-  // `feature: "telephony.transfer-target.diag"` import-grep if any)
-  // in the follow-up fix once Vercel Logs surface Mike's actual
-  // response shape.
-  log.info(
-    {
-      feature: "telephony.transfer-target.diag",
-      recordCount: body.records?.length ?? 0,
-      sampleRecord: body.records?.[0]
-        ? {
-            usageType: body.records[0].usageType,
-            primary: body.records[0].primary,
-            hasPhoneNumber: typeof body.records[0].phoneNumber === "string",
-          }
-        : null,
-      allUsageTypes: body.records?.map((r) => r.usageType) ?? [],
-    },
-    "[transfer-target diagnostic] RC response shape",
-  )
-  // ─── END TEMPORARY DIAGNOSTIC ───────────────────────────────────
 
   const directNumbers = (body.records ?? []).filter(
     (r) =>
@@ -514,7 +524,7 @@ async function fetchTransferTarget(accessToken: string): Promise<string | undefi
       r.phoneNumber.length > 0,
   )
   if (directNumbers.length === 0) {
-    return undefined
+    return {}
   }
 
   // Prefer primary === true if multiple DirectNumber records exist
@@ -522,5 +532,5 @@ async function fetchTransferTarget(accessToken: string): Promise<string | undefi
   // DID). Falls back to the first record when no explicit primary
   // flag is set on any record.
   const primary = directNumbers.find((r) => r.primary === true) ?? directNumbers[0]
-  return primary?.phoneNumber
+  return primary?.phoneNumber ? { value: primary.phoneNumber } : {}
 }

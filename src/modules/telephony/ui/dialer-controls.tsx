@@ -121,6 +121,7 @@ export function DialerStatusRow({ state, now }: { state: DialerUiState; now: num
 export function DialerActions({
   state,
   canTransfer,
+  transferNeedsReconnect,
   onHangup,
   onMute,
   onKeypadDigit,
@@ -128,6 +129,7 @@ export function DialerActions({
 }: {
   state: DialerUiState
   canTransfer: boolean
+  transferNeedsReconnect: boolean
   onHangup: () => void
   onMute: () => void
   onKeypadDigit: (digit: string) => void
@@ -146,7 +148,11 @@ export function DialerActions({
         <Keypad onDigit={onKeypadDigit} />
         <div className="flex items-center gap-2">
           <MuteButton muted={state.muted} onClick={onMute} />
-          <TransferButton enabled={canTransfer} onClick={onTransfer} />
+          <TransferButton
+            enabled={canTransfer}
+            needsReconnect={transferNeedsReconnect}
+            onClick={onTransfer}
+          />
           <HangupButton onClick={onHangup} />
         </div>
       </div>
@@ -199,23 +205,39 @@ function MuteButton({ muted, onClick }: { muted: boolean; onClick: () => void })
 }
 
 /**
- * Transfer-to-mobile button. Disabled when the user has no mobile
- * number registered in RingCentral (graceful degradation of D9 when
- * the user-mobile probe at bootstrap returns null). Click calls
- * `session.transfer(userMobile)` via the hook's transferToMobile.
+ * Transfer-to-phone button. Disabled when the bootstrap couldn't
+ * discover a transfer target (the user's RC DirectNumber). Tooltip
+ * branches on `needsReconnect`:
+ *   - `needsReconnect=true` → "Reconnect RingCentral…" (a 403 from
+ *     /extension/~/phone-number means the user's OAuth grant lacks
+ *     ReadAccounts; reconnecting re-grants with the new scope).
+ *   - `needsReconnect=false` → "Configure your RC business number…"
+ *     (everything else — RC errors, no DirectNumber assigned, etc.).
+ * Click calls `session.transfer(target)` via the hook's
+ * transferToMobile (the field is named `userMobile` for historical
+ * reasons; the actual value is the user's RC DirectNumber).
  */
-function TransferButton({ enabled, onClick }: { enabled: boolean; onClick: () => void }) {
+function TransferButton({
+  enabled,
+  needsReconnect,
+  onClick,
+}: {
+  enabled: boolean
+  needsReconnect: boolean
+  onClick: () => void
+}) {
+  const title = enabled
+    ? "Transfer to phone"
+    : needsReconnect
+      ? "Reconnect RingCentral in Settings → Integrations to enable transfer."
+      : "Configure your RingCentral business number to enable transfer."
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!enabled}
       aria-label="Transfer call to phone"
-      title={
-        enabled
-          ? "Transfer to phone"
-          : "Configure your RingCentral business number to enable transfer."
-      }
+      title={title}
       className="flex size-10 items-center justify-center rounded-full bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-secondary)]/80 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <PhoneForwarded className="size-4" aria-hidden="true" />

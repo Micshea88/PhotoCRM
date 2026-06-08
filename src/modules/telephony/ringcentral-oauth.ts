@@ -15,8 +15,24 @@ import { env } from "@/lib/env"
 
 const REDIRECT_PATH = "/api/telephony/ringcentral/callback"
 
-/** Scopes we request from RingCentral. Mirrors Step 1's scope spec. */
-const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling"
+/**
+ * Scopes we request from RingCentral.
+ *
+ *   - ReadCallLog, ReadMessages, SMS, VoipCalling: Telephony 3a original set
+ *     (voice calling + call history + SMS).
+ *   - ReadAccounts: REQUIRED for any /restapi/v1.0/account/~/extension/~/*
+ *     endpoint. Added 2026-06-08 after the post-deploy transfer-button
+ *     debugging surfaced that /extension/~/phone-number returns 403
+ *     without it. See memory:ringcentral-oauth-scopes for the
+ *     scope-vs-endpoint matrix and the rationale.
+ *
+ * Existing connected users retain their OLD scope grant until they
+ * disconnect + reconnect — their new token will include ReadAccounts
+ * automatically because we always pass `SCOPES` in the authorize URL
+ * and use `prompt=consent` to force RC to re-display the consent
+ * screen (so the user sees + grants the new scope explicitly).
+ */
+const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling ReadAccounts"
 
 export class RingCentralOAuthNotConfigured extends Error {
   constructor() {
@@ -54,6 +70,15 @@ export function buildAuthorizeUrl(args: { state: string; codeChallenge: string }
     code_challenge: args.codeChallenge,
     code_challenge_method: "S256",
     scope: SCOPES,
+    // Force RC to re-display the consent screen even for users who
+    // previously authorized this app. Critical when SCOPES changes:
+    // without prompt=consent, RC may silently re-grant the user's
+    // PRIOR scope set (missing the newly-added one), and the new
+    // feature would stay broken for existing users until they revoke
+    // at RC's side. With prompt=consent, every reconnect surfaces the
+    // current SCOPES list explicitly. Net friction for first-time
+    // users: zero (RC always shows consent on first connect anyway).
+    prompt: "consent",
   })
   return `${serverUrl}/restapi/oauth/authorize?${params.toString()}`
 }

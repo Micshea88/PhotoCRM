@@ -32,6 +32,13 @@ export interface DialerBootstrapClient {
   sipInfo: unknown
   externalUserId: string
   userMobile?: string
+  /** Mirrors DialerBootstrap.userMobileNeedsReconnect — true when the
+   *  transfer-target probe got a 403 from RC (existing user's OAuth
+   *  grant lacks the ReadAccounts scope we added 2026-06-08). The
+   *  Transfer button's tooltip branches on this to prompt reconnect
+   *  instead of the generic "configure your business number" copy.
+   *  See memory:ringcentral-oauth-scopes. */
+  userMobileNeedsReconnect?: boolean
 }
 
 interface DialerPublicApi {
@@ -40,6 +47,10 @@ interface DialerPublicApi {
   isReady: boolean
   isAvailable: boolean // true iff bootstrap is non-null
   canTransfer: boolean // true iff userMobile is set
+  /** true iff the transfer-target probe failed with 403. Drives the
+   *  TransferButton's tooltip toward "Reconnect RC…" instead of the
+   *  generic "Configure your business number…" copy. */
+  transferNeedsReconnect: boolean
   externalUserId: string
 
   // Audio element binding via callback ref (React 19 react-hooks/refs
@@ -73,6 +84,7 @@ const EMPTY_API: DialerPublicApi = {
   isReady: false,
   isAvailable: false,
   canTransfer: false,
+  transferNeedsReconnect: false,
   externalUserId: "",
   setAudioElement: noop,
   now: 0,
@@ -179,6 +191,7 @@ function DialerProviderInner({
     isReady: webPhone.isReady,
     isAvailable: true,
     canTransfer: webPhone.canTransfer,
+    transferNeedsReconnect: bootstrap.userMobileNeedsReconnect === true,
     externalUserId: bootstrap.externalUserId,
     setAudioElement: webPhone.setAudioElement,
     now: webPhone.now,

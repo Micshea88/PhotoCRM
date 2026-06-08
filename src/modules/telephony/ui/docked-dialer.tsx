@@ -71,6 +71,7 @@ function ExpandedPanel() {
       <DialerActions
         state={dialer.state}
         canTransfer={dialer.canTransfer}
+        transferNeedsReconnect={dialer.transferNeedsReconnect}
         onHangup={dialer.hangup}
         onMute={dialer.toggleMute}
         onKeypadDigit={dialer.sendDtmf}

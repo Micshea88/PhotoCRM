@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react"
 import { Calendar, CheckSquare, Mail, MoreHorizontal, Phone, StickyNote } from "lucide-react"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { openDialer } from "@/lib/open-dialer"
+import { useDialer } from "@/modules/telephony/ui/dialer-context"
 import type { AssociationOption } from "@/components/ui/activity-modal-chrome"
 import { AddNoteModal } from "./add-note-modal"
 import { LogCallModal } from "./log-call-modal"
@@ -89,9 +89,10 @@ export function ActionIconRow({
   // "call THIS contact," not "set up calling globally."
   const useTelHref = canCall && !hasConnectedPhoneProvider
 
+  const dialer = useDialer()
   function handleConnectedCall() {
     if (!primaryPhone) return
-    openDialer({ phoneNumber: primaryPhone, contactId, contactLabel })
+    dialer.startCall({ phoneNumber: primaryPhone, contactId, contactLabel })
   }
 
   return (

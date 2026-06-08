@@ -5,6 +5,7 @@ import type * as schema from "@/db/schema"
 import { withOrgContext } from "@/lib/org-context"
 import { getProvidersByCategory } from "@/modules/integrations/registry"
 import { telephonyConnections } from "@/modules/telephony/schema"
+import { decrypt, encrypt } from "@/lib/crypto"
 import { env } from "@/lib/env"
 import { log } from "@/lib/log"
 import { RingCentralOAuthNotConfigured } from "@/modules/telephony/ringcentral-oauth"
@@ -171,6 +172,11 @@ export interface DialerBootstrap {
   accessTokenExpiresAt: Date
   sipInfo: unknown
   externalUserId: string
+  /** RC-registered mobile number for the user, used as the
+   *  transfer-to-mobile target. Undefined when the user has no
+   *  mobile on their RC profile OR the user-mobile probe failed
+   *  (graceful degradation: transfer button renders disabled). */
+  userMobile?: string
 }
 
 /**
@@ -191,20 +197,19 @@ export async function getDialerBootstrapImpl(
   tx: DbHandle,
   args: { organizationId: string; userId: string },
 ): Promise<DialerBootstrap> {
-  // 1. Get a usable access token. Ignore `rotated` — bootstrap is a
-  //    read; the dialer action handles audit on mid-call rotations.
+  // 1. Get a usable access token.
   const { token: accessToken } = await getValidAccessToken(
     { organizationId: args.organizationId, userId: args.userId },
     tx,
   )
 
-  // 2. Read the row for accessTokenExpiresAt + externalUserId.
-  //    getValidAccessToken's contract returns just the token + rotation
-  //    flag; we read these fields here rather than expanding its shape.
+  // 2. Read the row for the metadata fields + cached sipInfo.
   const [row] = await tx
     .select({
+      id: telephonyConnections.id,
       accessTokenExpiresAt: telephonyConnections.accessTokenExpiresAt,
       externalUserId: telephonyConnections.externalUserId,
+      sipInfoCached: telephonyConnections.sipInfoCached,
     })
     .from(telephonyConnections)
     .where(
@@ -217,20 +222,51 @@ export async function getDialerBootstrapImpl(
     )
     .limit(1)
   if (!row) {
-    // Defensive: getValidAccessToken should have thrown
-    // RingCentralAuthError("no_active_connection") above. Re-throw
-    // with the same code so callers see one consistent contract.
     throw new RingCentralAuthError("no_active_connection")
   }
 
-  // 3. Fetch SIP provisioning from RingCentral with the fresh token.
-  const sipInfo = await fetchSipProvisioning(accessToken)
+  // 3. SipInfo — cache hit decrypts + parses; cache miss fetches +
+  //    encrypts + UPDATEs the row in the same tx so subsequent
+  //    bootstraps skip the sip-provision REST call entirely.
+  //    Steady-state: 1 RC REST call per layout render (the
+  //    extension fetch in step 4); cold-cache: 2 REST calls.
+  let sipInfo: unknown = null
+  if (row.sipInfoCached) {
+    try {
+      sipInfo = JSON.parse(decrypt(row.sipInfoCached))
+    } catch (e) {
+      // Cached value is corrupt (key rotation? bad write?). Fall
+      // through to fresh fetch — caching corrupt data forever would
+      // be worse than the per-render REST call.
+      const detail = e instanceof Error ? e.message : String(e)
+      log.warn(
+        { feature: "telephony.sip-provision", err: detail },
+        "[sip-provision] cached value failed to decrypt/parse; re-fetching",
+      )
+      sipInfo = null
+    }
+  }
+  if (sipInfo === null) {
+    sipInfo = await fetchSipProvisioning(accessToken)
+    const cipher = encrypt(JSON.stringify(sipInfo))
+    await tx
+      .update(telephonyConnections)
+      .set({ sipInfoCached: cipher, sipInfoCachedAt: new Date() })
+      .where(eq(telephonyConnections.id, row.id))
+  }
+
+  // 4. User mobile — fetched fresh on every boot for v1 (mobile
+  //    numbers change rarely but unpredictably; caching is a future
+  //    optimization). Errors degrade gracefully to undefined →
+  //    transfer button disabled with the "set a mobile number" copy.
+  const userMobile = await fetchUserMobile(accessToken)
 
   return {
     accessToken,
     accessTokenExpiresAt: row.accessTokenExpiresAt,
     sipInfo,
     externalUserId: row.externalUserId,
+    userMobile,
   }
 }
 
@@ -328,4 +364,86 @@ async function fetchSipProvisioning(accessToken: string): Promise<unknown> {
     "[sip-provision] transient error from RingCentral",
   )
   throw new RingCentralTransientError(providerCode, providerDetail)
+}
+
+/**
+ * GET `/restapi/v1.0/account/~/extension/~` — returns the
+ * authenticated user's extension. Probes for the user's registered
+ * mobile number, used as the target of the dialer's
+ * "Transfer to phone" action (D9).
+ *
+ * Robust to RC's response-shape ambiguity: tries the documented
+ * `contact.mobilePhone` field first; falls back to scanning the
+ * `phoneNumbers` array for a `type === "MobileNumber"` or
+ * `usageType === "MobileNumber"` entry. Returns `undefined` when
+ * neither path yields a value OR when the RC call fails — this
+ * is the graceful-degradation contract: the transfer button
+ * disables itself when userMobile is undefined.
+ *
+ * Unlike `fetchSipProvisioning`, errors here do NOT throw. The
+ * dialer functions fine without a transfer target; failing the
+ * whole bootstrap because we couldn't probe the mobile would be
+ * incorrect UX.
+ *
+ * NEVER logs the access token. NEVER logs the mobile number
+ * itself — only the existence-or-not signal and any RC error code.
+ */
+async function fetchUserMobile(accessToken: string): Promise<string | undefined> {
+  const { RINGCENTRAL_SERVER_URL } = env
+  if (!RINGCENTRAL_SERVER_URL) {
+    return undefined
+  }
+  const url = `${RINGCENTRAL_SERVER_URL.replace(/\/$/, "")}/restapi/v1.0/account/~/extension/~`
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    })
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    log.warn(
+      { feature: "telephony.user-mobile", err: detail },
+      "[user-mobile] network error reaching RingCentral; transfer disabled this session",
+    )
+    return undefined
+  }
+
+  if (!res.ok) {
+    log.warn(
+      { feature: "telephony.user-mobile", status: res.status },
+      "[user-mobile] RC returned non-OK; transfer disabled this session",
+    )
+    return undefined
+  }
+
+  let body: {
+    contact?: { mobilePhone?: string }
+    phoneNumbers?: { type?: string; usageType?: string; phoneNumber?: string }[]
+  }
+  try {
+    body = (await res.json()) as typeof body
+  } catch {
+    log.warn(
+      { feature: "telephony.user-mobile", status: res.status },
+      "[user-mobile] response body did not parse as JSON; transfer disabled this session",
+    )
+    return undefined
+  }
+
+  if (typeof body.contact?.mobilePhone === "string" && body.contact.mobilePhone.length > 0) {
+    return body.contact.mobilePhone
+  }
+  const mobileEntry = body.phoneNumbers?.find(
+    (p) => p.type === "MobileNumber" || p.usageType === "MobileNumber",
+  )
+  if (mobileEntry?.phoneNumber) {
+    return mobileEntry.phoneNumber
+  }
+  return undefined
 }

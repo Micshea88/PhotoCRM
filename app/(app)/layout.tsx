@@ -10,7 +10,37 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { resolveSidebarItems } from "@/modules/org/ui/app-sidebar"
 import { AppTopbar } from "@/modules/org/ui/app-topbar"
 import { ClientLayoutShell } from "@/modules/org/ui/client-layout-shell"
+import { getDialerBootstrap } from "@/modules/telephony/queries"
+import { DialerProvider, type DialerBootstrapClient } from "@/modules/telephony/ui/dialer-context"
+import { DockedDialer } from "@/modules/telephony/ui/docked-dialer"
 import { getUserPreference } from "@/modules/user-preferences/queries"
+
+/**
+ * Server-side bootstrap fetch for the inline dialer. Returns null on
+ * ANY failure (no RC connection, transient RC error, missing env
+ * config) — the DialerProvider absorbs null by rendering an empty
+ * API and the DockedDialer renders nothing. The fact that the
+ * widget is invisible is the signal to the user that RC isn't
+ * configured; the dedicated Settings → Integrations page is the
+ * setup surface, not this widget.
+ */
+async function tryDialerBootstrap(
+  organizationId: string,
+  userId: string,
+): Promise<DialerBootstrapClient | null> {
+  try {
+    const b = await getDialerBootstrap({ organizationId, userId })
+    return {
+      accessToken: b.accessToken,
+      accessTokenExpiresAt: b.accessTokenExpiresAt.toISOString(),
+      sipInfo: b.sipInfo,
+      externalUserId: b.externalUserId,
+      userMobile: b.userMobile,
+    }
+  } catch {
+    return null
+  }
+}
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getSession()
@@ -66,13 +96,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // propagate into async child server components — those render
   // outside the layout's frame. Resolve here, fully await, and pass
   // plain values to the client wrapper.
-  const { sidebarItems, navCollapsed, settingsExpanded } = await runWithOrgContext(
+  const { sidebarItems, navCollapsed, settingsExpanded, dialerBootstrap } = await runWithOrgContext(
     { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
     async () => {
-      const [items, navPref, settingsPref] = await Promise.all([
+      const [items, navPref, settingsPref, bootstrap] = await Promise.all([
         resolveSidebarItems(session.user.id, extendedRole),
         getUserPreference("nav_collapsed", null),
         getUserPreference("nav_settings_expanded", null),
+        tryDialerBootstrap(activeOrgId, session.user.id),
       ])
       return {
         sidebarItems: items,
@@ -81,6 +112,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         // value shapes).
         navCollapsed: navPref === true,
         settingsExpanded: settingsPref === true,
+        dialerBootstrap: bootstrap,
       }
     },
   )
@@ -99,7 +131,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         initialCollapsed={navCollapsed}
         initialSettingsExpanded={settingsExpanded}
       >
-        {children}
+        <DialerProvider bootstrap={dialerBootstrap}>
+          {children}
+          <DockedDialer />
+        </DialerProvider>
       </ClientLayoutShell>
     </div>
   )

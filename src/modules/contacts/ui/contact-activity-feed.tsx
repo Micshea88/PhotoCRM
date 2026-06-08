@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { cn } from "@/lib/utils"
-import { openDialer } from "@/lib/open-dialer"
+import { useDialer } from "@/modules/telephony/ui/dialer-context"
 import { updateContactNote, deleteContactNote } from "@/modules/contacts/actions"
 import { updateCall, deleteCall } from "@/modules/calls/actions"
 import { updateMeeting, deleteMeeting } from "@/modules/meetings/actions"
@@ -240,6 +240,7 @@ export function ContactActivityFeed({
    *  the picker fires tel:${primaryPhone} immediately. */
   primaryPhone?: string | null
 }) {
+  const dialer = useDialer()
   const [activeTab, setActiveTab] = useState<FilterKey>("all")
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS)
   // Backlog Item 1c — All-tab Type chips filter IN PLACE (don't jump
@@ -420,7 +421,7 @@ export function ContactActivityFeed({
               onClick={() => {
                 if (hasConnectedPhoneProvider) {
                   if (primaryPhone) {
-                    openDialer({ phoneNumber: primaryPhone, contactId })
+                    dialer.startCall({ phoneNumber: primaryPhone, contactId })
                   }
                   return
                 }

@@ -70,6 +70,12 @@ export async function upsertRingCentralConnection(
         refreshTokenExpiresAt,
         scope: args.tokens.scope,
         externalUserId: args.tokens.owner_id,
+        // Clear the cached sipInfo on (re-)connect — the previous grant
+        // may have been issued to a different RC extension or under a
+        // different RC tenant; getDialerBootstrap will fetch fresh on
+        // the next boot.
+        sipInfoCached: null,
+        sipInfoCachedAt: null,
         deletedAt: null,
         deletedBy: null,
         updatedAt: now,

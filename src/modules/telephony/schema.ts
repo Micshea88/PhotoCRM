@@ -85,6 +85,26 @@ export const telephonyConnections = pgTable(
      * step populates it; never plaintext.
      */
     validationToken: text("validation_token"),
+    /**
+     * Cached RC SIP-provisioning grant (output of POST /restapi/v1.0/
+     * client-info/sip-provision) — encrypted JSON. Contains SIP digest
+     * credentials (username + password) that authenticate the WebPhone
+     * SDK's live SIP session. RC docs say the grant is reusable "for a
+     * long time" (months); caching it eliminates the per-bootstrap REST
+     * round-trip for the inline dialer.
+     *
+     * NULL when fresh / disconnected — `getDialerBootstrap` populates
+     * it on first fetch. Cleared (set NULL) by `upsertRingCentralConnection`
+     * on reactivation so a re-connect after disconnect re-fetches.
+     * AES-256-GCM ciphertext (v1: prefix). Never plaintext.
+     */
+    sipInfoCached: text("sip_info_cached"),
+    /**
+     * Timestamp of the last successful sip-provision fetch. Not used
+     * as a TTL today (no time-based invalidation) — kept for forensics
+     * and as a future hook for refresh logic.
+     */
+    sipInfoCachedAt: timestamp("sip_info_cached_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),

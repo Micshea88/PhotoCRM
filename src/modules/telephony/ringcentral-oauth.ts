@@ -18,25 +18,41 @@ const REDIRECT_PATH = "/api/telephony/ringcentral/callback"
 /**
  * Scopes we request from RingCentral.
  *
- *   - ReadCallLog, ReadMessages, SMS, VoipCalling: Telephony 3a original set
- *     (voice calling + call history + SMS).
- *   - ReadAccounts: REQUIRED for any /restapi/v1.0/account/~/extension/~/*
- *     endpoint. Added 2026-06-08 after the post-deploy transfer-button
- *     debugging surfaced that /extension/~/phone-number returns 403
- *     without it. See memory:ringcentral-oauth-scopes for the
- *     scope-vs-endpoint matrix and the rationale.
+ *   - ReadCallLog, ReadMessages, SMS, VoipCalling: Telephony 3a original
+ *     set (voice calling + call history + SMS). These have been enabled
+ *     in the RC Developer Console for app Yg8cwKhbPLnek6ikwUC9XC since
+ *     the original Step 1 registration; they are stable.
  *
- * Existing connected users retain their OLD scope grant until they
- * disconnect + reconnect — their new token will include ReadAccounts
- * automatically because we always pass `SCOPES` in the authorize URL
- * and use `prompt=login consent` to force RC to re-display BOTH the
- * login page AND the consent screen (so the user sees + grants the
- * new scope explicitly). `"login consent"` is the RC-specific
- * required value for external apps — RC's authorize endpoint does
- * NOT accept the OIDC-standard `prompt=consent` alone. See
- * memory:ringcentral-oauth-scopes for the prompt-value gotcha.
+ * TEMPORARY REVERT 2026-06-08 — `ReadAccounts` is NOT included here
+ * even though it's required for the Transfer-to-phone feature
+ * (`/restapi/v1.0/account/~/extension/~/phone-number`). RC's
+ * authorize endpoint rejects scope strings that include permissions
+ * the app hasn't been pre-configured for in the RC Developer Console
+ * — RC's "double-permission" model: scope strings on the user's
+ * OAuth grant AND permissions on the app's Console config must BOTH
+ * include a permission for it to be requestable. Adding ReadAccounts
+ * to the string here without enabling it on the app's Console config
+ * caused RC to return error=invalid_request "Parameter [scope] value
+ * is invalid", blocking all reconnects.
+ *
+ * Re-add `ReadAccounts` to this string in a follow-up commit AFTER
+ * Mike confirms it's enabled in the RC Developer Console for the app
+ * (https://developers.ringcentral.com → app `Yg8cwKhbPLnek6ikwUC9XC`
+ * → App Permissions → add ReadAccounts → save; if marked "(requires
+ * permission)", submit justification + wait for RC support approval).
+ *
+ * INTERIM UX: Transfer button stays disabled with the "Reconnect
+ * RingCentral…" tooltip (the 403 path in fetchTransferTarget). User
+ * cannot fix this by reconnecting in the meantime — that's a known
+ * cosmetic gap we accept rather than rip+replace the smart-tooltip
+ * pattern temporarily.
+ *
+ * Authorize URL also passes `prompt=login consent` (the RC-specific
+ * required value for external apps; `prompt=consent` alone is
+ * rejected). See memory:ringcentral-oauth-scopes for the full scope
+ * + prompt + double-permission discussion.
  */
-const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling ReadAccounts"
+const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling"
 
 export class RingCentralOAuthNotConfigured extends Error {
   constructor() {

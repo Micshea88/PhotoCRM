@@ -277,12 +277,50 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             dispatch({ type: "session_ended" })
             sessionRef.current = null
           })
+          // `mediaStreamSet` fires with the LOCAL microphone stream
+          // (NOT the remote/inbound stream — verified against
+          // ringcentral-web-phone@2.4.4 source at
+          // `node_modules/.../call-session/index.mjs.map`). The SDK's
+          // README at line 706-714 explicitly recommends this event
+          // for applying noise reduction to the OUTBOUND mic.
+          //
+          // **DSP constraints required.** The SDK's internal
+          // getUserMedia call uses `audio: { deviceId: { exact: ... } }`
+          // with NO `echoCancellation` / `noiseSuppression` /
+          // `autoGainControl` constraints. Per WebRTC convention,
+          // passing an `audio` constraint object (not `audio: true`)
+          // does NOT default-enable DSP processing — the recipient
+          // gets the raw mic stream. Apply the three standard DSP
+          // constraints here so the recipient gets clean audio.
+          //
+          // **DO NOT attach this stream to our `<audio>` element.**
+          // The prior 3a code did exactly that (treating it as if it
+          // were the REMOTE stream) which caused Mike's own mic to
+          // play through Mike's own speakers — an acoustic echo loop.
+          // Remote audio is handled by the SDK's internal hidden
+          // audio element created in its RTCPeerConnection.ontrack
+          // handler; we don't need a manual element for inbound
+          // playback. The `<audio>` element in `docked-dialer.tsx`
+          // plus the `audioElementRef` / `pendingStreamRef` /
+          // `setAudioElement` plumbing below are now dead-but-
+          // harmless code, kept in place to minimize the surgery for
+          // this fix. Future cleanup: remove them entirely. See
+          // memory:telephony-sdk-mediastreamset-gotcha.
           session.on("mediaStreamSet", (stream: MediaStream) => {
-            pendingStreamRef.current = stream
-            const node = audioElementRef.current
-            if (node) {
-              node.srcObject = stream
-            }
+            stream.getAudioTracks().forEach((track) => {
+              void track
+                .applyConstraints({
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: true,
+                })
+                .catch(() => {
+                  // Browser may not support runtime constraint
+                  // changes on a live audio track; degrades to raw
+                  // mic (no worse than today's behavior). Silent
+                  // self-heal — no toast / no error surface.
+                })
+            })
           })
         })
         await phone.start()

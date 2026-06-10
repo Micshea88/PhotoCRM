@@ -18,41 +18,43 @@ const REDIRECT_PATH = "/api/telephony/ringcentral/callback"
 /**
  * Scopes we request from RingCentral.
  *
- *   - ReadCallLog, ReadMessages, SMS, VoipCalling: Telephony 3a original
- *     set (voice calling + call history + SMS). These have been enabled
- *     in the RC Developer Console for app Yg8cwKhbPLnek6ikwUC9XC since
- *     the original Step 1 registration; they are stable.
+ *   - ReadCallLog   : read call history (3a — call history surfaced
+ *     on the contact detail page).
+ *   - ReadMessages  : read SMS history (3a — SMS history surfacing).
+ *   - SMS           : send SMS (3a — outbound SMS from the contact
+ *     activity feed; 3b will surface this in the UI).
+ *   - VoipCalling   : SIP-provision (`/restapi/v1.0/client-info/sip-
+ *     provision`) + WebPhone SDK calling (3a — the docked dialer).
+ *   - ReadAccounts  : read extension/account metadata under
+ *     `/restapi/v1.0/account/~/extension/~/*` — required for the
+ *     `/extension/~/phone-number` endpoint that DirectNumber
+ *     discovery (Transfer-to-phone) hits. Added 2026-06-09 after Mike
+ *     enabled the permission on the app's RC Developer Console
+ *     config.
  *
- * TEMPORARY REVERT 2026-06-08 — `ReadAccounts` is NOT included here
- * even though it's required for the Transfer-to-phone feature
- * (`/restapi/v1.0/account/~/extension/~/phone-number`). RC's
- * authorize endpoint rejects scope strings that include permissions
- * the app hasn't been pre-configured for in the RC Developer Console
- * — RC's "double-permission" model: scope strings on the user's
- * OAuth grant AND permissions on the app's Console config must BOTH
- * include a permission for it to be requestable. Adding ReadAccounts
- * to the string here without enabling it on the app's Console config
- * caused RC to return error=invalid_request "Parameter [scope] value
- * is invalid", blocking all reconnects.
- *
- * Re-add `ReadAccounts` to this string in a follow-up commit AFTER
- * Mike confirms it's enabled in the RC Developer Console for the app
- * (https://developers.ringcentral.com → app `Yg8cwKhbPLnek6ikwUC9XC`
- * → App Permissions → add ReadAccounts → save; if marked "(requires
- * permission)", submit justification + wait for RC support approval).
- *
- * INTERIM UX: Transfer button stays disabled with the "Reconnect
- * RingCentral…" tooltip (the 403 path in fetchTransferTarget). User
- * cannot fix this by reconnecting in the meantime — that's a known
- * cosmetic gap we accept rather than rip+replace the smart-tooltip
- * pattern temporarily.
+ * **Operational gate — RC's double-permission model.** RC validates
+ * the `scope=` param against TWO independent layers: (a) the app's
+ * Console config (developer-side enablement) and (b) the user's
+ * OAuth consent grant. Both must include a permission for it to be
+ * requestable. Adding a scope to this string WITHOUT first enabling
+ * it on the app's Console config caused RC to return
+ * `error=invalid_request "Parameter [scope] value is invalid"` and
+ * broke ALL reconnects (incident 2026-06-08, reverted in cad853b,
+ * re-landed here once Console enablement was confirmed). Before
+ * adding any new scope, follow the audit checklist in
+ * memory:ringcentral-oauth-scopes — Console enablement is the gate
+ * that bit us.
  *
  * Authorize URL also passes `prompt=login consent` (the RC-specific
  * required value for external apps; `prompt=consent` alone is
- * rejected). See memory:ringcentral-oauth-scopes for the full scope
- * + prompt + double-permission discussion.
+ * rejected). Forces RC to re-display the login + consent screen
+ * every authorize call — critical when SCOPES changes, otherwise RC
+ * silently re-grants the user's PRIOR scope set (missing newly-added
+ * ones) and the new feature stays broken until manual revoke. See
+ * memory:ringcentral-oauth-scopes for the full prompt + double-
+ * permission discussion.
  */
-const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling"
+const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling ReadAccounts"
 
 export class RingCentralOAuthNotConfigured extends Error {
   constructor() {

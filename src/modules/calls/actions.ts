@@ -8,7 +8,7 @@ import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
 import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
 import { callLog } from "./schema"
-import { deleteCallInput, logCallInput, updateCallInput } from "./types"
+import { deleteCallInput, logCallInput, recordOutboundCallInput, updateCallInput } from "./types"
 
 /**
  * Manual "Log Call" entry point used by the contact detail page's
@@ -132,6 +132,126 @@ export const updateCall = orgAction
       { resourceType: "call_log", resourceId: id },
     )
     if (result[0]?.contactId) revalidatePath(`/contacts/${result[0].contactId}`)
+    return { id }
+  })
+
+/**
+ * Auto-log an outbound call from the inline dialer's session_ended
+ * event. Fired by `src/modules/telephony/ui/dialer-context.tsx`'s
+ * `handleCallEnded` callback exactly once per call, regardless of
+ * whether the call connected.
+ *
+ * Direction is hard-coded "outgoing" (matches `CALL_DIRECTIONS`);
+ * source is hard-coded "ringcentral" — even V1 dialer-sourced rows
+ * carry that source string per the schema JSDoc. The 3b RC webhook
+ * handler will write rows with `source="ringcentral"` plus the RC
+ * call id in `externalId`; reconciliation between dialer-sourced
+ * rows (externalId null) and webhook-sourced rows (externalId set)
+ * is a 3b concern.
+ *
+ * Notes synthesis from disposition:
+ *   - "completed"   → null
+ *   - "failed"      → "Call did not connect: <reason>."
+ *   - "transferred" → "Transferred to phone."
+ *
+ * `phoneNumber` lands in `externalMetadata` (jsonb) alongside the
+ * raw disposition + reason — `call_log` has no phone-number column,
+ * and stuffing it into notes pollutes the activity feed display.
+ *
+ * **Known V1 reliability gap (acceptable):** if the user closes the
+ * browser tab during an active call, this action never fires and
+ * no row is written. The 3b inbound-call webhook handler will
+ * backfill via the `(org_id, source, external_id) WHERE external_id
+ * IS NOT NULL` partial unique index. Don't treat the missing row as
+ * a bug; it's the explicit V1 reliability tradeoff documented in
+ * memory:contact_detail_polish_backlog #18.
+ *
+ * No owner/admin gate — any authenticated org member with a live
+ * RingCentral connection may have placed a call against their own
+ * grant. orgAction's org-membership check is sufficient. The
+ * contact pre-flight (when contactId is set) verifies the contact
+ * is in the active org and not soft-deleted; when contactId is
+ * null, the row is still written without a contact link (matches
+ * the schema's nullable contact_id).
+ */
+export const recordOutboundCall = orgAction
+  .metadata({ actionName: "call_log.recorded_from_dialer" })
+  .inputSchema(recordOutboundCallInput)
+  .action(async ({ parsedInput, ctx }) => {
+    if (parsedInput.contactId) {
+      const [contact] = await ctx.db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.id, parsedInput.contactId),
+            eq(contacts.organizationId, ctx.activeOrg.id),
+            isNull(contacts.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!contact) {
+        throw new ActionError("VALIDATION", "Contact not found in this organization.")
+      }
+    }
+
+    const notes =
+      parsedInput.disposition === "transferred"
+        ? "Transferred to phone."
+        : parsedInput.disposition === "failed"
+          ? `Call did not connect: ${parsedInput.reason ?? "ended"}.`
+          : null
+
+    const id = createId()
+    await ctx.db.insert(callLog).values({
+      id,
+      organizationId: ctx.activeOrg.id,
+      contactId: parsedInput.contactId ?? null,
+      userId: ctx.session.user.id,
+      direction: "outgoing",
+      startedAt: new Date(parsedInput.startedAt),
+      durationSeconds: parsedInput.durationSeconds,
+      notes,
+      recordingFileId: null,
+      source: "ringcentral",
+      externalId: parsedInput.externalId ?? null,
+      externalMetadata: {
+        phoneNumber: parsedInput.phoneNumber,
+        disposition: parsedInput.disposition,
+        reason: parsedInput.reason ?? null,
+      },
+      createdBy: ctx.session.user.id,
+      updatedBy: ctx.session.user.id,
+    })
+
+    if (parsedInput.contactId) {
+      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    }
+
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "call_log.recorded_from_dialer",
+      {
+        resourceType: "call_log",
+        resourceId: id,
+        metadata: {
+          contactId: parsedInput.contactId ?? null,
+          disposition: parsedInput.disposition,
+          durationSeconds: parsedInput.durationSeconds,
+        },
+      },
+    )
+
+    if (parsedInput.contactId) {
+      revalidatePath(`/contacts/${parsedInput.contactId}`)
+    }
+
     return { id }
   })
 

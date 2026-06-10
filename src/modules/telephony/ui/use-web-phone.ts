@@ -25,7 +25,9 @@ import type { SipInfo } from "ringcentral-web-phone/types"
  * Does NOT own:
  *  - Widget collapse/expand state (that lives in dialer-context.tsx)
  *  - Audit recording (the context calls recordCallTransferred via the
- *    onTransferred callback)
+ *    onTransferred callback and recordOutboundCall via the
+ *    onCallEnded callback — both fire on transferred calls; see
+ *    onCallEnded's JSDoc below for the rationale)
  *  - The audio element itself (the docked widget renders it, but this
  *    hook owns the ref the SDK writes srcObject to)
  *
@@ -164,8 +166,22 @@ export interface UseWebPhoneArgs {
   sipInfo: unknown
   userMobile?: string
   /** Called AFTER a successful transfer. The context wires this to
-   *  the recordCallTransferred server action. */
+   *  the recordCallTransferred server action (audit-log entry with
+   *  masked last-4 of the transfer target). */
   onTransferred?: (mobile: string) => void
+  /** Called exactly once whenever a call reaches the "ended" state,
+   *  REGARDLESS of how (completed / failed / transferred). The
+   *  context wires this to the recordOutboundCall server action so a
+   *  `call_log` row is written for every dialer call. Fires from a
+   *  useEffect that watches the reducer's transition to "ended" —
+   *  the reducer's same-kind guard absorbs the redundant
+   *  `disposed`-event dispatch that follows a transfer's explicit
+   *  session_ended, so the effect fires exactly once per call.
+   *
+   *  `recordCallTransferred` (forensic audit) and `recordOutboundCall`
+   *  (CRM activity feed) intentionally BOTH fire on transferred
+   *  calls — they serve different audiences. */
+  onCallEnded?: (details: { durationMs: number; reason?: string }) => void
 }
 
 export interface UseWebPhoneResult {
@@ -310,6 +326,29 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
       window.clearTimeout(timer)
     }
   }, [state.kind])
+
+  // ─── onCallEnded fan-out (auto-log call_log row) ───────────────
+
+  // Stash the latest callback in a ref so the effect below doesn't
+  // re-fire on every parent render (fresh callback identity would
+  // re-trigger the effect's dep array on no actual state change).
+  const onCallEndedRef = useRef(args.onCallEnded)
+  useEffect(() => {
+    onCallEndedRef.current = args.onCallEnded
+  }, [args.onCallEnded])
+
+  // Fires exactly once on the transition into "ended". The reducer's
+  // session_ended same-kind guard (returns the existing state ref
+  // when state.kind is already "ended") makes the redundant disposed
+  // dispatch that follows a transfer's explicit session_ended a
+  // no-op at React's reconciliation layer, so this effect doesn't
+  // double-fire.
+  useEffect(() => {
+    if (state.kind !== "ended") return
+    const cb = onCallEndedRef.current
+    if (!cb) return
+    cb({ durationMs: state.durationMs, reason: state.reason })
+  }, [state])
 
   // ─── Handlers ────────────────────────────────────────────────────
 

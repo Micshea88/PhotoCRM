@@ -49,6 +49,43 @@ export const updateCallInput = z.object({
 
 export const deleteCallInput = z.object({ id: z.string().min(1) })
 
+/**
+ * Disposition of an outbound call placed via the inline dialer.
+ * Maps to the synthesized notes copy that lands on the row:
+ *   - "completed"   → notes = null
+ *   - "failed"      → notes = "Call did not connect: <reason>."
+ *   - "transferred" → notes = "Transferred to phone."
+ *
+ * Direction on the resulting row is always "outgoing" (the
+ * `CALL_DIRECTIONS` convention); failed/transferred dispositions
+ * don't remap to "missed" because that label is reserved for
+ * inbound calls the user didn't pick up.
+ */
+export const RECORDED_CALL_DISPOSITIONS = ["completed", "failed", "transferred"] as const
+export const recordedCallDispositionSchema = z.enum(RECORDED_CALL_DISPOSITIONS)
+export type RecordedCallDisposition = z.infer<typeof recordedCallDispositionSchema>
+
+/**
+ * Input for `recordOutboundCall` — auto-logged from the dialer's
+ * session_ended event. The action hard-codes direction to
+ * "outgoing" and source to "ringcentral"; those are NOT client
+ * inputs. `contactId` is optional because the dialer's public
+ * `startCall` API permits dialing without a contact context
+ * (future free-form dial input); V1 call sites always pass it.
+ * `externalId` is null for V1; the 3b inbound-call webhook will
+ * supply the real RC call id.
+ */
+export const recordOutboundCallInput = z.object({
+  contactId: z.string().min(1).nullable().optional(),
+  phoneNumber: z.string().min(1).max(64),
+  startedAt: z.iso.datetime(),
+  durationSeconds: z.number().int().min(0).max(86_400),
+  disposition: recordedCallDispositionSchema,
+  reason: z.string().max(1000).nullable().optional(),
+  externalId: z.string().nullable().optional(),
+})
+
 export type LogCallInput = z.infer<typeof logCallInput>
 export type UpdateCallInput = z.infer<typeof updateCallInput>
 export type DeleteCallInput = z.infer<typeof deleteCallInput>
+export type RecordOutboundCallInput = z.infer<typeof recordOutboundCallInput>

@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react"
+import { recordOutboundCall } from "@/modules/calls/actions"
 import { recordCallTransferred } from "@/modules/telephony/actions"
 import { useWebPhone, type DialerUiState } from "./use-web-phone"
 
@@ -148,10 +149,55 @@ function DialerProviderInner({
     })
   }, [])
 
+  // Snapshot of the in-flight call's per-row data — stamped in
+  // startCall, read in handleCallEnded, nulled after the auto-log
+  // server action fires. Single-slot is sufficient because the
+  // dialer can only run one call at a time; a second startCall
+  // overwrites the slot, and the previous call's session_ended has
+  // already fired (the reducer can't transition out of "ended"
+  // without going through "idle").
+  const currentCallRef = useRef<{
+    contactId?: string
+    phoneNumber: string
+    startedAt: string
+  } | null>(null)
+
+  // Auto-log the call_log row on session_ended. Disposition is
+  // inferred from the reason carried by the hook:
+  //   reason === "transferred"  → "transferred"
+  //   reason present (anything else) → "failed"
+  //   reason absent → "completed"
+  // The reason itself is stored in externalMetadata for debugging;
+  // the action synthesizes the notes copy from disposition + reason.
+  const handleCallEnded = useCallback((details: { durationMs: number; reason?: string }) => {
+    const call = currentCallRef.current
+    if (!call) return
+    currentCallRef.current = null
+    const disposition =
+      details.reason === "transferred" ? "transferred" : details.reason ? "failed" : "completed"
+    void recordOutboundCall({
+      contactId: call.contactId,
+      phoneNumber: call.phoneNumber,
+      startedAt: call.startedAt,
+      durationSeconds: Math.round(details.durationMs / 1000),
+      disposition,
+      reason: details.reason ?? null,
+      externalId: null,
+    }).catch(() => {
+      // Best-effort. The call already happened; if the server
+      // action fails (network blip, validation rejection because
+      // the contact was deleted mid-call, etc.) we don't surface
+      // an error to the user — the dialer UX flow is independent
+      // of the activity-feed write. 3b webhook will backfill via
+      // the partial unique index when it lands.
+    })
+  }, [])
+
   const webPhone = useWebPhone({
     sipInfo: bootstrap.sipInfo,
     userMobile: bootstrap.userMobile,
     onTransferred: handleTransferred,
+    onCallEnded: handleCallEnded,
   })
 
   // Widget collapse/expand state.
@@ -172,9 +218,15 @@ function DialerProviderInner({
 
   const startCall = useCallback(
     (args: { phoneNumber: string; contactId?: string; contactLabel?: string }) => {
-      // contactId is part of the public API for future use (call-log
-      // recording in 3b) but is not consumed by the SDK call — only
-      // the phoneNumber + contactLabel reach the state machine.
+      // Stamp the current-call ref BEFORE invoking the SDK so even
+      // an immediate failure inside webPhone.startCall (which catches
+      // the rejection and dispatches session_ended synchronously)
+      // still has the per-row data available to handleCallEnded.
+      currentCallRef.current = {
+        contactId: args.contactId,
+        phoneNumber: args.phoneNumber,
+        startedAt: new Date().toISOString(),
+      }
       setWidgetExpanded(true)
       webPhone.startCall({ phoneNumber: args.phoneNumber, contactLabel: args.contactLabel })
     },

@@ -124,7 +124,27 @@ const PLACEHOLDER_FILTERS: Partial<Record<FilterKey, string>> = {
   task: "Tasks ship in Push 7. Once they exist they'll surface here.",
 }
 
-function entryTitleText(e: ActivityEntry): string {
+/**
+ * Builds the header text for an activity card.
+ *
+ * For most kinds, the loader's `title` is generic ("Note added",
+ * "SMS (outbound)"), so when an `actor` is known the card historically
+ * substitutes `"<Kind> by <Actor>"` — more informative than the generic
+ * loader title.
+ *
+ * **Calls are the exception.** The loader pre-formats a structured
+ * title for calls (e.g., `"Call (outgoing) · 0:42"`) that carries
+ * direction + duration. Discarding it for the generic actor-by pattern
+ * loses that signal — Mike saw "Call by Mike" on every dialer-logged
+ * call with no direction / no duration. Preserve the loader's title
+ * for the call kind. Actor attribution for calls is retained in the
+ * audit log + the in-call dialer header; the activity feed doesn't
+ * surface it inline.
+ *
+ * (Exported so `tests/unit/entry-title-text.test.tsx` can verify the
+ * per-kind contract without rendering the whole card.)
+ */
+export function entryTitleText(e: ActivityEntry): string {
   const kindLabel = (() => {
     switch (e.kind) {
       case "note":
@@ -141,6 +161,9 @@ function entryTitleText(e: ActivityEntry): string {
         return "Audit"
     }
   })()
+  if (e.kind === "call") {
+    return e.title || kindLabel
+  }
   if (e.actor) {
     // P-email-log mockup uses " · " for email headers; the other kinds
     // keep the existing " by " idiom.

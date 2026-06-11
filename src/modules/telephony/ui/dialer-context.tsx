@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react"
 import { recordOutboundCall } from "@/modules/calls/actions"
 import { recordCallTransferred } from "@/modules/telephony/actions"
+import { classifyDisposition } from "@/modules/telephony/classify-disposition"
 import { useWebPhone, type DialerUiState } from "./use-web-phone"
 
 /**
@@ -163,35 +164,43 @@ function DialerProviderInner({
   } | null>(null)
 
   // Auto-log the call_log row on session_ended. Disposition is
-  // inferred from the reason carried by the hook:
-  //   reason === "transferred"  → "transferred"
-  //   reason present (anything else) → "failed"
-  //   reason absent → "completed"
-  // The reason itself is stored in externalMetadata for debugging;
-  // the action synthesizes the notes copy from disposition + reason.
-  const handleCallEnded = useCallback((details: { durationMs: number; reason?: string }) => {
-    const call = currentCallRef.current
-    if (!call) return
-    currentCallRef.current = null
-    const disposition =
-      details.reason === "transferred" ? "transferred" : details.reason ? "failed" : "completed"
-    void recordOutboundCall({
-      contactId: call.contactId,
-      phoneNumber: call.phoneNumber,
-      startedAt: call.startedAt,
-      durationSeconds: Math.round(details.durationMs / 1000),
-      disposition,
-      reason: details.reason ?? null,
-      externalId: null,
-    }).catch(() => {
-      // Best-effort. The call already happened; if the server
-      // action fails (network blip, validation rejection because
-      // the contact was deleted mid-call, etc.) we don't surface
-      // an error to the user — the dialer UX flow is independent
-      // of the activity-feed write. 3b webhook will backfill via
-      // the partial unique index when it lands.
-    })
-  }, [])
+  // derived by the pure `classifyDisposition` helper using the
+  // reducer's previousKind + the SIP-response reason from the
+  // SDK's failed event. The classifier handles the 3s heuristic
+  // for distinguishing cancelled from no_answer on SIP 487.
+  const handleCallEnded = useCallback(
+    (details: {
+      durationMs: number
+      reason?: string
+      previousKind: "starting" | "ringing" | "connected"
+    }) => {
+      const call = currentCallRef.current
+      if (!call) return
+      currentCallRef.current = null
+      const disposition = classifyDisposition({
+        previousKind: details.previousKind,
+        reason: details.reason,
+        durationMs: details.durationMs,
+      })
+      void recordOutboundCall({
+        contactId: call.contactId,
+        phoneNumber: call.phoneNumber,
+        startedAt: call.startedAt,
+        durationSeconds: Math.round(details.durationMs / 1000),
+        disposition,
+        reason: details.reason ?? null,
+        externalId: null,
+      }).catch(() => {
+        // Best-effort. The call already happened; if the server
+        // action fails (network blip, validation rejection because
+        // the contact was deleted mid-call, etc.) we don't surface
+        // an error to the user — the dialer UX flow is independent
+        // of the activity-feed write. 3b webhook will backfill via
+        // the partial unique index when it lands.
+      })
+    },
+    [],
+  )
 
   const webPhone = useWebPhone({
     sipInfo: bootstrap.sipInfo,

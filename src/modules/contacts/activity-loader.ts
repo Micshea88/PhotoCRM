@@ -72,6 +72,7 @@ export async function loadContactActivityWithDb(
         id: callLog.id,
         startedAt: callLog.startedAt,
         direction: callLog.direction,
+        disposition: callLog.disposition,
         durationSeconds: callLog.durationSeconds,
         notes: callLog.notes,
         actorName: user.name,
@@ -186,6 +187,7 @@ export async function loadContactActivityWithDb(
         title: `Call (${c.direction})${dur}`,
         body: c.notes,
         actor: actor(c.actorName, c.actorEmail),
+        callDisposition: c.disposition,
       })
     }
 

@@ -46,6 +46,7 @@ export const logCall = orgAction
       contactId: parsedInput.contactId,
       userId: ctx.session.user.id,
       direction: parsedInput.direction,
+      disposition: parsedInput.disposition ?? null,
       startedAt: new Date(parsedInput.startedAt),
       durationSeconds: parsedInput.durationSeconds ?? null,
       notes: parsedInput.notes ?? null,
@@ -99,6 +100,7 @@ export const updateCall = orgAction
     if (rest.durationSeconds !== undefined) patch.durationSeconds = rest.durationSeconds
     if (rest.notes !== undefined) patch.notes = rest.notes
     if (rest.recordingFileId !== undefined) patch.recordingFileId = rest.recordingFileId
+    if (rest.disposition !== undefined) patch.disposition = rest.disposition
 
     const result = await ctx.db
       .update(callLog)
@@ -195,12 +197,14 @@ export const recordOutboundCall = orgAction
       }
     }
 
-    const notes =
-      parsedInput.disposition === "transferred"
-        ? "Transferred to phone."
-        : parsedInput.disposition === "failed"
-          ? `Call did not connect: ${parsedInput.reason ?? "ended"}.`
-          : null
+    // Notes synthesis: only the transferred disposition carries a
+    // body line ("Transferred to phone." is meaningful info beyond
+    // what the badge conveys). All other dispositions get null notes
+    // — the activity-feed badge (Connected / No Answer / Busy /
+    // Failed / Cancelled) carries the signal; mechanically synthesized
+    // "Call did not connect: <SIP/2.0 486 Busy Here>" strings would
+    // duplicate the badge and leak SDK internals into the UI.
+    const notes = parsedInput.disposition === "transferred" ? "Transferred to phone." : null
 
     const id = createId()
     await ctx.db.insert(callLog).values({
@@ -209,12 +213,18 @@ export const recordOutboundCall = orgAction
       contactId: parsedInput.contactId ?? null,
       userId: ctx.session.user.id,
       direction: "outgoing",
+      disposition: parsedInput.disposition,
       startedAt: new Date(parsedInput.startedAt),
       durationSeconds: parsedInput.durationSeconds,
       notes,
       recordingFileId: null,
       source: "ringcentral",
       externalId: parsedInput.externalId ?? null,
+      // `external_metadata` retains phoneNumber + reason for
+      // debugging / 3b webhook reconciliation. `disposition` is also
+      // mirrored here so the 5 pre-2026-06-11 rows can be backfilled
+      // into the structured column via a one-time post-deploy SQL
+      // operation (documented in the commit message).
       externalMetadata: {
         phoneNumber: parsedInput.phoneNumber,
         disposition: parsedInput.disposition,

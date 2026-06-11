@@ -283,20 +283,49 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
         // Listener for outbound call sessions — attached BEFORE
         // start() so we never miss the outboundCall emission.
         phone.on("outboundCall", (session: CallSession) => {
+          // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; removed in follow-up commit
+          console.log("[TELEPHONY-DIAG]", "outboundCall-event", {
+            sessionId: session.callId,
+            stateBefore: stateRef.current.kind,
+            ts: Date.now(),
+          })
           sessionRef.current = session
           const sessionId = session.callId || `local-${Date.now().toString(36)}`
           session.on("ringing", () => {
+            // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+            console.log("[TELEPHONY-DIAG]", "ringing-event", {
+              stateBefore: stateRef.current.kind,
+              ts: Date.now(),
+            })
             dispatch({ type: "session_ringing", sessionId })
           })
           session.on("answered", () => {
+            // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+            console.log("[TELEPHONY-DIAG]", "answered-event", {
+              stateBefore: stateRef.current.kind,
+              ts: Date.now(),
+            })
             dispatch({ type: "session_answered" })
           })
           session.on("failed", (subject: unknown) => {
             const reason = typeof subject === "string" ? subject : "failed"
+            // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+            console.log("[TELEPHONY-DIAG]", "failed-event", {
+              subjectRaw: subject,
+              subjectTypeof: typeof subject,
+              reasonDispatched: reason,
+              stateBefore: stateRef.current.kind,
+              ts: Date.now(),
+            })
             dispatch({ type: "session_ended", reason })
             sessionRef.current = null
           })
           session.on("disposed", () => {
+            // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+            console.log("[TELEPHONY-DIAG]", "disposed-event", {
+              stateBefore: stateRef.current.kind,
+              ts: Date.now(),
+            })
             // If transfer's success path already fired session_ended
             // with reason="transferred", the reducer's guard makes
             // this dispatch a no-op (state.kind is already "ended").
@@ -409,6 +438,14 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
   // double-fire.
   useEffect(() => {
     if (state.kind !== "ended") return
+    // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; removed in follow-up commit
+    console.log("[TELEPHONY-DIAG]", "onCallEnded-effect-fire", {
+      stateNow: state.kind,
+      durationMs: state.durationMs,
+      reason: state.reason,
+      previousKind: state.previousKind,
+      ts: Date.now(),
+    })
     const cb = onCallEndedRef.current
     if (!cb) return
     cb({
@@ -425,11 +462,23 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     if (cur.kind !== "idle" && cur.kind !== "ended") return
     const phone = webPhoneRef.current
     if (!phone) return
+    // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+    console.log("[TELEPHONY-DIAG]", "startCall-dispatch-dial", {
+      phoneNumber: callArgs.phoneNumber,
+      stateBefore: cur.kind,
+      ts: Date.now(),
+    })
     dispatch({ type: "dial", toNumber: callArgs.phoneNumber, contactLabel: callArgs.contactLabel })
     // Fire-and-forget. Per the SDK README, `await phone.call(...)`
     // resolves AFTER answered/failed; the session events drive state.
     phone.call(callArgs.phoneNumber).catch((e: unknown) => {
       const reason = e instanceof Error ? e.message : String(e)
+      // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+      console.log("[TELEPHONY-DIAG]", "phone.call-catch", {
+        reason,
+        stateBefore: stateRef.current.kind,
+        ts: Date.now(),
+      })
       if (stateRef.current.kind === "starting" || stateRef.current.kind === "ringing") {
         dispatch({ type: "session_ended", reason })
       }
@@ -483,6 +532,11 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     void (async () => {
       try {
         await session.transfer(target)
+        // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+        console.log("[TELEPHONY-DIAG]", "transferToMobile-dispatch-transferred", {
+          stateBefore: stateRef.current.kind,
+          ts: Date.now(),
+        })
         // Transfer succeeded. Explicit dispatch BEFORE the disposed
         // event arrives — race-free per Clarification 2. If disposed
         // dispatches session_ended later, the reducer's same-kind

@@ -174,6 +174,13 @@ function DialerProviderInner({
       reason?: string
       previousKind: "starting" | "ringing" | "connected"
     }) => {
+      // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; removed in follow-up commit
+      console.log("[TELEPHONY-DIAG]", "handleCallEnded-input", {
+        durationMs: details.durationMs,
+        reason: details.reason,
+        previousKind: details.previousKind,
+        ts: Date.now(),
+      })
       const call = currentCallRef.current
       if (!call) return
       currentCallRef.current = null
@@ -181,6 +188,14 @@ function DialerProviderInner({
         previousKind: details.previousKind,
         reason: details.reason,
         durationMs: details.durationMs,
+      })
+      // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+      console.log("[TELEPHONY-DIAG]", "classifyDisposition-result", {
+        disposition,
+        previousKindIn: details.previousKind,
+        reasonIn: details.reason,
+        durationMsIn: details.durationMs,
+        ts: Date.now(),
       })
       void recordOutboundCall({
         contactId: call.contactId,

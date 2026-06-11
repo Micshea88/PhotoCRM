@@ -5,41 +5,50 @@ import type { RecordedCallDisposition } from "@/modules/calls/types"
  * signals the WebPhone SDK + reducer surface on session_ended.
  *
  * Inputs:
- *   - `previousKind` — reducer state at the transition moment
- *     (`"starting"` / `"ringing"` / `"connected"`). Determines
- *     whether the call ever reached answered state.
+ *   - `previousKind` — reducer state at the transition moment.
+ *     **Kept in the signature but NOT used on the no-reason path**
+ *     because the RC WebPhone SDK fires its `answered` event ~42ms
+ *     after `ringing` regardless of whether the remote actually
+ *     picked up (verified 2026-06-11 via [TELEPHONY-DIAG] logs;
+ *     likely a SIP 100 Trying or 183 Session Progress provisional
+ *     response, not the 200 OK final response). Every outbound
+ *     call lands in `previousKind="connected"` so the signal
+ *     carries no information. Retained in case the SDK behavior
+ *     changes in a future version or to enable opt-in re-use.
  *   - `reason` — raw SIP response line from the SDK's `failed`
  *     event payload (e.g., `"SIP/2.0 486 Busy Here"`), OR the
  *     literal `"transferred"` from the explicit transfer success
- *     path, OR `undefined` when only a `disposed` event fired.
- *   - `durationMs` — elapsed time from ring-start to ended. Used
- *     for the cancelled-vs-no_answer heuristic both on SIP 487
- *     AND on the no-reason fallback path. Rapid hangup (< 3s ring)
- *     classifies as `cancelled`; longer classifies as `no_answer`.
+ *     path, OR `undefined` when only a `disposed` event fired
+ *     (the actual production case — see verified-2026-06-11 audit
+ *     of `external_metadata.reason` showing empty on three test
+ *     calls with distinct end states).
+ *   - `durationMs` — elapsed time from ring-start to ended. **The
+ *     only signal that varies based on actual call outcome on the
+ *     no-reason path.**
  *
  * Decision order:
  *   1. Explicit `"transferred"` reason wins (set by our own code
  *     in the transfer success path).
- *   2. If `reason` carries a SIP response line, parse the code and
- *     map: 486→busy, 408/480→no_answer, 487→cancelled-or-no_answer
- *     via duration heuristic, other 4xx-5xx→failed.
- *   3. **No reason — fall back to state + duration heuristic.** The
- *     RC WebPhone SDK doesn't reliably surface `failed`-event
- *     subjects in production (verified 2026-06-11 via SQL: three
- *     test calls with distinct end states all had
- *     `external_metadata.reason` empty). The reason-present path
- *     above is preserved as a defensive optimization for SDK
- *     versions / call paths that DO fire `failed` correctly, but
- *     the no-reason fallback is the actual production path:
- *       - `connected` + no reason → `completed` (normal hangup
- *         after a real conversation)
- *       - `ringing` + duration < 3s → `cancelled` (rapid hangup
- *         mid-ring; user clicked dial then immediately hung up)
- *       - `ringing` + duration ≥ 3s → `no_answer` (rang for a
- *         while then user gave up OR remote went to voicemail-
- *         which-disconnected)
- *       - `starting` → `failed` (call never reached ringing —
- *         SDK init issue, invalid number, etc.)
+ *   2. If `reason` carries a SIP response line (rare in practice),
+ *     parse the code and map: 486→busy, 408/480→no_answer,
+ *     487→cancelled-or-no_answer via duration heuristic, other
+ *     4xx-5xx→failed.
+ *   3. **No reason — duration-only heuristic.** The production
+ *     path. Three brackets:
+ *       - `durationMs < 3s` → `cancelled` (rapid hangup, no real
+ *         attempt to reach the remote)
+ *       - `3s ≤ durationMs < 20s` → `no_answer` (long enough to
+ *         be a real ring attempt but too short to be a useful
+ *         conversation; also catches instant voicemail pickup)
+ *       - `durationMs ≥ 20s` → `completed` (long enough to
+ *         suggest a real conversation)
+ *
+ * Known false-positive corners (acceptable for V1 — tunable):
+ *   - Voicemail picked up at ~18s → classified as `no_answer`
+ *     (close enough; voicemail is closer to no_answer than to
+ *     completed in the CRM mental model).
+ *   - Real conversation < 20s ("Hi — wrong number") → classified
+ *     as `no_answer` (short calls are often unhelpful anyway).
  *
  * Voicemail is NEVER auto-classified — voicemail systems answer
  * SIP with 200 OK so the SDK can't distinguish them from a real
@@ -51,9 +60,17 @@ import type { RecordedCallDisposition } from "@/modules/calls/types"
  * `@/modules/calls/types`.
  */
 
-/** Ring time below this threshold classifies a SIP 487 as cancelled
- *  rather than no_answer. Tunable post-deploy based on UAT. */
+/** Below this duration, the call gets classified as `cancelled`
+ *  (rapid hangup, no real attempt). Used by BOTH the SIP-487
+ *  reason branch AND the no-reason duration-only fallback.
+ *  Tunable post-deploy based on UAT. */
 export const CANCELLED_RING_TIME_MS = 3000
+
+/** At-or-above this duration on the no-reason path, the call
+ *  classifies as `completed` (long enough to suggest a real
+ *  conversation). The `no_answer` band lives between
+ *  `CANCELLED_RING_TIME_MS` and this value. Tunable post-deploy. */
+export const COMPLETED_DURATION_MS = 20_000
 
 export interface ClassifyDispositionArgs {
   previousKind: "starting" | "ringing" | "connected"
@@ -79,15 +96,12 @@ export function classifyDisposition(args: ClassifyDispositionArgs): RecordedCall
     return "failed"
   }
 
-  // Reason absent — the actual production path. Fall back to
-  // state + duration heuristic to deliver the full taxonomy
-  // (Connected / Cancelled / No Answer / Failed) using only the
-  // signals we reliably have.
-  if (args.previousKind === "connected") return "completed"
-  if (args.previousKind === "ringing") {
-    return args.durationMs < CANCELLED_RING_TIME_MS ? "cancelled" : "no_answer"
-  }
-  return "failed"
+  // Reason absent — the actual production path. previousKind is
+  // intentionally unused here (see JSDoc; SDK's answered event is
+  // unreliable). Duration alone drives the classification.
+  if (args.durationMs < CANCELLED_RING_TIME_MS) return "cancelled"
+  if (args.durationMs < COMPLETED_DURATION_MS) return "no_answer"
+  return "completed"
 }
 
 /** Extract the numeric SIP response code from a raw SIP response

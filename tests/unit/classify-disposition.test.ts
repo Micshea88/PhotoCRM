@@ -1,21 +1,25 @@
 /**
- * Unit tests for `classifyDisposition` — the pure function that
- * derives a RecordedCallDisposition from the reducer's previousKind
- * + the SIP-response reason payload from the SDK's `failed` event.
+ * Unit tests for `classifyDisposition`.
  *
- * Anchors the locked taxonomy + 3s heuristic from the 2026-06-11
- * disposition push. Covers the decision tree in the JSDoc:
- *   1. Explicit "transferred" reason wins.
- *   2. SIP code 486 → busy; 408/480 → no_answer; 487 → cancelled or
- *      no_answer based on previousKind + duration; other 4xx-5xx → failed.
- *   3. No reason + previousKind=connected → completed.
- *   4. Defensive default: failed.
+ * **Major contract shift 2026-06-11 (afternoon):** the no-reason
+ * path is now duration-only — previousKind is ignored on that
+ * branch because the RC WebPhone SDK fires `answered` ~42ms after
+ * `ringing` regardless of whether the remote picked up. Verified
+ * via [TELEPHONY-DIAG] console logs. Three duration brackets:
+ *   - < 3s    → cancelled
+ *   - 3s-20s  → no_answer
+ *   - ≥ 20s   → completed
+ *
+ * The reason-present path is unchanged: SIP 486 → busy, 408/480 →
+ * no_answer, 487 with duration heuristic for cancelled vs no_answer,
+ * other 4xx-5xx → failed.
  */
 import { describe, it, expect } from "vitest"
 import {
   classifyDisposition,
   parseSipResponseCode,
   CANCELLED_RING_TIME_MS,
+  COMPLETED_DURATION_MS,
 } from "@/modules/telephony/classify-disposition"
 
 describe("classifyDisposition", () => {
@@ -146,8 +150,65 @@ describe("classifyDisposition", () => {
     })
   })
 
-  describe("no reason — state + duration heuristic (the actual production path)", () => {
-    it("previousKind=connected → completed (normal hangup after answered call)", () => {
+  describe("no reason — duration-only heuristic (the actual production path)", () => {
+    // The SDK's `answered` event is unreliable (fires ~42ms after
+    // ringing regardless of actual pickup), so every call lands as
+    // previousKind="connected". The tests below assert duration is
+    // what drives classification — previousKind values are still
+    // passed (signature requires them) but should NOT affect
+    // outcome on the no-reason path.
+
+    it("duration < 3s → cancelled (rapid hangup; previousKind irrelevant)", () => {
+      expect(
+        classifyDisposition({
+          previousKind: "connected", // SDK bug — would be "connected" in reality
+          reason: undefined,
+          durationMs: 2000,
+        }),
+      ).toBe("cancelled")
+    })
+
+    it("duration at the 3s boundary → no_answer", () => {
+      expect(
+        classifyDisposition({
+          previousKind: "connected",
+          reason: undefined,
+          durationMs: CANCELLED_RING_TIME_MS,
+        }),
+      ).toBe("no_answer")
+    })
+
+    it("duration in mid-band (10s) → no_answer", () => {
+      expect(
+        classifyDisposition({
+          previousKind: "connected",
+          reason: undefined,
+          durationMs: 10_000,
+        }),
+      ).toBe("no_answer")
+    })
+
+    it("duration just below the 20s boundary → no_answer (19.999s)", () => {
+      expect(
+        classifyDisposition({
+          previousKind: "connected",
+          reason: undefined,
+          durationMs: COMPLETED_DURATION_MS - 1,
+        }),
+      ).toBe("no_answer")
+    })
+
+    it("duration at the 20s boundary → completed", () => {
+      expect(
+        classifyDisposition({
+          previousKind: "connected",
+          reason: undefined,
+          durationMs: COMPLETED_DURATION_MS,
+        }),
+      ).toBe("completed")
+    })
+
+    it("duration well above 20s → completed (45s real conversation)", () => {
       expect(
         classifyDisposition({
           previousKind: "connected",
@@ -157,54 +218,39 @@ describe("classifyDisposition", () => {
       ).toBe("completed")
     })
 
-    it("previousKind=ringing + duration < 3s → cancelled (rapid hangup mid-ring)", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: 2000,
-        }),
-      ).toBe("cancelled")
+    it("previousKind does NOT influence outcome on the no-reason path", () => {
+      // Same duration, three different previousKind values → all
+      // classify identically. Proves the duration-only contract.
+      const durations = [2000, 10_000, 30_000]
+      const expectedByDuration = ["cancelled", "no_answer", "completed"] as const
+
+      for (let i = 0; i < durations.length; i++) {
+        for (const prev of ["starting", "ringing", "connected"] as const) {
+          expect(
+            classifyDisposition({
+              previousKind: prev,
+              reason: undefined,
+              durationMs: durations[i]!,
+            }),
+          ).toBe(expectedByDuration[i])
+        }
+      }
     })
 
-    it("previousKind=ringing + duration exactly 3s (boundary) → no_answer", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: CANCELLED_RING_TIME_MS,
-        }),
-      ).toBe("no_answer")
-    })
-
-    it("previousKind=ringing + duration ≥ 3s → no_answer (rang then gave up)", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: 10_000,
-        }),
-      ).toBe("no_answer")
-    })
-
-    it("previousKind=ringing + duration > 30s → no_answer (long ring with no pickup)", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: 35_000,
-        }),
-      ).toBe("no_answer")
-    })
-
-    it("previousKind=starting → failed (call never even reached ringing)", () => {
+    it("starting + 0ms → cancelled (under the V1 contract)", () => {
+      // The previous spec classified starting → failed, but with the
+      // duration-only heuristic this lands in the cancelled bracket.
+      // Acceptable per the explicit Mike-approved tradeoff: starting
+      // with no reason effectively never happens in practice (the
+      // phone.call().catch() path always provides a reason), so this
+      // case is theoretical.
       expect(
         classifyDisposition({
           previousKind: "starting",
           reason: undefined,
           durationMs: 0,
         }),
-      ).toBe("failed")
+      ).toBe("cancelled")
     })
   })
 })

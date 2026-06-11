@@ -280,6 +280,45 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     void (async () => {
       try {
         const phone = new WebPhone({ sipInfo: args.sipInfo as SipInfo })
+
+        // TELEPHONY-DIAG (temporary) — observe-only listener on the
+        // SDK's `inboundCall` event. The SDK auto-creates an
+        // InboundCallSession + auto-replies 100/180 for every
+        // inbound INVITE (see SDK source at
+        // node_modules/ringcentral-web-phone/dist/index.mjs:23-59);
+        // we don't currently register a handler, so those sessions
+        // sit in `phone.callSessions` with the SDK acknowledging
+        // 180 Ringing — surfacing as ringback audio + dialer-widget
+        // ring (the "laptop hijack" symptom).
+        //
+        // Hypothesis under test: RC sends an inbound INVITE during
+        // or shortly after a transfer flow, which is what Mike sees
+        // as "Pathway keeps ringing on my computer" post-transfer.
+        // This log captures the timing relative to other dispatches
+        // so we can disambiguate scenarios A/B/C.
+        //
+        // **DO NOT modify the session.** No accept/decline/answer/
+        // hangup — pure observation. The SDK's existing auto-reply
+        // behavior remains unchanged; we're just gaining visibility.
+        phone.on("inboundCall", (session: CallSession) => {
+          // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; removed in follow-up commit
+          console.log("[TELEPHONY-DIAG]", "inboundCall-event", {
+            sessionId: session.callId,
+            stateBefore: stateRef.current.kind,
+            remotePeer: session.remotePeer,
+            // SDK populates sipMessage on the InboundCallSession
+            // constructor (see SDK source); these headers identify
+            // who/why RC is calling Pathway.
+            sipSubject: session.sipMessage.subject,
+            sipFrom: session.sipMessage.headers.From,
+            sipTo: session.sipMessage.headers.To,
+            sipCallId: session.sipMessage.headers["Call-Id"],
+            sipAlertInfo: session.sipMessage.headers["Alert-Info"],
+            callSessionsCount: phone.callSessions.length,
+            ts: Date.now(),
+          })
+        })
+
         // Listener for outbound call sessions — attached BEFORE
         // start() so we never miss the outboundCall emission.
         phone.on("outboundCall", (session: CallSession) => {

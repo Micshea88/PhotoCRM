@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react"
 import { recordOutboundCall } from "@/modules/calls/actions"
-import { recordCallTransferred } from "@/modules/telephony/actions"
 import { classifyDisposition } from "@/modules/telephony/classify-disposition"
 import { useWebPhone, type DialerUiState } from "./use-web-phone"
 
@@ -33,14 +32,6 @@ export interface DialerBootstrapClient {
   accessTokenExpiresAt: string // ISO — Date doesn't structured-clone reliably across the boundary
   sipInfo: unknown
   externalUserId: string
-  userMobile?: string
-  /** Mirrors DialerBootstrap.userMobileNeedsReconnect — true when the
-   *  transfer-target probe got a 403 from RC (existing user's OAuth
-   *  grant lacks the ReadAccounts scope we added 2026-06-08). The
-   *  Transfer button's tooltip branches on this to prompt reconnect
-   *  instead of the generic "configure your business number" copy.
-   *  See memory:ringcentral-oauth-scopes. */
-  userMobileNeedsReconnect?: boolean
 }
 
 interface DialerPublicApi {
@@ -48,11 +39,6 @@ interface DialerPublicApi {
   state: DialerUiState
   isReady: boolean
   isAvailable: boolean // true iff bootstrap is non-null
-  canTransfer: boolean // true iff userMobile is set
-  /** true iff the transfer-target probe failed with 403. Drives the
-   *  TransferButton's tooltip toward "Reconnect RC…" instead of the
-   *  generic "Configure your business number…" copy. */
-  transferNeedsReconnect: boolean
   externalUserId: string
 
   // Audio element binding via callback ref (React 19 react-hooks/refs
@@ -73,7 +59,6 @@ interface DialerPublicApi {
   hangup: () => void
   toggleMute: () => void
   sendDtmf: (digit: string) => void
-  transferToMobile: () => void
 }
 
 const noop = () => {
@@ -85,8 +70,6 @@ const EMPTY_API: DialerPublicApi = {
   state: { kind: "idle" },
   isReady: false,
   isAvailable: false,
-  canTransfer: false,
-  transferNeedsReconnect: false,
   externalUserId: "",
   setAudioElement: noop,
   now: 0,
@@ -97,24 +80,12 @@ const EMPTY_API: DialerPublicApi = {
   hangup: noop,
   toggleMute: noop,
   sendDtmf: noop,
-  transferToMobile: noop,
 }
 
 const DialerContext = createContext<DialerPublicApi>(EMPTY_API)
 
 export function useDialer(): DialerPublicApi {
   return useContext(DialerContext)
-}
-
-/**
- * Mask a phone number to its last 4 digits for the audit payload.
- * `+15551234567` → `*******4567`. Removes all non-digit characters
- * before slicing so formatted-or-not input shapes are absorbed.
- */
-function maskLast4(mobile: string): string {
-  const digits = mobile.replace(/\D/g, "")
-  const last4 = digits.slice(-4)
-  return `*******${last4}`
 }
 
 export function DialerProvider({
@@ -140,16 +111,6 @@ function DialerProviderInner({
   bootstrap: DialerBootstrapClient
   children: ReactNode
 }) {
-  // Stable callback for audit recording. The hook captures this in a
-  // ref so a fresh-identity callback wouldn't cause SDK re-init.
-  const handleTransferred = useCallback((mobile: string) => {
-    void recordCallTransferred({ targetMaskedLast4: maskLast4(mobile) }).catch(() => {
-      // best-effort audit. Transfer already happened; failure to
-      // audit doesn't roll anything back. Server-side pino captures
-      // the action errror.
-    })
-  }, [])
-
   // Snapshot of the in-flight call's per-row data — stamped in
   // startCall, read in handleCallEnded, nulled after the auto-log
   // server action fires. Single-slot is sufficient because the
@@ -164,23 +125,14 @@ function DialerProviderInner({
   } | null>(null)
 
   // Auto-log the call_log row on session_ended. Disposition is
-  // derived by the pure `classifyDisposition` helper using the
-  // reducer's previousKind + the SIP-response reason from the
-  // SDK's failed event. The classifier handles the 3s heuristic
-  // for distinguishing cancelled from no_answer on SIP 487.
+  // derived by the pure `classifyDisposition` helper using
+  // duration + (defensively) any reason the SDK surfaces.
   const handleCallEnded = useCallback(
     (details: {
       durationMs: number
       reason?: string
       previousKind: "starting" | "ringing" | "connected"
     }) => {
-      // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; removed in follow-up commit
-      console.log("[TELEPHONY-DIAG]", "handleCallEnded-input", {
-        durationMs: details.durationMs,
-        reason: details.reason,
-        previousKind: details.previousKind,
-        ts: Date.now(),
-      })
       const call = currentCallRef.current
       if (!call) return
       currentCallRef.current = null
@@ -188,14 +140,6 @@ function DialerProviderInner({
         previousKind: details.previousKind,
         reason: details.reason,
         durationMs: details.durationMs,
-      })
-      // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
-      console.log("[TELEPHONY-DIAG]", "classifyDisposition-result", {
-        disposition,
-        previousKindIn: details.previousKind,
-        reasonIn: details.reason,
-        durationMsIn: details.durationMs,
-        ts: Date.now(),
       })
       void recordOutboundCall({
         contactId: call.contactId,
@@ -210,8 +154,7 @@ function DialerProviderInner({
         // action fails (network blip, validation rejection because
         // the contact was deleted mid-call, etc.) we don't surface
         // an error to the user — the dialer UX flow is independent
-        // of the activity-feed write. 3b webhook will backfill via
-        // the partial unique index when it lands.
+        // of the activity-feed write.
       })
     },
     [],
@@ -219,8 +162,6 @@ function DialerProviderInner({
 
   const webPhone = useWebPhone({
     sipInfo: bootstrap.sipInfo,
-    userMobile: bootstrap.userMobile,
-    onTransferred: handleTransferred,
     onCallEnded: handleCallEnded,
   })
 
@@ -266,8 +207,6 @@ function DialerProviderInner({
     state: webPhone.state,
     isReady: webPhone.isReady,
     isAvailable: true,
-    canTransfer: webPhone.canTransfer,
-    transferNeedsReconnect: bootstrap.userMobileNeedsReconnect === true,
     externalUserId: bootstrap.externalUserId,
     setAudioElement: webPhone.setAudioElement,
     now: webPhone.now,
@@ -278,7 +217,6 @@ function DialerProviderInner({
     hangup: webPhone.hangup,
     toggleMute: webPhone.toggleMute,
     sendDtmf: webPhone.sendDtmf,
-    transferToMobile: webPhone.transferToMobile,
   }
 
   return <DialerContext.Provider value={api}>{children}</DialerContext.Provider>

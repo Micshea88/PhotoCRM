@@ -1,17 +1,14 @@
 /**
  * Integration tests for `recordOutboundCall` — disposition column
- * write + notes synthesis contract.
+ * write + notes-always-null contract.
  *
  * Contract under test:
  *   - The disposition input value lands in `call_log.disposition`.
- *   - For disposition="transferred", notes = "Transferred to phone."
- *   - For all other dispositions (completed / no_answer / busy /
- *     failed / cancelled / voicemail / wrong_number), notes = null —
- *     the activity-feed badge carries the signal; no mechanically
- *     synthesized "Call did not connect: SIP/2.0 486 Busy Here" leak
- *     of SDK internals into the UI.
+ *   - Auto-logged rows always have `notes = null` — the activity-feed
+ *     badge carries the disposition signal on its own; no mechanically
+ *     synthesized strings leak into the UI.
  *   - phoneNumber + raw reason still land in external_metadata for
- *     debugging / 3b reconciliation.
+ *     debugging.
  *
  * These tests bypass the orgAction wrappers (which need cookies) and
  * exercise the contract by inserting rows the way the action does
@@ -53,9 +50,10 @@ async function insertOutboundCallRow(
   },
 ): Promise<string> {
   const id = createId()
-  // Mirrors the action's insert shape exactly, including the notes
-  // synthesis rule that only "transferred" produces a body line.
-  const notes = args.disposition === "transferred" ? "Transferred to phone." : null
+  // Mirrors the action's insert shape exactly. Auto-logged rows
+  // never carry a synthesized body line — the activity-feed badge
+  // carries the disposition signal on its own.
+  const notes = null
   await db.insert(callLog).values({
     id,
     organizationId: args.orgId,
@@ -101,28 +99,7 @@ describe("recordOutboundCall — disposition column + notes synthesis", () => {
     })
   })
 
-  it("transferred disposition synthesizes notes='Transferred to phone.'", async () => {
-    await withTestDb(async (db) => {
-      const userId = await createUser(db)
-      const orgId = await createOrganization(db, userId)
-      await setOrgContext(db, orgId, "owner", userId)
-      const contactId = await seedContact(db, orgId, userId)
-
-      const id = await insertOutboundCallRow(db, {
-        orgId,
-        userId,
-        contactId,
-        disposition: "transferred",
-        reason: "transferred",
-      })
-
-      const [row] = await db.select().from(callLog).where(eq(callLog.id, id))
-      expect(row?.disposition).toBe("transferred")
-      expect(row?.notes).toBe("Transferred to phone.")
-    })
-  })
-
-  it("non-transferred dispositions leave notes=null (badge carries the signal)", async () => {
+  it("all dispositions leave notes=null (badge carries the signal)", async () => {
     const cases: RecordedCallDisposition[] = [
       "completed",
       "no_answer",

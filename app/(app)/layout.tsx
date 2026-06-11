@@ -35,8 +35,6 @@ async function tryDialerBootstrap(
       accessTokenExpiresAt: b.accessTokenExpiresAt.toISOString(),
       sipInfo: b.sipInfo,
       externalUserId: b.externalUserId,
-      userMobile: b.userMobile,
-      userMobileNeedsReconnect: b.userMobileNeedsReconnect,
     }
   } catch {
     return null

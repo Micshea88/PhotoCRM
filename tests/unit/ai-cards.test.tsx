@@ -44,17 +44,15 @@ vi.mock("next/navigation", () => ({
 }))
 
 // Telephony 3a inline-dialer refactor — ContactActivityFeed and
-// ActionIconRow now read useDialer() from the dialer-context
-// provider. That module imports the WebPhone SDK + the
-// recordCallTransferred server action, neither of which loads
-// cleanly in jsdom (WebPhone hits WebRTC APIs; the action chains
-// into @/lib/db). Stub the context surface to a no-op API.
+// ActionIconRow read useDialer() from the dialer-context provider.
+// That module imports the WebPhone SDK + server actions, neither of
+// which loads cleanly in jsdom (WebPhone hits WebRTC APIs; actions
+// chain into @/lib/db). Stub the context surface to a no-op API.
 vi.mock("@/modules/telephony/ui/dialer-context", () => ({
   useDialer: () => ({
     state: { kind: "idle" },
     isReady: false,
     isAvailable: false,
-    canTransfer: false,
     externalUserId: "",
     setAudioElement: vi.fn(),
     now: 0,
@@ -65,7 +63,6 @@ vi.mock("@/modules/telephony/ui/dialer-context", () => ({
     hangup: vi.fn(),
     toggleMute: vi.fn(),
     sendDtmf: vi.fn(),
-    transferToMobile: vi.fn(),
   }),
   DialerProvider: ({ children }: { children: React.ReactNode }) => children,
 }))

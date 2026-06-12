@@ -181,13 +181,9 @@ describe("ContactActivityFeed", () => {
 
   it("renders all entries + the locked 7-tab sub-filter strip", () => {
     render(<ContactActivityFeed contactId="test-c" entries={entries} />)
-    // Title format: "<Kind> by <Actor>" for non-call kinds (Polish #5
-    // Fix 6 original contract). Calls are the exception — they preserve
-    // the loader's structured title ("Call (outgoing) · M:SS") so the
-    // direction + duration signal isn't lost. See the fix for the
-    // 2026-06-10 "Call by Mike" regression on dialer-logged calls.
+    // Polish #5 Fix 6 — title format is "{Type} by {Author}".
     expect(screen.getByText("Note by Alice")).toBeInTheDocument()
-    expect(screen.getByText("Call (outgoing)")).toBeInTheDocument()
+    expect(screen.getByText("Call by Bob")).toBeInTheDocument()
     // Polish #5 Fix 7b — sub-tab strip with 7 fixed tabs, counts inline.
     expect(screen.getByRole("tab", { name: /All activities \(2\)/ })).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: /Notes \(1\)/ })).toBeInTheDocument()
@@ -204,7 +200,7 @@ describe("ContactActivityFeed", () => {
     render(<ContactActivityFeed contactId="test-c" entries={entries} />)
     await user.click(screen.getByRole("tab", { name: /Calls \(1\)/ }))
     expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
-    expect(screen.getByText("Call (outgoing)")).toBeInTheDocument()
+    expect(screen.getByText("Call by Bob")).toBeInTheDocument()
   })
 
   it("empty state prompts the user to use Add Note / Log Call", () => {
@@ -247,7 +243,7 @@ describe("ContactActivityFeed", () => {
     )
     // Note hidden by the in-place type filter.
     expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
-    expect(screen.getByText("Call (outgoing)")).toBeInTheDocument()
+    expect(screen.getByText("Call by Bob")).toBeInTheDocument()
   })
 
   it("P-email-log — All-activities Type chip row includes Emails and filters in place", async () => {
@@ -285,7 +281,7 @@ describe("ContactActivityFeed", () => {
     )
     expect(screen.getByText("Pricing follow-up")).toBeInTheDocument()
     expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
-    expect(screen.queryByText("Call (outgoing)")).not.toBeInTheDocument()
+    expect(screen.queryByText("Call by Bob")).not.toBeInTheDocument()
   })
 
   it("P-email-log — logged email surfaces under the Emails sub-tab with the mockup header + subject + body", async () => {
@@ -318,7 +314,7 @@ describe("ContactActivityFeed", () => {
     expect(screen.getByText(/Loved chatting today/)).toBeInTheDocument()
     // Calls / notes are hidden on the Emails tab.
     expect(screen.queryByText("Note by Alice")).not.toBeInTheDocument()
-    expect(screen.queryByText("Call (outgoing)")).not.toBeInTheDocument()
+    expect(screen.queryByText("Call by Bob")).not.toBeInTheDocument()
   })
 
   it("P-email-log — Notes / Calls keep body-only rendering (no subject line leaked onto them)", () => {

@@ -10,10 +10,21 @@ import type { BetterAuthRole } from "@/modules/rbac/types"
 import { OrgInviteEmail } from "@/emails/org-invite"
 import { ResetPasswordEmail } from "@/emails/reset-password"
 import { VerifyEmail } from "@/emails/verify-email"
+import { resolveAuthOrigins } from "@/lib/auth-origins"
+
+// Preview-aware baseURL + trustedOrigins (see resolveAuthOrigins). VERCEL_ENV
+// /VERCEL_URL are Vercel-injected; absent locally and in production builds,
+// both of which therefore use the canonical BETTER_AUTH_URL unchanged.
+const { baseURL: authBaseURL, trustedOrigins: authTrustedOrigins } = resolveAuthOrigins({
+  betterAuthUrl: env.BETTER_AUTH_URL,
+  vercelEnv: process.env.VERCEL_ENV,
+  vercelUrl: process.env.VERCEL_URL,
+})
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
-  baseURL: env.BETTER_AUTH_URL,
+  baseURL: authBaseURL,
+  trustedOrigins: authTrustedOrigins,
   secret: env.BETTER_AUTH_SECRET,
   emailAndPassword: {
     enabled: true,

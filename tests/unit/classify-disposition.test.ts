@@ -146,7 +146,7 @@ describe("classifyDisposition", () => {
     })
   })
 
-  describe("no reason — state + duration heuristic (the actual production path)", () => {
+  describe("no reason (disposed-only path)", () => {
     it("previousKind=connected → completed (normal hangup after answered call)", () => {
       expect(
         classifyDisposition({
@@ -157,47 +157,17 @@ describe("classifyDisposition", () => {
       ).toBe("completed")
     })
 
-    it("previousKind=ringing + duration < 3s → cancelled (rapid hangup mid-ring)", () => {
+    it("previousKind=ringing → failed (defensive default)", () => {
       expect(
         classifyDisposition({
           previousKind: "ringing",
           reason: undefined,
           durationMs: 2000,
         }),
-      ).toBe("cancelled")
+      ).toBe("failed")
     })
 
-    it("previousKind=ringing + duration exactly 3s (boundary) → no_answer", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: CANCELLED_RING_TIME_MS,
-        }),
-      ).toBe("no_answer")
-    })
-
-    it("previousKind=ringing + duration ≥ 3s → no_answer (rang then gave up)", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: 10_000,
-        }),
-      ).toBe("no_answer")
-    })
-
-    it("previousKind=ringing + duration > 30s → no_answer (long ring with no pickup)", () => {
-      expect(
-        classifyDisposition({
-          previousKind: "ringing",
-          reason: undefined,
-          durationMs: 35_000,
-        }),
-      ).toBe("no_answer")
-    })
-
-    it("previousKind=starting → failed (call never even reached ringing)", () => {
+    it("previousKind=starting → failed (defensive default)", () => {
       expect(
         classifyDisposition({
           previousKind: "starting",

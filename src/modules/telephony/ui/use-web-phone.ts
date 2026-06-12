@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react"
 import WebPhone from "ringcentral-web-phone"
-import type InboundCallSession from "ringcentral-web-phone/call-session/inbound"
 import type { SipInfo } from "ringcentral-web-phone/types"
 
 /**
@@ -282,39 +281,34 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
       try {
         const phone = new WebPhone({ sipInfo: args.sipInfo as SipInfo })
 
-        // INTERIM (until 3b inbound-answer UI ships): when RC sends
-        // an inbound INVITE to Pathway — whether as a real inbound
-        // call or as a post-transfer side-effect — immediately
-        // decline it. The SDK's default behavior is to auto-reply
-        // 100 Trying + 180 Ringing without confirming receipt (see
-        // `node_modules/ringcentral-web-phone/dist/index.mjs:23-59`),
-        // which leaves the session half-handled and surfaces as the
-        // "laptop hijack" symptom: ringback audio + dialer-widget
-        // ringing with no answer UI.
+        // TELEPHONY-DIAG (temporary) — observe-only listener on the
+        // SDK's `inboundCall` event. The SDK auto-creates an
+        // InboundCallSession + auto-replies 100/180 for every
+        // inbound INVITE (see SDK source at
+        // node_modules/ringcentral-web-phone/dist/index.mjs:23-59);
+        // we don't currently register a handler, so those sessions
+        // sit in `phone.callSessions` with the SDK acknowledging
+        // 180 Ringing — surfacing as ringback audio + dialer-widget
+        // ring (the "laptop hijack" symptom).
         //
-        // Verified 2026-06-11 via [TELEPHONY-DIAG] capture: an
-        // inbound INVITE arrives during Mike's transfer flow,
-        // confusing RC's bridge → recipient is put on hold awaiting
-        // resolution → eventually dropped. The same hijack also
-        // surfaces on Mike's everyday inbound calls.
+        // Hypothesis under test: RC sends an inbound INVITE during
+        // or shortly after a transfer flow, which is what Mike sees
+        // as "Pathway keeps ringing on my computer" post-transfer.
+        // This log captures the timing relative to other dispatches
+        // so we can disambiguate scenarios A/B/C.
         //
-        // `session.decline()` sends a `Client Reject` to RC, which
-        // then routes the call per the user's RC routing rules
-        // (typically mobile app first, then voicemail). We stay out
-        // of the way; RC handles routing.
-        //
-        // The 3b push will REPLACE this handler with the actual
-        // inbound-answer UI. Until then this is the deliberate
-        // interim behavior.
-        phone.on("inboundCall", (session: InboundCallSession) => {
-          // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
+        // **DO NOT modify the session.** No accept/decline/answer/
+        // hangup — pure observation. The SDK's existing auto-reply
+        // behavior remains unchanged; we're just gaining visibility.
+        phone.on("inboundCall", (session: CallSession) => {
+          // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; removed in follow-up commit
           console.log("[TELEPHONY-DIAG]", "inboundCall-event", {
             sessionId: session.callId,
             stateBefore: stateRef.current.kind,
             remotePeer: session.remotePeer,
             // SDK populates sipMessage on the InboundCallSession
-            // constructor; these headers identify who/why RC is
-            // calling Pathway.
+            // constructor (see SDK source); these headers identify
+            // who/why RC is calling Pathway.
             sipSubject: session.sipMessage.subject,
             sipFrom: session.sipMessage.headers.From,
             sipTo: session.sipMessage.headers.To,
@@ -322,12 +316,6 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             sipAlertInfo: session.sipMessage.headers["Alert-Info"],
             callSessionsCount: phone.callSessions.length,
             ts: Date.now(),
-          })
-          void session.decline().catch(() => {
-            // Best-effort. If decline fails (network blip / SDK
-            // weirdness), RC will time the session out on its own
-            // side. The user might briefly see hijack symptoms;
-            // closing the tab recovers.
           })
         })
 
@@ -375,26 +363,12 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
             console.log("[TELEPHONY-DIAG]", "disposed-event", {
               stateBefore: stateRef.current.kind,
-              isTransferring: isTransferringRef.current,
               ts: Date.now(),
             })
-            // SDK ordering reality (verified 2026-06-11): `disposed`
-            // ALWAYS fires before `transferToMobile`'s `await
-            // session.transfer()` resolves. The WebPhone constructor's
-            // main `inboundMessage` handler is registered first; when
-            // RC's BYE arrives in response to our REFER, that handler
-            // splices the session and calls `dispose()` (firing
-            // "disposed" synchronously) BEFORE `_transfer`'s handler
-            // resolves the promise. So we tag the dispatch's reason
-            // HERE based on whether a transfer is in flight, rather
-            // than relying on `transferToMobile`'s later (absorbed)
-            // dispatch to set it.
-            if (isTransferringRef.current) {
-              dispatch({ type: "session_ended", reason: "transferred" })
-              isTransferringRef.current = false
-            } else {
-              dispatch({ type: "session_ended" })
-            }
+            // If transfer's success path already fired session_ended
+            // with reason="transferred", the reducer's guard makes
+            // this dispatch a no-op (state.kind is already "ended").
+            dispatch({ type: "session_ended" })
             sessionRef.current = null
           })
           // `mediaStreamSet` fires with the LOCAL microphone stream
@@ -527,11 +501,6 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     if (cur.kind !== "idle" && cur.kind !== "ended") return
     const phone = webPhoneRef.current
     if (!phone) return
-    // Defensive: clear any stale isTransferringRef value left over
-    // from a prior call where transfer hung without resolving (rare
-    // but possible). The flag is only meaningful for the current
-    // in-flight call's disposed-event-time reason tagging.
-    isTransferringRef.current = false
     // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary
     console.log("[TELEPHONY-DIAG]", "startCall-dispatch-dial", {
       phoneNumber: callArgs.phoneNumber,
@@ -607,15 +576,10 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
           stateBefore: stateRef.current.kind,
           ts: Date.now(),
         })
-        // SDK ordering reality: by the time this await resolves,
-        // RC's BYE has already arrived and the SDK has fired
-        // "disposed" — our disposed handler already dispatched
-        // session_ended with reason="transferred" (gated on
-        // isTransferringRef.current=true that we set before this
-        // async block ran). The dispatch below is now redundant but
-        // harmless: the reducer's same-kind guard (state.kind
-        // already "ended") absorbs it. Kept for defensive symmetry
-        // in case the SDK ever inverts the event ordering.
+        // Transfer succeeded. Explicit dispatch BEFORE the disposed
+        // event arrives — race-free per Clarification 2. If disposed
+        // dispatches session_ended later, the reducer's same-kind
+        // guard (`state.kind === "ended"` → no-op) absorbs it.
         dispatch({ type: "session_ended", reason: "transferred" })
         sessionRef.current = null
         const cb = onTransferredRef.current

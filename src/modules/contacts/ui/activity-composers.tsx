@@ -12,11 +12,7 @@ import { logCall } from "@/modules/calls/actions"
 import { logEmail } from "@/modules/email-log/actions"
 import { logMeeting } from "@/modules/meetings/actions"
 import { logSms } from "@/modules/sms-messages/actions"
-import {
-  dispositionDisplayLabel,
-  type CallDirection,
-  type RecordedCallDisposition,
-} from "@/modules/calls/types"
+import type { CallDirection } from "@/modules/calls/types"
 
 /**
  * P-activities — inline composers that ship in the new Activities
@@ -188,24 +184,7 @@ function ToolbarStub({ icon, label }: { icon: React.ReactNode; label: string }) 
 
 // ─── Call log composer ────────────────────────────────────────────────
 
-/**
- * User-selectable outcomes for the manual "Log a call" composer.
- * Aligned with the unified `RECORDED_CALL_DISPOSITIONS` taxonomy
- * shipped 2026-06-11. Internal value goes to `call_log.disposition`;
- * display label matches HubSpot's user-facing copy via
- * `dispositionDisplayLabel`.
- *
- * Manual users see these five values (the SDK-only `failed` /
- * `cancelled` / `transferred` aren't user-selectable because they
- * describe system signals, not user judgment).
- */
-const MANUAL_CALL_OUTCOMES: readonly RecordedCallDisposition[] = [
-  "completed",
-  "voicemail",
-  "no_answer",
-  "busy",
-  "wrong_number",
-]
+const CALL_OUTCOMES = ["Connected", "Left voicemail", "No answer", "Busy", "Wrong number"] as const
 
 // Backlog Item 1e — Mike's approved spec: direction = Outbound /
 // Inbound only. "Missed" was extra; dropped. A call you didn't pick
@@ -218,7 +197,7 @@ const CALL_DIRECTIONS: { value: CallDirection; label: string }[] = [
 export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
   const router = useRouter()
   const [startedAt, setStartedAt] = useState(nowIso())
-  const [outcome, setOutcome] = useState<RecordedCallDisposition | null>("completed")
+  const [outcome, setOutcome] = useState<string | null>("Connected")
   const [direction, setDirection] = useState<CallDirection | null>("outgoing")
   const [durationMin, setDurationMin] = useState("")
   const [notes, setNotes] = useState("")
@@ -243,20 +222,15 @@ export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBasePr
         setError(null)
         const parsedMin = parseInt(durationMin.trim() || "0", 10)
         const durationSeconds = Number.isFinite(parsedMin) && parsedMin > 0 ? parsedMin * 60 : null
-        // Notes is the user's free-text only. Outcome lives in
-        // its own `disposition` column (rendered as a badge in the
-        // activity feed). Pre-2026-06-11 manual entries that stored
-        // outcome inline as "Outcome: X\n<notes>" remain readable
-        // verbatim — the activity card just shows the whole string
-        // as body text and no badge (callDisposition is NULL for
-        // those rows).
+        const combinedNotes = notes.trim()
+          ? `Outcome: ${outcome}\n${notes.trim()}`
+          : `Outcome: ${outcome}`
         const result = await logCall({
           contactId,
           startedAt: new Date(startedAt).toISOString(),
           direction,
           durationSeconds,
-          notes: notes.trim() || null,
-          disposition: outcome,
+          notes: combinedNotes,
         })
         setSaving(false)
         if (result.serverError) {
@@ -297,13 +271,10 @@ export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBasePr
         </Field>
         <Field label="Outcome">
           <SearchableSelect
-            items={MANUAL_CALL_OUTCOMES.map((d) => ({
-              value: d,
-              label: dispositionDisplayLabel(d),
-            }))}
+            items={CALL_OUTCOMES.map((o) => ({ value: o, label: o }))}
             value={outcome}
             onChange={(v) => {
-              setOutcome(v as RecordedCallDisposition | null)
+              setOutcome(v)
             }}
             aria-label="Outcome"
             placeholder="Pick outcome"

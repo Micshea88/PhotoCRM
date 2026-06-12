@@ -1,1 +1,0 @@
-ALTER TABLE "call_log" ADD COLUMN "disposition" text;

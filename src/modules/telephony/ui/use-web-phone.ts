@@ -73,24 +73,6 @@ export type DialerUiState =
       contactLabel?: string
       durationMs: number
       reason?: string
-      /**
-       * Which state the reducer was in immediately before transitioning
-       * to "ended". Drives the disposition classifier downstream:
-       *   - "connected" → call did reach answered state; absent reason → completed
-       *   - "ringing"   → call never connected; reason (SIP code) classifies
-       *                   busy / no_answer / cancelled / failed
-       *   - "starting"  → call failed before ringing (catch path from
-       *                   phone.call()); reason classifies as failed
-       *
-       * Captured because the SDK's session lifecycle alone (the `failed`
-       * event payload) isn't always sufficient — a `disposed` event
-       * after a connected call fires with no reason and SHOULD classify
-       * as completed, whereas a `disposed` after a never-connected call
-       * (e.g., user hangs up mid-ring; SDK sends BYE; server returns
-       * 487 raced with our local disposed) should not. previousKind
-       * makes the call-reached-connected question deterministic.
-       */
-      previousKind: "starting" | "ringing" | "connected"
     }
   | { kind: "sdk_init_failed"; error: string }
   | { kind: "no_microphone"; error: string }
@@ -148,7 +130,6 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
           contactLabel: state.contactLabel,
           durationMs: Date.now() - state.startedAt,
           reason: action.reason,
-          previousKind: state.kind,
         }
       }
       if (state.kind === "starting") {
@@ -159,7 +140,6 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
           contactLabel: state.contactLabel,
           durationMs: 0,
           reason: action.reason,
-          previousKind: "starting",
         }
       }
       // Any other kind (already ended, idle, sdk failure, etc.) — no-op
@@ -190,24 +170,18 @@ export interface UseWebPhoneArgs {
    *  masked last-4 of the transfer target). */
   onTransferred?: (mobile: string) => void
   /** Called exactly once whenever a call reaches the "ended" state,
-   *  REGARDLESS of how (completed / failed / transferred / etc.).
-   *  The context wires this to the recordOutboundCall server action
-   *  so a `call_log` row is written for every dialer call.
-   *
-   *  `previousKind` is the reducer state at the moment of transition
-   *  (one of `"starting"` / `"ringing"` / `"connected"`). The
-   *  disposition classifier in `dialer-context.tsx` uses it together
-   *  with `reason` to derive a `RecordedCallDisposition`. See the
-   *  `ended`-state JSDoc above for the design rationale.
+   *  REGARDLESS of how (completed / failed / transferred). The
+   *  context wires this to the recordOutboundCall server action so a
+   *  `call_log` row is written for every dialer call. Fires from a
+   *  useEffect that watches the reducer's transition to "ended" —
+   *  the reducer's same-kind guard absorbs the redundant
+   *  `disposed`-event dispatch that follows a transfer's explicit
+   *  session_ended, so the effect fires exactly once per call.
    *
    *  `recordCallTransferred` (forensic audit) and `recordOutboundCall`
    *  (CRM activity feed) intentionally BOTH fire on transferred
    *  calls — they serve different audiences. */
-  onCallEnded?: (details: {
-    durationMs: number
-    reason?: string
-    previousKind: "starting" | "ringing" | "connected"
-  }) => void
+  onCallEnded?: (details: { durationMs: number; reason?: string }) => void
 }
 
 export interface UseWebPhoneResult {
@@ -411,11 +385,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     if (state.kind !== "ended") return
     const cb = onCallEndedRef.current
     if (!cb) return
-    cb({
-      durationMs: state.durationMs,
-      reason: state.reason,
-      previousKind: state.previousKind,
-    })
+    cb({ durationMs: state.durationMs, reason: state.reason })
   }, [state])
 
   // ─── Handlers ────────────────────────────────────────────────────

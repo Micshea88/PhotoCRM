@@ -48,16 +48,29 @@ export function ResetPasswordForm() {
     if (!token) return
     setSubmitting(true)
     setError(null)
-    const result = await authClient.resetPassword({
-      newPassword: values.password,
-      token,
-    })
-    setSubmitting(false)
-    if (result.error) {
-      setError(result.error.message ?? "Reset failed")
-      return
+    try {
+      const result = await authClient.resetPassword({
+        newPassword: values.password,
+        token,
+      })
+      if (result.error) {
+        // An invalid/expired/used token is the common, actionable case;
+        // anything 5xx is an infra failure. Either way the user needs a
+        // clear next step, not a dead spinner.
+        setError(
+          result.error.status >= 500
+            ? "Something went wrong, please try again."
+            : "This reset link is invalid or has expired. Request a new one.",
+        )
+        return
+      }
+      router.push("/sign-in")
+    } catch {
+      // Network error / client threw — never strand on "Resetting…".
+      setError("Something went wrong, please try again.")
+    } finally {
+      setSubmitting(false)
     }
-    router.push("/sign-in")
   }
 
   return (

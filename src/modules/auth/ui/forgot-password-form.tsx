@@ -16,6 +16,11 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>
 
+// Anti-enumeration: shown for both success and "no such account" so the
+// form never reveals whether an email is registered.
+const RESET_CONFIRMATION = "If an account with that email exists, we've sent a reset link."
+const GENERIC_ERROR = "Something went wrong, please try again."
+
 export function ForgotPasswordForm() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -30,24 +35,33 @@ export function ForgotPasswordForm() {
   async function onSubmit(values: Values) {
     setSubmitting(true)
     setError(null)
-    const result = await authClient.requestPasswordReset({
-      email: values.email,
-      redirectTo: "/reset-password",
-    })
-    setSubmitting(false)
-    if (result.error) {
-      setError(result.error.message ?? "Request failed")
-      return
+    try {
+      const result = await authClient.requestPasswordReset({
+        email: values.email,
+        redirectTo: "/reset-password",
+      })
+      // Surface ONLY real send/infrastructure failures (5xx). Anything
+      // else — success, or a non-existent email (Better Auth returns
+      // success for enumeration safety) — lands on the standard
+      // confirmation so we never reveal whether the account exists.
+      if (result.error && result.error.status >= 500) {
+        setError(GENERIC_ERROR)
+        return
+      }
+      setSubmitted(true)
+    } catch {
+      // Network error / client threw. Never leave the button stuck on
+      // "Sending…"; show a retryable error.
+      setError(GENERIC_ERROR)
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitted(true)
   }
 
   if (submitted) {
     return (
       <Alert>
-        <AlertDescription>
-          If an account exists for that email, we sent a reset link. Check your inbox.
-        </AlertDescription>
+        <AlertDescription>{RESET_CONFIRMATION}</AlertDescription>
       </Alert>
     )
   }

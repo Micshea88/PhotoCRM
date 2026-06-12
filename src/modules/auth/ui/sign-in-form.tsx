@@ -19,6 +19,11 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>
 
+// Anti-enumeration: the same message for any credential failure, so the
+// form never reveals whether an email is registered.
+const INVALID_CREDENTIALS = "Invalid email or password"
+const GENERIC_ERROR = "Something went wrong, please try again."
+
 export function SignInForm() {
   const router = useRouter()
   const params = useSearchParams()
@@ -44,31 +49,46 @@ export function SignInForm() {
   async function onSubmit(values: Values) {
     setSubmitting(true)
     setError(null)
-    const result = await authClient.signIn.email({
-      email: values.email,
-      password: values.password,
-    })
-    if (result.error) {
-      setSubmitting(false)
-      setError(result.error.message ?? "Sign-in failed")
-      return
-    }
-    // Restore an active organization from the user's memberships if none is set.
-    // Better Auth doesn't persist activeOrganizationId across sign-out/sign-in.
-    // V1 architecture (Push 2c.6.11 Commit C) enforces one-email-one-org at
-    // invite-creation time, so this list has at most one entry in practice.
-    const orgs = await authClient.organization.list()
-    const session = await authClient.getSession()
-    const hasActive = !!session.data?.session.activeOrganizationId
-    if (!hasActive && orgs.data && orgs.data.length > 0) {
-      const first = orgs.data[0]
-      if (first) {
-        await authClient.organization.setActive({ organizationId: first.id })
+    try {
+      const result = await authClient.signIn.email({
+        email: values.email,
+        password: values.password,
+      })
+      if (result.error) {
+        // Anti-enumeration: never reveal whether the email exists. A 5xx
+        // is an infrastructure failure, not a credential mismatch, so it
+        // gets the generic message instead.
+        setError(result.error.status >= 500 ? GENERIC_ERROR : INVALID_CREDENTIALS)
+        return
       }
+      // Restore an active organization from the user's memberships if none is
+      // set. Better Auth doesn't persist activeOrganizationId across
+      // sign-out/sign-in. V1 enforces one-email-one-org at invite time, so
+      // this list has at most one entry in practice. Best-effort: a transient
+      // failure here must NOT strand the user on a dead form — they're already
+      // signed in, and the active org resolves on the next page load.
+      try {
+        const orgs = await authClient.organization.list()
+        const session = await authClient.getSession()
+        const hasActive = !!session.data?.session.activeOrganizationId
+        if (!hasActive && orgs.data && orgs.data.length > 0) {
+          const first = orgs.data[0]
+          if (first) {
+            await authClient.organization.setActive({ organizationId: first.id })
+          }
+        }
+      } catch {
+        // Non-fatal — proceed to the redirect; org context resolves on load.
+      }
+      router.push(redirectTo)
+      router.refresh()
+    } catch {
+      // Network error, or the auth client threw instead of returning
+      // { error }. Never leave the button stuck on "Signing in…".
+      setError(GENERIC_ERROR)
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
-    router.push(redirectTo)
-    router.refresh()
   }
 
   return (

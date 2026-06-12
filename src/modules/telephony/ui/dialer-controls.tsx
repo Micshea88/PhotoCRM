@@ -157,7 +157,12 @@ function Keypad({ onDigit }: { onDigit: (digit: string) => void }) {
           onClick={() => {
             onDigit(digit)
           }}
-          className="rounded-md bg-[var(--color-secondary)] py-2 text-base font-medium text-[var(--color-secondary-foreground)] hover:bg-[var(--color-secondary)]/80"
+          // Pressed feedback via CSS :active (fires on mouse-down AND
+          // touch, so no JS state needed): the key highlights with the
+          // accent token while held and returns to normal on release.
+          // `touch-manipulation` keeps taps snappy + `select-none` stops
+          // text selection on rapid presses.
+          className="touch-manipulation rounded-md bg-[var(--color-secondary)] py-2 text-base font-medium text-[var(--color-secondary-foreground)] transition-colors select-none hover:bg-[var(--color-secondary)]/80 active:bg-[var(--color-accent)] active:text-[var(--color-accent-foreground)]"
         >
           {digit}
         </button>

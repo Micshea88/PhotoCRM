@@ -61,7 +61,7 @@ describe("SignInForm — error + loading contract", () => {
     h.signInEmail.mockRejectedValue(new Error("network down"))
     render(<SignInForm />)
     typeInto(/email/i, "user@example.com")
-    typeInto(/password/i, "secret")
+    typeInto("Password", "secret")
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
 
     expect(await screen.findByText("Something went wrong, please try again.")).toBeInTheDocument()
@@ -74,7 +74,7 @@ describe("SignInForm — error + loading contract", () => {
     h.signInEmail.mockResolvedValue({ error: { status: 401, message: "User not found" } })
     render(<SignInForm />)
     typeInto(/email/i, "user@example.com")
-    typeInto(/password/i, "secret")
+    typeInto("Password", "secret")
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
 
     expect(await screen.findByText("Invalid email or password")).toBeInTheDocument()
@@ -85,7 +85,7 @@ describe("SignInForm — error + loading contract", () => {
     h.signInEmail.mockResolvedValue({ error: { status: 500, message: "boom" } })
     render(<SignInForm />)
     typeInto(/email/i, "user@example.com")
-    typeInto(/password/i, "secret")
+    typeInto("Password", "secret")
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
 
     expect(await screen.findByText("Something went wrong, please try again.")).toBeInTheDocument()
@@ -97,7 +97,7 @@ describe("SignInForm — error + loading contract", () => {
     h.orgList.mockRejectedValue(new Error("transient"))
     render(<SignInForm />)
     typeInto(/email/i, "user@example.com")
-    typeInto(/password/i, "secret")
+    typeInto("Password", "secret")
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
 
     await waitFor(() => {

@@ -7,6 +7,7 @@ import { z } from "zod"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
@@ -122,18 +123,16 @@ export function AccountSettingsForm({
         <form onSubmit={pw.handleSubmit(onPasswordSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="currentPassword">Current password</Label>
-            <Input
+            <PasswordInput
               id="currentPassword"
-              type="password"
               autoComplete="current-password"
               {...pw.register("currentPassword")}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="newPassword">New password</Label>
-            <Input
+            <PasswordInput
               id="newPassword"
-              type="password"
               autoComplete="new-password"
               {...pw.register("newPassword")}
             />
@@ -143,9 +142,8 @@ export function AccountSettingsForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm new password</Label>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               autoComplete="new-password"
               {...pw.register("confirmPassword")}
             />

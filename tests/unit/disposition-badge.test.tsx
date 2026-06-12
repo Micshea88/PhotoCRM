@@ -50,6 +50,8 @@ vi.mock("@/modules/telephony/ui/dialer-context", () => ({
     state: { kind: "idle" },
     isReady: false,
     isAvailable: false,
+    canTransfer: false,
+    transferNeedsReconnect: false,
     externalUserId: "",
     setAudioElement: vi.fn(),
     now: 0,
@@ -60,6 +62,7 @@ vi.mock("@/modules/telephony/ui/dialer-context", () => ({
     hangup: vi.fn(),
     toggleMute: vi.fn(),
     sendDtmf: vi.fn(),
+    transferToMobile: vi.fn(),
   }),
   DialerProvider: ({ children }: { children: React.ReactNode }) => children,
 }))

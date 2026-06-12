@@ -23,6 +23,18 @@ import {
 } from "@/modules/telephony/classify-disposition"
 
 describe("classifyDisposition", () => {
+  describe("transferred (explicit reason)", () => {
+    it("returns transferred when reason === 'transferred', regardless of state", () => {
+      expect(
+        classifyDisposition({
+          previousKind: "connected",
+          reason: "transferred",
+          durationMs: 60_000,
+        }),
+      ).toBe("transferred")
+    })
+  })
+
   describe("SIP response code mapping", () => {
     it("486 Busy Here → busy", () => {
       expect(

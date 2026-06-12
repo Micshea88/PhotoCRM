@@ -79,6 +79,8 @@ export interface ClassifyDispositionArgs {
 }
 
 export function classifyDisposition(args: ClassifyDispositionArgs): RecordedCallDisposition {
+  if (args.reason === "transferred") return "transferred"
+
   if (args.reason) {
     const sipCode = parseSipResponseCode(args.reason)
     if (sipCode === 486) return "busy"

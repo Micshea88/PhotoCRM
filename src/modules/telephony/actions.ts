@@ -16,6 +16,45 @@ import { audit } from "@/modules/audit/audit"
 import { telephonyConnections } from "@/modules/telephony/schema"
 import { getValidAccessToken } from "@/modules/telephony/token-refresh"
 
+const recordCallTransferredInput = z.object({
+  /** "*******1234" format — 7 asterisks + last 4 digits of the
+   *  mobile number we transferred to. Mask happens client-side
+   *  (dialer-context.tsx::maskLast4) so the full number never
+   *  crosses the wire. */
+  targetMaskedLast4: z.string().regex(/^\*{7}\d{4}$/, "expected '*******' followed by 4 digits"),
+})
+
+/**
+ * Record a successful transfer-to-mobile in the audit log. Fired by
+ * the dialer context after `session.transfer()` resolves; client-side
+ * has already masked the target number to last-4 so the full PII
+ * never crosses the action boundary.
+ *
+ * No owner/admin gate — any authenticated org member with a live
+ * RingCentral connection may have transferred a call against their
+ * own grant. Same authorization stance as
+ * `refreshAccessTokenForDialer`.
+ *
+ * Best-effort: the transfer already happened. If this action fails
+ * (network blip, audit table issue), the call was still transferred;
+ * the client absorbs the error silently.
+ */
+export const recordCallTransferred = orgAction
+  .metadata({ actionName: "telephony.record_call_transferred" })
+  .inputSchema(recordCallTransferredInput)
+  .action(async ({ parsedInput, ctx }) => {
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+      },
+      "telephony.call_transferred",
+      { metadata: { targetMaskedLast4: parsedInput.targetMaskedLast4 } },
+    )
+    return { ok: true }
+  })
+
 /**
  * Telephony server actions — connect initiation + disconnect.
  *

@@ -12,7 +12,7 @@ import { DialerActions, DialerHeader, DialerStatusRow, formatDuration } from "./
  * Two visual states:
  *   - Collapsed pill: 220×40, shows current call status briefly
  *   - Expanded panel: 360×520, full dialer UI (header + status row +
- *     keypad/mute/hangup actions)
+ *     keypad/mute/transfer/hangup actions)
  *
  * The hidden `<audio autoPlay>` element is rendered at the TOP level
  * of the widget container — OUTSIDE the conditional that swaps
@@ -70,9 +70,12 @@ function ExpandedPanel() {
       <DialerStatusRow state={dialer.state} now={dialer.now} />
       <DialerActions
         state={dialer.state}
+        canTransfer={dialer.canTransfer}
+        transferNeedsReconnect={dialer.transferNeedsReconnect}
         onHangup={dialer.hangup}
         onMute={dialer.toggleMute}
         onKeypadDigit={dialer.sendDtmf}
+        onTransfer={dialer.transferToMobile}
       />
     </div>
   )
@@ -107,7 +110,7 @@ function collapsedLabel(state: ReturnType<typeof useDialer>["state"], now: numbe
     case "connected":
       return `In call · ${formatDuration(now - state.startedAt)}`
     case "ended":
-      return "Call ended"
+      return state.reason === "transferred" ? "Transferred to phone" : "Call ended"
     case "sdk_init_failed":
       return "Dialer error"
     case "no_microphone":

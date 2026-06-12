@@ -197,13 +197,14 @@ export const recordOutboundCall = orgAction
       }
     }
 
-    // Auto-logged rows never carry a synthesized body line — the
-    // activity-feed badge (Connected / No Answer / Busy / Failed /
-    // Cancelled) carries the disposition signal on its own.
-    // Mechanically synthesized strings would duplicate the badge
-    // and leak SDK internals into the UI. Manual logCall entries
-    // can still write user-entered notes via the composer.
-    const notes = null
+    // Notes synthesis: only the transferred disposition carries a
+    // body line ("Transferred to phone." is meaningful info beyond
+    // what the badge conveys). All other dispositions get null notes
+    // — the activity-feed badge (Connected / No Answer / Busy /
+    // Failed / Cancelled) carries the signal; mechanically synthesized
+    // "Call did not connect: <SIP/2.0 486 Busy Here>" strings would
+    // duplicate the badge and leak SDK internals into the UI.
+    const notes = parsedInput.disposition === "transferred" ? "Transferred to phone." : null
 
     const id = createId()
     await ctx.db.insert(callLog).values({

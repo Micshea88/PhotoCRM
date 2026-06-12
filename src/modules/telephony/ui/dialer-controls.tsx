@@ -1,6 +1,6 @@
 "use client"
 
-import { Mic, MicOff, PhoneOff } from "lucide-react"
+import { Mic, MicOff, PhoneOff, PhoneForwarded } from "lucide-react"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import { assertNever, type DialerUiState } from "./use-web-phone"
 
@@ -12,6 +12,11 @@ import { assertNever, type DialerUiState } from "./use-web-phone"
  * No state ownership here — every component is purely a function of
  * its props. State lives in `use-web-phone.ts` (the SDK lifecycle
  * hook) and `dialer-context.tsx` (the widget collapse/expand state).
+ *
+ * The TransferButton is new for D9 (transfer-to-mobile). The
+ * DialerStatusRow's `ended` branch was extended to render
+ * "Transferred to phone" when the reason is "transferred"; otherwise
+ * unchanged from the popup version.
  */
 
 const KEYPAD_ROWS: readonly (readonly string[])[] = [
@@ -80,6 +85,13 @@ export function DialerStatusRow({ state, now }: { state: DialerUiState; now: num
         <p className="text-center font-mono text-base">{formatDuration(now - state.startedAt)}</p>
       )
     case "ended":
+      if (state.reason === "transferred") {
+        return (
+          <p className="text-center text-sm text-[var(--color-muted-foreground)]">
+            Transferred to phone · {formatDuration(state.durationMs)}
+          </p>
+        )
+      }
       return (
         <p className="text-center text-sm text-[var(--color-muted-foreground)]">
           Call ended · {formatDuration(state.durationMs)}
@@ -108,14 +120,20 @@ export function DialerStatusRow({ state, now }: { state: DialerUiState; now: num
 
 export function DialerActions({
   state,
+  canTransfer,
+  transferNeedsReconnect,
   onHangup,
   onMute,
   onKeypadDigit,
+  onTransfer,
 }: {
   state: DialerUiState
+  canTransfer: boolean
+  transferNeedsReconnect: boolean
   onHangup: () => void
   onMute: () => void
   onKeypadDigit: (digit: string) => void
+  onTransfer: () => void
 }) {
   if (state.kind === "ringing") {
     return (
@@ -130,6 +148,11 @@ export function DialerActions({
         <Keypad onDigit={onKeypadDigit} />
         <div className="flex items-center gap-2">
           <MuteButton muted={state.muted} onClick={onMute} />
+          <TransferButton
+            enabled={canTransfer}
+            needsReconnect={transferNeedsReconnect}
+            onClick={onTransfer}
+          />
           <HangupButton onClick={onHangup} />
         </div>
       </div>
@@ -177,6 +200,47 @@ function MuteButton({ muted, onClick }: { muted: boolean; onClick: () => void })
       ) : (
         <Mic className="size-4" aria-hidden="true" />
       )}
+    </button>
+  )
+}
+
+/**
+ * Transfer-to-phone button. Disabled when the bootstrap couldn't
+ * discover a transfer target (the user's RC DirectNumber). Tooltip
+ * branches on `needsReconnect`:
+ *   - `needsReconnect=true` → "Reconnect RingCentral…" (a 403 from
+ *     /extension/~/phone-number means the user's OAuth grant lacks
+ *     ReadAccounts; reconnecting re-grants with the new scope).
+ *   - `needsReconnect=false` → "Configure your RC business number…"
+ *     (everything else — RC errors, no DirectNumber assigned, etc.).
+ * Click calls `session.transfer(target)` via the hook's
+ * transferToMobile (the field is named `userMobile` for historical
+ * reasons; the actual value is the user's RC DirectNumber).
+ */
+function TransferButton({
+  enabled,
+  needsReconnect,
+  onClick,
+}: {
+  enabled: boolean
+  needsReconnect: boolean
+  onClick: () => void
+}) {
+  const title = enabled
+    ? "Transfer to phone"
+    : needsReconnect
+      ? "Reconnect RingCentral in Settings → Integrations to enable transfer."
+      : "Configure your RingCentral business number to enable transfer."
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!enabled}
+      aria-label="Transfer call to phone"
+      title={title}
+      className="flex size-10 items-center justify-center rounded-full bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-secondary)]/80 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <PhoneForwarded className="size-4" aria-hidden="true" />
     </button>
   )
 }

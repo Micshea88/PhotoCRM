@@ -22,20 +22,28 @@ export function resolveAuthOrigins(input: {
   betterAuthUrl: string
   vercelEnv: string | undefined
   vercelUrl: string | undefined
+  vercelBranchUrl: string | undefined
 }): { baseURL: string; trustedOrigins: string[] } {
-  const previewUrl =
-    input.vercelEnv === "preview" && input.vercelUrl ? `https://${input.vercelUrl}` : null
-  if (previewUrl) {
-    // PREVIEW ONLY. Vercel exposes a deploy under several .vercel.app
-    // domains (the deployment URL in VERCEL_URL, the branch alias, etc.) and
-    // the tester may load any of them; the exact VERCEL_URL alone can miss.
-    // Trust this exact origin AND a `*.vercel.app` wildcard. This is
-    // preview-scoped — production (below) never gets the wildcard, so its
-    // trust set is not broadened.
-    return {
-      baseURL: previewUrl,
-      trustedOrigins: [input.betterAuthUrl, previewUrl, "https://*.vercel.app"],
-    }
+  if (input.vercelEnv !== "preview") {
+    return { baseURL: input.betterAuthUrl, trustedOrigins: [input.betterAuthUrl] }
   }
-  return { baseURL: input.betterAuthUrl, trustedOrigins: [input.betterAuthUrl] }
+  // PREVIEW ONLY. Vercel exposes a deploy under more than one .vercel.app
+  // domain (the deployment URL in VERCEL_URL and the branch alias in
+  // VERCEL_BRANCH_URL) and the tester may load either. Trust BOTH EXACT
+  // origins — never a `*.vercel.app` wildcard, which would trust the whole
+  // shared Vercel tenant (any attacker's *.vercel.app app) and is a CSRF /
+  // origin-bypass surface.
+  const previewUrl = input.vercelUrl ? `https://${input.vercelUrl}` : null
+  const branchUrl = input.vercelBranchUrl ? `https://${input.vercelBranchUrl}` : null
+  const exactOrigins = [previewUrl, branchUrl].filter((o): o is string => o !== null)
+  if (exactOrigins.length === 0) {
+    // Preview but Vercel exposed no domain — fall back to canonical config.
+    return { baseURL: input.betterAuthUrl, trustedOrigins: [input.betterAuthUrl] }
+  }
+  return {
+    // Prefer the stable branch alias for absolute links (email reset/verify);
+    // fall back to the exact deployment URL.
+    baseURL: branchUrl ?? previewUrl ?? input.betterAuthUrl,
+    trustedOrigins: [input.betterAuthUrl, ...exactOrigins],
+  }
 }

@@ -19,6 +19,7 @@ const { baseURL: authBaseURL, trustedOrigins: authTrustedOrigins } = resolveAuth
   betterAuthUrl: env.BETTER_AUTH_URL,
   vercelEnv: process.env.VERCEL_ENV,
   vercelUrl: process.env.VERCEL_URL,
+  vercelBranchUrl: process.env.VERCEL_BRANCH_URL,
 })
 
 export const auth = betterAuth({

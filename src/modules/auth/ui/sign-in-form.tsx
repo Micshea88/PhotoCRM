@@ -9,6 +9,7 @@ import { z } from "zod"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -112,12 +113,7 @@ export function SignInForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
-        <Input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          {...register("password")}
-        />
+        <PasswordInput id="password" autoComplete="current-password" {...register("password")} />
         {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
       </div>
       {error && (

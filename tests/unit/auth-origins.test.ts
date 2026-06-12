@@ -31,16 +31,28 @@ describe("resolveAuthOrigins", () => {
     ).toEqual({ baseURL: PROD, trustedOrigins: [PROD] })
   })
 
-  it("preview: derives baseURL + adds the EXACT deploy origin (keeps prod trusted)", () => {
+  it("preview: derives baseURL, keeps prod trusted, adds exact origin + vercel.app wildcard", () => {
     const out = resolveAuthOrigins({
       betterAuthUrl: PROD,
       vercelEnv: "preview",
       vercelUrl: "photocrm-git-feat-abc-mike.vercel.app",
     })
     expect(out.baseURL).toBe("https://photocrm-git-feat-abc-mike.vercel.app")
-    expect(out.trustedOrigins).toEqual([PROD, "https://photocrm-git-feat-abc-mike.vercel.app"])
-    // Never a wildcard.
-    expect(out.trustedOrigins).not.toContain("https://*.vercel.app")
+    expect(out.trustedOrigins).toEqual([
+      PROD,
+      "https://photocrm-git-feat-abc-mike.vercel.app",
+      "https://*.vercel.app",
+    ])
+  })
+
+  it("PRODUCTION never gets the vercel.app wildcard (trust set not broadened)", () => {
+    const prod = resolveAuthOrigins({
+      betterAuthUrl: PROD,
+      vercelEnv: "production",
+      vercelUrl: "photocrm-abc.vercel.app",
+    })
+    expect(prod.trustedOrigins).not.toContain("https://*.vercel.app")
+    expect(prod.trustedOrigins).toEqual([PROD])
   })
 
   it("preview env but no VERCEL_URL: falls back to production config (no half-config)", () => {

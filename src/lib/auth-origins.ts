@@ -26,7 +26,16 @@ export function resolveAuthOrigins(input: {
   const previewUrl =
     input.vercelEnv === "preview" && input.vercelUrl ? `https://${input.vercelUrl}` : null
   if (previewUrl) {
-    return { baseURL: previewUrl, trustedOrigins: [input.betterAuthUrl, previewUrl] }
+    // PREVIEW ONLY. Vercel exposes a deploy under several .vercel.app
+    // domains (the deployment URL in VERCEL_URL, the branch alias, etc.) and
+    // the tester may load any of them; the exact VERCEL_URL alone can miss.
+    // Trust this exact origin AND a `*.vercel.app` wildcard. This is
+    // preview-scoped — production (below) never gets the wildcard, so its
+    // trust set is not broadened.
+    return {
+      baseURL: previewUrl,
+      trustedOrigins: [input.betterAuthUrl, previewUrl, "https://*.vercel.app"],
+    }
   }
   return { baseURL: input.betterAuthUrl, trustedOrigins: [input.betterAuthUrl] }
 }

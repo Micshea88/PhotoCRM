@@ -13,6 +13,8 @@ import {
 } from "@/modules/telephony/ringcentral-oauth"
 import { and, eq, isNull } from "drizzle-orm"
 import { audit } from "@/modules/audit/audit"
+import { parsePhoneInput } from "@/lib/format/phone"
+import { findContactByPhoneImpl } from "@/modules/telephony/queries"
 import { telephonyConnections } from "@/modules/telephony/schema"
 import { getValidAccessToken } from "@/modules/telephony/token-refresh"
 
@@ -109,6 +111,40 @@ export const beginRingCentralConnect = orgAction
     })
 
     return { authorizeUrl }
+  })
+
+const lookupContactByPhoneInput = z.object({
+  phoneNumber: z.string().min(1).max(64),
+})
+
+/**
+ * Caller-ID → contact match for the inbound answer UI (3b).
+ *
+ * Normalizes the inbound number via `parsePhoneInput` (strip
+ * non-digits, drop a leading 1, require exactly 10 digits) and
+ * matches it against contacts' `primary_phone` / `secondary_phone`.
+ * Both stored columns are digit-normalized in SQL and compared on
+ * their last 10 digits, so legacy rows that carry formatting or a
+ * leading 1 still match. Returns the first match (the dialer only
+ * needs one name for the banner).
+ *
+ * Read-only — no `audit()` / `revalidatePath`. orgAction is the
+ * right wrapper because it gives org scoping + RLS context for the
+ * contacts read without re-implementing the membership check. The
+ * `(org_id, deleted_at)` predicate keeps it tenant-safe and skips
+ * soft-deleted contacts.
+ *
+ * No owner/admin gate: any member with a live RC connection can
+ * receive a call and needs the caller's identity.
+ */
+export const lookupContactByPhone = orgAction
+  .metadata({ actionName: "telephony.lookup_contact_by_phone" })
+  .inputSchema(lookupContactByPhoneInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const ten = parsePhoneInput(parsedInput.phoneNumber)
+    if (!ten) return { contact: null }
+    const contact = await findContactByPhoneImpl(ctx.db, ctx.activeOrg.id, ten)
+    return { contact }
   })
 
 const disconnectTelephonyInput = z.object({

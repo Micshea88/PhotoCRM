@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react"
 import WebPhone from "ringcentral-web-phone"
 import type { SipInfo } from "ringcentral-web-phone/types"
+import type InboundCallSession from "ringcentral-web-phone/call-session/inbound"
+import type InboundMessage from "ringcentral-web-phone/sip-message/inbound"
+import { isAnsweredElsewhere } from "@/modules/telephony/inbound-cancel-reason"
 
 /**
  * SDK lifecycle hook for the inline dialer.
@@ -14,20 +17,27 @@ import type { SipInfo } from "ringcentral-web-phone/types"
  *    README — `await webPhone.call(...)` resolves AFTER the call is
  *    answered or has failed, too late to attach session listeners on
  *    the returned session)
+ *  - inboundCall listener (3b — attached alongside outboundCall, also
+ *    before start()). Shows an inbound_ringing state with Answer /
+ *    Decline. No call-waiting in V1: an inbound that arrives while a
+ *    call is active is declined immediately.
  *  - session-event listeners (ringing / answered / failed / disposed /
- *    mediaStreamSet)
+ *    mediaStreamSet) for BOTH directions
  *  - reducer + state machine
  *  - duration tick for the connected-state counter
  *  - ended → idle auto-transition (1.5s)
- *  - Public handlers: startCall, hangup, toggleMute, sendDtmf
+ *  - Public handlers: startCall, hangup, toggleMute, sendDtmf,
+ *    answerInbound, declineInbound, setInboundContact
  *
  * Does NOT own:
  *  - Widget collapse/expand state (that lives in dialer-context.tsx)
- *  - Audit recording (the context calls recordOutboundCall via the
- *    onCallEnded callback)
+ *  - Audit recording (the context calls recordOutboundCall /
+ *    recordInboundCall via the onCallEnded / onInbound* callbacks)
+ *  - Caller-ID → contact lookup (the context calls the
+ *    lookupContactByPhone server action from onInboundRinging and
+ *    pushes the result back via setInboundContact)
  *  - The audio element itself (the docked widget renders it, but this
  *    hook owns the ref the SDK writes srcObject to)
- *  - Inbound call handling (scoped to 3b — see comment in SDK init)
  *
  * SDK constraint reminder (memory:web-phone-no-runtime-token-api):
  * the SIP session authenticates via SipInfo's embedded digest
@@ -48,12 +58,28 @@ export type DialerUiState =
       startedAt: number
     }
   | {
+      // Inbound call ringing — awaiting the user's Answer / Decline.
+      // `toNumber` is intentionally absent: the other party here is the
+      // CALLER (`fromNumber`). `contactId` / `contactName` are filled
+      // asynchronously by the caller-ID lookup (inbound_contact_resolved).
+      kind: "inbound_ringing"
+      sessionId: string
+      fromNumber: string
+      contactId?: string
+      contactName?: string
+      startedAt: number
+    }
+  | {
       kind: "connected"
       sessionId: string
+      // The OTHER party's number — callee for outgoing, caller for
+      // incoming. Named `toNumber` for continuity with the outbound
+      // path + the shared dialer-controls render code.
       toNumber: string
       contactLabel?: string
       startedAt: number
       muted: boolean
+      direction: "incoming" | "outgoing"
     }
   | {
       kind: "ended"
@@ -62,6 +88,7 @@ export type DialerUiState =
       contactLabel?: string
       durationMs: number
       reason?: string
+      direction: "incoming" | "outgoing"
       /**
        * Reducer state immediately before transitioning to "ended".
        * Threaded through to the disposition classifier; currently
@@ -83,14 +110,25 @@ type Action =
   | { type: "session_ended"; reason?: string }
   | { type: "toggle_mute" }
   | { type: "auto_reset_to_idle" }
+  // Inbound (3b)
+  | { type: "inbound_ringing"; sessionId: string; fromNumber: string }
+  | { type: "inbound_contact_resolved"; contactId?: string; contactName?: string }
+  | { type: "inbound_answered" }
+  // Declined by the user OR abandoned by the caller before answer —
+  // both return the machine to idle.
+  | { type: "inbound_dismissed" }
 
 export function assertNever(_x: never): never {
   throw new Error("use-web-phone: unhandled action")
 }
 
-const INITIAL_STATE: DialerUiState = { kind: "idle" }
+export const INITIAL_STATE: DialerUiState = { kind: "idle" }
 
-function reducer(state: DialerUiState, action: Action): DialerUiState {
+/**
+ * Exported for unit testing (tests/unit/use-web-phone-reducer.test.ts).
+ * Pure function of (state, action); all side effects live in the hook.
+ */
+export function reducer(state: DialerUiState, action: Action): DialerUiState {
   switch (action.type) {
     case "sdk_init_failed":
       return { kind: "sdk_init_failed", error: action.error }
@@ -117,6 +155,7 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
         contactLabel: state.contactLabel,
         startedAt: state.startedAt,
         muted: false,
+        direction: "outgoing",
       }
     case "session_ended":
       if (state.kind === "ringing" || state.kind === "connected") {
@@ -127,6 +166,7 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
           contactLabel: state.contactLabel,
           durationMs: Date.now() - state.startedAt,
           reason: action.reason,
+          direction: state.kind === "connected" ? state.direction : "outgoing",
           previousKind: state.kind,
         }
       }
@@ -138,6 +178,7 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
           contactLabel: state.contactLabel,
           durationMs: 0,
           reason: action.reason,
+          direction: "outgoing",
           previousKind: "starting",
         }
       }
@@ -152,6 +193,36 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
     case "auto_reset_to_idle":
       if (state.kind !== "ended") return state
       return { kind: "idle" }
+    case "inbound_ringing":
+      // Only from a quiescent machine. The hook ALSO guards (declines
+      // the SDK session when busy) so this is defense-in-depth.
+      if (state.kind !== "idle" && state.kind !== "ended") return state
+      return {
+        kind: "inbound_ringing",
+        sessionId: action.sessionId,
+        fromNumber: action.fromNumber,
+        startedAt: Date.now(),
+      }
+    case "inbound_contact_resolved":
+      if (state.kind !== "inbound_ringing") return state
+      return { ...state, contactId: action.contactId, contactName: action.contactName }
+    case "inbound_answered":
+      if (state.kind !== "inbound_ringing") return state
+      return {
+        kind: "connected",
+        sessionId: state.sessionId,
+        toNumber: state.fromNumber,
+        contactLabel: state.contactName,
+        // Talk-time clock starts at answer (NOT ring-start) so the
+        // logged duration + classifier see conversation length, not
+        // how long the caller waited.
+        startedAt: Date.now(),
+        muted: false,
+        direction: "incoming",
+      }
+    case "inbound_dismissed":
+      if (state.kind !== "inbound_ringing") return state
+      return { kind: "idle" }
     default:
       assertNever(action)
   }
@@ -160,6 +231,18 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
 function noop(): void {
   // intentionally empty — swallows `.catch()` rejections from
   // best-effort cleanup paths (session.hangup / webPhone.dispose).
+}
+
+/** Read an inbound session's caller number defensively. The SDK's
+ *  `remoteNumber` getter runs `extractNumber(remotePeer)` which can
+ *  throw on an unexpected From-header shape; fall back to "" so the
+ *  ring UI still appears (formatPhoneDisplay renders "" gracefully). */
+function safeRemoteNumber(session: CallSession): string {
+  try {
+    return session.remoteNumber || ""
+  } catch {
+    return ""
+  }
 }
 
 export interface UseWebPhoneArgs {
@@ -178,6 +261,19 @@ export interface UseWebPhoneArgs {
     reason?: string
     previousKind: "starting" | "ringing" | "connected"
   }) => void
+  /** Fired when an inbound call starts ringing. The context expands
+   *  the widget and kicks off the caller-ID → contact lookup, pushing
+   *  the result back via `setInboundContact`. */
+  onInboundRinging?: (fromNumber: string) => void
+  /** Fired the moment an inbound call is answered (SDK `answered`
+   *  event). The context stamps its current-call ref with
+   *  direction="incoming" so the shared `onCallEnded` path logs the
+   *  row via `recordInboundCall`. */
+  onInboundAnswered?: (info: { fromNumber: string; contactId?: string }) => void
+  /** Fired when an inbound call ends WITHOUT being answered — the user
+   *  declined or the caller hung up first. Per Option A the context
+   *  logs a `no_answer` row only when `contactId` is set. */
+  onInboundUnanswered?: (info: { fromNumber: string; contactId?: string }) => void
 }
 
 export interface UseWebPhoneResult {
@@ -198,6 +294,15 @@ export interface UseWebPhoneResult {
   hangup: () => void
   toggleMute: () => void
   sendDtmf: (digit: string) => void
+  /** Answer the currently-ringing inbound call. */
+  answerInbound: () => void
+  /** Decline the currently-ringing inbound call (RC routes per the
+   *  user's rules — mobile app, voicemail, etc.). */
+  declineInbound: () => void
+  /** Push the caller-ID → contact lookup result into the
+   *  inbound_ringing state (called by the context after the async
+   *  lookup resolves). Null is a no-op (unknown caller). */
+  setInboundContact: (contact: { contactId: string; name: string } | null) => void
 }
 
 export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
@@ -210,12 +315,46 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
   const [sdkReady, setSdkReady] = useState(false)
   const webPhoneRef = useRef<WebPhone | null>(null)
   const sessionRef = useRef<CallSession | null>(null)
+  // Inbound sessions only — typed as InboundCallSession so answer() /
+  // decline() (absent on the base CallSession) are callable. The same
+  // session is ALSO stored in sessionRef for the shared hangup / mute /
+  // dtmf controls once the call is connected.
+  const inboundSessionRef = useRef<InboundCallSession | null>(null)
+  // The per-inbound-call sipClient "inboundMessage" listener (reads the
+  // raw CANCEL/BYE Reason header). Held in a ref so it can be removed
+  // from every teardown path — including ones outside the SDK-init
+  // effect (declineInbound).
+  const inboundSipHandlerRef = useRef<((msg: InboundMessage) => void) | null>(null)
   // Audio element node tracked via a callback ref (set by
   // setAudioElement below). Plus a pending-stream ref so we don't
   // lose the MediaStream if it arrives before the element mounts.
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const pendingStreamRef = useRef<MediaStream | null>(null)
   const cancelledRef = useRef(false)
+
+  // Inbound callbacks — stashed in refs so the SDK-init effect (which
+  // depends only on sipInfo) always reads the latest identity without
+  // re-subscribing the SDK listeners on every parent render.
+  const onInboundRingingRef = useRef(args.onInboundRinging)
+  const onInboundAnsweredRef = useRef(args.onInboundAnswered)
+  const onInboundUnansweredRef = useRef(args.onInboundUnanswered)
+  useEffect(() => {
+    onInboundRingingRef.current = args.onInboundRinging
+    onInboundAnsweredRef.current = args.onInboundAnswered
+    onInboundUnansweredRef.current = args.onInboundUnanswered
+  }, [args.onInboundRinging, args.onInboundAnswered, args.onInboundUnanswered])
+
+  // Remove the inbound sipClient listener from any teardown path. Safe
+  // to call repeatedly: the SDK's EventEmitter.off() is filter-based, so
+  // removing an already-removed (or never-registered) listener is a
+  // no-op. Reads webPhoneRef so it works from handlers defined outside
+  // the SDK-init effect (e.g. declineInbound).
+  const detachInboundSipHandler = useCallback(() => {
+    const handler = inboundSipHandlerRef.current
+    if (!handler) return
+    webPhoneRef.current?.sipClient.off("inboundMessage", handler)
+    inboundSipHandlerRef.current = null
+  }, [])
 
   const setAudioElement = useCallback((node: HTMLAudioElement | null) => {
     audioElementRef.current = node
@@ -248,16 +387,144 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
       try {
         const phone = new WebPhone({ sipInfo: args.sipInfo as SipInfo })
 
-        // Inbound handling: scoped to the 3b push. The SDK's default
-        // behavior on inbound INVITE is to auto-reply 180 Ringing
-        // (see `node_modules/ringcentral-web-phone/dist/index.mjs:
-        // 23-59`); without a `phone.on("inboundCall", ...)` handler
-        // here, the session sits in `phone.callSessions[]` with the
-        // SDK acknowledging 180 Ringing — surfacing as the "laptop
-        // hijack" symptom (ringback audio + dialer-widget ring with
-        // no answer UI). 3b will register a handler that wires the
-        // session into a real inbound-answer/decline UI. Until then,
-        // this is a known gap.
+        // `mediaStreamSet` fires with the LOCAL microphone stream (NOT
+        // the remote/inbound stream — verified against
+        // ringcentral-web-phone@2.4.4 source at
+        // `node_modules/.../call-session/index.mjs`). The SDK's
+        // internal getUserMedia uses `audio: { deviceId: { exact } }`
+        // which does NOT default-enable WebRTC DSP, so without these
+        // constraints the OTHER party gets a raw, choppy mic stream.
+        // We apply the three standard DSP constraints to the live mic
+        // track. We do NOT attach this stream to our `<audio>` element
+        // — remote audio is handled by the SDK's internal hidden
+        // element (its RTCPeerConnection.ontrack handler). Attaching
+        // the local stream caused the 3a echo loop. Shared by BOTH
+        // outbound and inbound sessions — inbound `answer()` runs the
+        // same `init()` and fires the same event. See
+        // memory:telephony-sdk-mediastreamset-gotcha.
+        const attachMicDsp = (session: CallSession) => {
+          session.on("mediaStreamSet", (stream: MediaStream) => {
+            stream.getAudioTracks().forEach((track) => {
+              void track
+                .applyConstraints({
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: true,
+                })
+                .catch(() => {
+                  // Browser may not support runtime constraint changes
+                  // on a live audio track; degrades to raw mic (no
+                  // worse than before). Silent self-heal.
+                })
+            })
+          })
+        }
+
+        // Listener for inbound call sessions — attached BEFORE start()
+        // so we never miss the inboundCall emission. The SDK has
+        // already auto-replied 100 Trying + 180 Ringing by the time
+        // this fires; we drive the Answer/Decline UI from here.
+        phone.on("inboundCall", (session: InboundCallSession) => {
+          const cur = stateRef.current
+          // No call-waiting in V1: if a call is already active (or
+          // ringing), decline the newcomer immediately so RC routes it
+          // per the user's rules (mobile app, voicemail, etc.).
+          if (cur.kind !== "idle" && cur.kind !== "ended") {
+            void session.decline().catch(noop)
+            return
+          }
+          sessionRef.current = session
+          inboundSessionRef.current = session
+          const sessionId = session.callId || `inbound-${Date.now().toString(36)}`
+          const fromNumber = safeRemoteNumber(session)
+          dispatch({ type: "inbound_ringing", sessionId, fromNumber })
+          onInboundRingingRef.current?.(fromNumber)
+
+          session.on("answered", () => {
+            // Read the pre-dispatch snapshot (stateRef updates via an
+            // effect AFTER render, so it still holds inbound_ringing
+            // here) to capture the resolved contactId for logging.
+            const snap = stateRef.current
+            dispatch({ type: "inbound_answered" })
+            if (snap.kind === "inbound_ringing") {
+              onInboundAnsweredRef.current?.({
+                fromNumber: snap.fromNumber,
+                contactId: snap.contactId,
+              })
+            }
+          })
+          // Pre-answer teardown classifier. RC rings ALL of the user's
+          // devices at once; when the call is answered on another device
+          // (cell, mobile app, desk phone), RC cancels THIS leg with a
+          // CANCEL carrying `Reason: SIP;cause=200;text="Call completed
+          // elsewhere"`. That is NOT a miss — logging a no_answer row for
+          // it would be false data on most calls for a phone-first user.
+          // The SDK's `disposed` event carries no payload (dispose()
+          // emits with no args — verified in call-session/index.mjs), so
+          // we read the raw CANCEL/BYE off the sipClient channel where
+          // the Reason header is visible. Registered AFTER the SDK's own
+          // dispatcher, so `disposed` (below) fires first; the
+          // inbound_ringing teardown decision therefore lives HERE. The
+          // SDK's emit() iterates a snapshot, so a detach during the same
+          // emit never skips this handler.
+          const sipMsgHandler = (msg: InboundMessage) => {
+            if (msg.headers["Call-Id"] !== session.callId) return
+            const cseq = msg.headers.CSeq ?? ""
+            if (!cseq.endsWith(" CANCEL") && !cseq.endsWith(" BYE")) return
+            const snap = stateRef.current
+            if (snap.kind === "inbound_ringing") {
+              if (isAnsweredElsewhere(msg.headers.Reason)) {
+                // Answered on another device — write NO Pathway row. RC's
+                // own call log has it; a future call-log sync imports it.
+              } else {
+                // Genuine caller abandonment before answer.
+                onInboundUnansweredRef.current?.({
+                  fromNumber: snap.fromNumber,
+                  contactId: snap.contactId,
+                })
+              }
+              dispatch({ type: "inbound_dismissed" })
+            }
+            // else: an answered call's BYE — the disposed handler drives
+            // the shared ended/log path.
+            detachInboundSipHandler()
+            sessionRef.current = null
+            inboundSessionRef.current = null
+          }
+          phone.sipClient.on("inboundMessage", sipMsgHandler)
+          inboundSipHandlerRef.current = sipMsgHandler
+
+          session.on("failed", () => {
+            const snap = stateRef.current
+            if (snap.kind === "inbound_ringing") {
+              // Technical failure before answer (negotiation error, etc.)
+              // — dismiss the ring UI but write NO row: a failure is not
+              // a missed call, and logging no_answer for it is false data.
+              dispatch({ type: "inbound_dismissed" })
+            } else {
+              // Failure after answer — end the call so the shared ended
+              // path logs it.
+              dispatch({ type: "session_ended" })
+            }
+            detachInboundSipHandler()
+            sessionRef.current = null
+            inboundSessionRef.current = null
+          })
+
+          session.on("disposed", () => {
+            const snap = stateRef.current
+            if (snap.kind !== "inbound_ringing") {
+              // Answered call ended → shared ended path logs the row.
+              dispatch({ type: "session_ended" })
+            }
+            // The inbound_ringing teardown is handled by sipMsgHandler
+            // (it needs the CANCEL's Reason header this event lacks).
+            detachInboundSipHandler()
+            sessionRef.current = null
+            inboundSessionRef.current = null
+          })
+          attachMicDsp(session)
+        })
 
         // Listener for outbound call sessions — attached BEFORE
         // start() so we never miss the outboundCall emission.
@@ -279,51 +546,11 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             dispatch({ type: "session_ended" })
             sessionRef.current = null
           })
-          // `mediaStreamSet` fires with the LOCAL microphone stream
-          // (NOT the remote/inbound stream — verified against
-          // ringcentral-web-phone@2.4.4 source at
-          // `node_modules/.../call-session/index.mjs.map`). The SDK's
-          // README at line 706-714 explicitly recommends this event
-          // for applying noise reduction to the OUTBOUND mic.
-          //
-          // **DSP constraints required.** The SDK's internal
-          // getUserMedia call uses `audio: { deviceId: { exact: ... } }`
-          // with NO `echoCancellation` / `noiseSuppression` /
-          // `autoGainControl` constraints. Per WebRTC convention,
-          // passing an `audio` constraint object (not `audio: true`)
-          // does NOT default-enable DSP processing — the recipient
-          // gets the raw mic stream. Apply the three standard DSP
-          // constraints here so the recipient gets clean audio.
-          //
-          // **DO NOT attach this stream to our `<audio>` element.**
-          // The prior 3a code did exactly that (treating it as if it
-          // were the REMOTE stream) which caused Mike's own mic to
-          // play through Mike's own speakers — an acoustic echo loop.
-          // Remote audio is handled by the SDK's internal hidden
-          // audio element created in its RTCPeerConnection.ontrack
-          // handler; we don't need a manual element for inbound
-          // playback. The `<audio>` element in `docked-dialer.tsx`
-          // plus the `audioElementRef` / `pendingStreamRef` /
-          // `setAudioElement` plumbing below are now dead-but-
-          // harmless code, kept in place to minimize the surgery for
-          // this fix. Future cleanup: remove them entirely. See
-          // memory:telephony-sdk-mediastreamset-gotcha.
-          session.on("mediaStreamSet", (stream: MediaStream) => {
-            stream.getAudioTracks().forEach((track) => {
-              void track
-                .applyConstraints({
-                  echoCancellation: true,
-                  noiseSuppression: true,
-                  autoGainControl: true,
-                })
-                .catch(() => {
-                  // Browser may not support runtime constraint
-                  // changes on a live audio track; degrades to raw
-                  // mic (no worse than today's behavior). Silent
-                  // self-heal — no toast / no error surface.
-                })
-            })
-          })
+          // Same local-mic DSP path used for inbound — see attachMicDsp
+          // definition above. The `<audio>` element + setAudioElement
+          // plumbing in docked-dialer.tsx are dead-but-harmless (remote
+          // audio plays through the SDK's own hidden element).
+          attachMicDsp(session)
         })
         await phone.start()
         if (cancelledRef.current) {
@@ -347,13 +574,17 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
 
     return () => {
       cancelledRef.current = true
+      // Remove any lingering inbound sipClient listener BEFORE nulling
+      // webPhoneRef (detach reads it). Safe if already removed.
+      detachInboundSipHandler()
       if (phoneInstance) {
         void phoneInstance.dispose()
       }
       webPhoneRef.current = null
       sessionRef.current = null
+      inboundSessionRef.current = null
     }
-  }, [args.sipInfo])
+  }, [args.sipInfo, detachInboundSipHandler])
 
   // ─── ended → idle auto-transition (1.5s) ───────────────────────
 
@@ -433,6 +664,45 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     session.sendDtmf(digit)
   }, [])
 
+  // ─── Inbound handlers ────────────────────────────────────────────
+
+  const answerInbound = useCallback(() => {
+    if (stateRef.current.kind !== "inbound_ringing") return
+    const session = inboundSessionRef.current
+    if (!session) return
+    // SDK negotiates SDP and emits `answered`; our session-level
+    // `answered` listener drives the state transition + onInboundAnswered.
+    void session.answer().catch(noop)
+  }, [])
+
+  const declineInbound = useCallback(() => {
+    const cur = stateRef.current
+    if (cur.kind !== "inbound_ringing") return
+    const session = inboundSessionRef.current
+    if (!session) return
+    // Decline only dismisses Pathway's leg — RC's other devices (cell,
+    // mobile app) keep ringing, so the call may still be answered
+    // elsewhere. Pathway therefore writes NOTHING on decline (a
+    // no_answer row would be false data when the call is then picked up
+    // on the cell). The upcoming RC call-log sync records the true
+    // outcome. Contrast the caller-abandoned path (sipMsgHandler), which
+    // DOES log no_answer — that's a genuine miss Pathway witnessed.
+    void session.decline().catch(noop)
+    dispatch({ type: "inbound_dismissed" })
+    detachInboundSipHandler()
+    sessionRef.current = null
+    inboundSessionRef.current = null
+  }, [detachInboundSipHandler])
+
+  const setInboundContact = useCallback((contact: { contactId: string; name: string } | null) => {
+    if (!contact) return
+    dispatch({
+      type: "inbound_contact_resolved",
+      contactId: contact.contactId,
+      contactName: contact.name,
+    })
+  }, [])
+
   return {
     state,
     setAudioElement,
@@ -442,5 +712,8 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     hangup,
     toggleMute,
     sendDtmf,
+    answerInbound,
+    declineInbound,
+    setInboundContact,
   }
 }

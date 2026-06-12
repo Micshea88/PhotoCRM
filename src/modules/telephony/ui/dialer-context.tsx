@@ -1,7 +1,16 @@
 "use client"
 
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react"
-import { recordOutboundCall } from "@/modules/calls/actions"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { recordInboundCall, recordOutboundCall } from "@/modules/calls/actions"
+import { lookupContactByPhone } from "@/modules/telephony/actions"
 import { classifyDisposition } from "@/modules/telephony/classify-disposition"
 import { useWebPhone, type DialerUiState } from "./use-web-phone"
 
@@ -59,6 +68,10 @@ interface DialerPublicApi {
   hangup: () => void
   toggleMute: () => void
   sendDtmf: (digit: string) => void
+
+  // Inbound call lifecycle (3b)
+  answerInbound: () => void
+  declineInbound: () => void
 }
 
 const noop = () => {
@@ -80,6 +93,8 @@ const EMPTY_API: DialerPublicApi = {
   hangup: noop,
   toggleMute: noop,
   sendDtmf: noop,
+  answerInbound: noop,
+  declineInbound: noop,
 }
 
 const DialerContext = createContext<DialerPublicApi>(EMPTY_API)
@@ -119,14 +134,28 @@ function DialerProviderInner({
   // already fired (the reducer can't transition out of "ended"
   // without going through "idle").
   const currentCallRef = useRef<{
+    direction: "incoming" | "outgoing"
     contactId?: string
     phoneNumber: string
     startedAt: string
   } | null>(null)
 
+  // Widget collapse/expand state. Declared up here because the inbound
+  // ringing handler below expands the widget on an incoming call.
+  const [widgetExpanded, setWidgetExpanded] = useState(false)
+  const expandWidget = useCallback(() => {
+    setWidgetExpanded(true)
+  }, [])
+  const collapseWidget = useCallback(() => {
+    setWidgetExpanded(false)
+  }, [])
+
   // Auto-log the call_log row on session_ended. Disposition is
   // derived by the pure `classifyDisposition` helper using
-  // duration + (defensively) any reason the SDK surfaces.
+  // duration + (defensively) any reason the SDK surfaces. Direction
+  // is carried on the current-call ref (stamped at startCall for
+  // outbound, at inbound-answered for incoming) so the same handler
+  // routes to the right writer.
   const handleCallEnded = useCallback(
     (details: {
       durationMs: number
@@ -141,7 +170,7 @@ function DialerProviderInner({
         reason: details.reason,
         durationMs: details.durationMs,
       })
-      void recordOutboundCall({
+      const row = {
         contactId: call.contactId,
         phoneNumber: call.phoneNumber,
         startedAt: call.startedAt,
@@ -149,13 +178,60 @@ function DialerProviderInner({
         disposition,
         reason: details.reason ?? null,
         externalId: null,
-      }).catch(() => {
-        // Best-effort. The call already happened; if the server
-        // action fails (network blip, validation rejection because
-        // the contact was deleted mid-call, etc.) we don't surface
-        // an error to the user — the dialer UX flow is independent
-        // of the activity-feed write.
+      }
+      // Best-effort either way. The call already happened; a failed
+      // server write (network blip, contact deleted mid-call) is not
+      // surfaced — the dialer UX is independent of the activity write.
+      const write = call.direction === "incoming" ? recordInboundCall : recordOutboundCall
+      void write(row).catch(noop)
+    },
+    [],
+  )
+
+  // Push the caller-ID lookup result into the inbound_ringing state.
+  // Held in a ref because the callbacks below are defined BEFORE
+  // useWebPhone returns; the effect wires the latest identity once.
+  const setInboundContactRef = useRef<(c: { contactId: string; name: string } | null) => void>(noop)
+
+  // Inbound ringing → expand the widget + resolve the caller's contact
+  // asynchronously (non-blocking, so the ring UI never waits on the
+  // round-trip).
+  const handleInboundRinging = useCallback((fromNumber: string) => {
+    setWidgetExpanded(true)
+    void lookupContactByPhone({ phoneNumber: fromNumber })
+      .then((res) => {
+        const contact = res.data?.contact ?? null
+        if (contact) setInboundContactRef.current(contact)
       })
+      .catch(noop)
+  }, [])
+
+  // Inbound answered → stamp the current-call ref so the shared
+  // handleCallEnded path logs an incoming row when the call ends.
+  const handleInboundAnswered = useCallback((info: { fromNumber: string; contactId?: string }) => {
+    currentCallRef.current = {
+      direction: "incoming",
+      contactId: info.contactId,
+      phoneNumber: info.fromNumber,
+      startedAt: new Date().toISOString(),
+    }
+  }, [])
+
+  // Inbound declined / missed → Option A: log a no_answer row ONLY
+  // when the caller matched a known contact (no orphan rows for
+  // unknown numbers).
+  const handleInboundUnanswered = useCallback(
+    (info: { fromNumber: string; contactId?: string }) => {
+      if (!info.contactId) return
+      void recordInboundCall({
+        contactId: info.contactId,
+        phoneNumber: info.fromNumber,
+        startedAt: new Date().toISOString(),
+        durationSeconds: 0,
+        disposition: "no_answer",
+        reason: null,
+        externalId: null,
+      }).catch(noop)
     },
     [],
   )
@@ -163,16 +239,16 @@ function DialerProviderInner({
   const webPhone = useWebPhone({
     sipInfo: bootstrap.sipInfo,
     onCallEnded: handleCallEnded,
+    onInboundRinging: handleInboundRinging,
+    onInboundAnswered: handleInboundAnswered,
+    onInboundUnanswered: handleInboundUnanswered,
   })
 
-  // Widget collapse/expand state.
-  const [widgetExpanded, setWidgetExpanded] = useState(false)
-  const expandWidget = useCallback(() => {
-    setWidgetExpanded(true)
-  }, [])
-  const collapseWidget = useCallback(() => {
-    setWidgetExpanded(false)
-  }, [])
+  // Wire the stable setInboundContact identity into the ref the
+  // ringing handler reads (avoids a definition-order cycle).
+  useEffect(() => {
+    setInboundContactRef.current = webPhone.setInboundContact
+  }, [webPhone.setInboundContact])
 
   // Auto-expand happens at the `startCall` source ONLY. We deliberately
   // do NOT have an effect that watches state.kind and auto-expands on
@@ -188,6 +264,7 @@ function DialerProviderInner({
       // the rejection and dispatches session_ended synchronously)
       // still has the per-row data available to handleCallEnded.
       currentCallRef.current = {
+        direction: "outgoing",
         contactId: args.contactId,
         phoneNumber: args.phoneNumber,
         startedAt: new Date().toISOString(),
@@ -217,6 +294,8 @@ function DialerProviderInner({
     hangup: webPhone.hangup,
     toggleMute: webPhone.toggleMute,
     sendDtmf: webPhone.sendDtmf,
+    answerInbound: webPhone.answerInbound,
+    declineInbound: webPhone.declineInbound,
   }
 
   return <DialerContext.Provider value={api}>{children}</DialerContext.Provider>

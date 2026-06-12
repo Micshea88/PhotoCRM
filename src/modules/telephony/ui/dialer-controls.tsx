@@ -1,6 +1,6 @@
 "use client"
 
-import { Mic, MicOff, PhoneOff } from "lucide-react"
+import { Mic, MicOff, Phone, PhoneOff } from "lucide-react"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import { assertNever, type DialerUiState } from "./use-web-phone"
 
@@ -70,6 +70,10 @@ export function DialerHeader({
 export function DialerStatusRow({ state, now }: { state: DialerUiState; now: number }) {
   switch (state.kind) {
     case "idle":
+      return null
+    case "inbound_ringing":
+      // Inbound ring renders via the dedicated IncomingCall panel, not
+      // this status row — this case exists only for switch exhaustiveness.
       return null
     case "starting":
       return <p className="text-center text-sm">Connecting…</p>
@@ -192,5 +196,84 @@ function HangupButton({ onClick }: { onClick: () => void }) {
     >
       <PhoneOff className="size-4" aria-hidden="true" />
     </button>
+  )
+}
+
+/**
+ * Inbound-call ringing panel (3b) — caller identity + Answer / Decline.
+ *
+ * Pure render: identity is the matched contact name (linked to the
+ * contact detail per the approved scope — link only, no auto-navigate)
+ * with the formatted number beneath; or just the formatted number when
+ * the caller is unknown. Answer is green (emerald, matching the repo's
+ * `ai-status-badge` client-green); Decline is the neutral secondary
+ * token.
+ */
+export function IncomingCall({
+  fromNumber,
+  contactName,
+  contactId,
+  onAnswer,
+  onDecline,
+}: {
+  fromNumber: string
+  contactName?: string
+  contactId?: string
+  onAnswer: () => void
+  onDecline: () => void
+}) {
+  const formatted = formatPhoneDisplay(fromNumber) || "Unknown caller"
+  return (
+    <div className="flex flex-col items-center gap-1 text-center">
+      <span className="text-xs font-medium text-[var(--color-muted-foreground)]">
+        Incoming call
+      </span>
+      {contactName ? (
+        <>
+          {contactId ? (
+            <a
+              href={`/contacts/${contactId}`}
+              className="text-base font-semibold hover:underline"
+              data-testid="incoming-call-contact-link"
+            >
+              {contactName}
+            </a>
+          ) : (
+            <h2 className="text-base font-semibold">{contactName}</h2>
+          )}
+          <p className="text-xs text-[var(--color-muted-foreground)]">{formatted}</p>
+        </>
+      ) : (
+        <h2 className="text-base font-semibold">{formatted}</h2>
+      )}
+      <div className="mt-3 flex items-center justify-center gap-6">
+        <div className="flex flex-col items-center gap-1">
+          <button
+            type="button"
+            aria-label="Decline call"
+            onClick={onDecline}
+            title="Decline"
+            data-testid="incoming-call-decline"
+            className="flex size-12 items-center justify-center rounded-full bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-secondary)]/80"
+          >
+            <PhoneOff className="size-5" aria-hidden="true" />
+          </button>
+          <span className="text-[11px] text-[var(--color-muted-foreground)]">Decline</span>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <button
+            type="button"
+            aria-label="Answer call"
+            onClick={onAnswer}
+            title="Answer"
+            data-testid="incoming-call-answer"
+            className="flex size-12 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            <Phone className="size-5" aria-hidden="true" />
+          </button>
+          <span className="text-[11px] text-[var(--color-muted-foreground)]">Answer</span>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,8 +1,9 @@
 import "server-only"
-import { and, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
 import { withOrgContext } from "@/lib/org-context"
+import { contacts } from "@/modules/contacts/schema"
 import { getProvidersByCategory } from "@/modules/integrations/registry"
 import { telephonyConnections } from "@/modules/telephony/schema"
 import { decrypt, encrypt } from "@/lib/crypto"
@@ -269,6 +270,51 @@ export async function getDialerBootstrap(args: {
   userId: string
 }): Promise<DialerBootstrap> {
   return withOrgContext((tx) => getDialerBootstrapImpl(tx, args))
+}
+
+export interface ContactPhoneMatch {
+  contactId: string
+  name: string
+}
+
+/**
+ * Caller-ID → contact match for the inbound answer UI (3b). Takes a
+ * pre-normalized 10-digit string (the action normalizes via
+ * `parsePhoneInput`) and matches it against `primary_phone` /
+ * `secondary_phone`, digit-normalizing each stored value in SQL and
+ * comparing on its last 10 digits so formatted / leading-1 legacy rows
+ * still match. Returns the first hit (the banner needs one name).
+ *
+ * Impl variant (takes a tx) so integration tests can drive the exact
+ * matching SQL against a BEGIN/ROLLBACK transaction — same convention
+ * as the connection-list queries above.
+ */
+export async function findContactByPhoneImpl(
+  db: DbHandle,
+  organizationId: string,
+  tenDigits: string,
+): Promise<ContactPhoneMatch | null> {
+  const [row] = await db
+    .select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+    })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.organizationId, organizationId),
+        isNull(contacts.deletedAt),
+        or(
+          sql`right(regexp_replace(coalesce(${contacts.primaryPhone}, ''), '[^0-9]', '', 'g'), 10) = ${tenDigits}`,
+          sql`right(regexp_replace(coalesce(${contacts.secondaryPhone}, ''), '[^0-9]', '', 'g'), 10) = ${tenDigits}`,
+        ),
+      ),
+    )
+    .limit(1)
+
+  if (!row) return null
+  return { contactId: row.id, name: `${row.firstName} ${row.lastName}`.trim() }
 }
 
 /**

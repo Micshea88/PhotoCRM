@@ -165,7 +165,34 @@ export const recordOutboundCallInput = z.object({
   externalId: z.string().nullable().optional(),
 })
 
+/**
+ * Input for `recordInboundCall` — auto-logged from the dialer's
+ * inbound-call lifecycle (3b inbound answer UI). The action hard-codes
+ * direction to "incoming" and source to "ringcentral"; those are NOT
+ * client inputs. Same field shape as `recordOutboundCallInput`.
+ *
+ * Two write paths feed this:
+ *   - Answered inbound that later ends → `disposition` is the
+ *     classifier's verdict (duration-based), `durationSeconds` is the
+ *     talk time.
+ *   - Declined / missed (caller hung up before answer) → `disposition`
+ *     is hard-coded `"no_answer"` with `durationSeconds: 0`. Per the
+ *     approved Option A, these are written ONLY when the caller matched
+ *     a known contact (so `contactId` is always set on that path); an
+ *     unknown-number decline writes no row.
+ */
+export const recordInboundCallInput = z.object({
+  contactId: z.string().min(1).nullable().optional(),
+  phoneNumber: z.string().min(1).max(64),
+  startedAt: z.iso.datetime(),
+  durationSeconds: z.number().int().min(0).max(86_400),
+  disposition: recordedCallDispositionSchema,
+  reason: z.string().max(1000).nullable().optional(),
+  externalId: z.string().nullable().optional(),
+})
+
 export type LogCallInput = z.infer<typeof logCallInput>
 export type UpdateCallInput = z.infer<typeof updateCallInput>
 export type DeleteCallInput = z.infer<typeof deleteCallInput>
 export type RecordOutboundCallInput = z.infer<typeof recordOutboundCallInput>
+export type RecordInboundCallInput = z.infer<typeof recordInboundCallInput>

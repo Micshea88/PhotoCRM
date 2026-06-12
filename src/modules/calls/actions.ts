@@ -8,7 +8,13 @@ import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
 import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
 import { callLog } from "./schema"
-import { deleteCallInput, logCallInput, recordOutboundCallInput, updateCallInput } from "./types"
+import {
+  deleteCallInput,
+  logCallInput,
+  recordInboundCallInput,
+  recordOutboundCallInput,
+  updateCallInput,
+} from "./types"
 
 /**
  * Manual "Log Call" entry point used by the contact detail page's
@@ -246,6 +252,96 @@ export const recordOutboundCall = orgAction
         userAgent: ctx.userAgent,
       },
       "call_log.recorded_from_dialer",
+      {
+        resourceType: "call_log",
+        resourceId: id,
+        metadata: {
+          contactId: parsedInput.contactId ?? null,
+          disposition: parsedInput.disposition,
+          durationSeconds: parsedInput.durationSeconds,
+        },
+      },
+    )
+
+    if (parsedInput.contactId) {
+      revalidatePath(`/contacts/${parsedInput.contactId}`)
+    }
+
+    return { id }
+  })
+
+/**
+ * Auto-log an INBOUND call from the inline dialer's inbound-call
+ * lifecycle (3b inbound answer UI). Twin of `recordOutboundCall`;
+ * the only differences are `direction: "incoming"` and a distinct
+ * audit action name. Fired by `dialer-context.tsx`:
+ *   - on the answered-call's `session_ended` (disposition from the
+ *     classifier), and
+ *   - on a declined/missed ring (disposition `"no_answer"`,
+ *     duration 0) — but per Option A only when the caller matched a
+ *     known contact, so `contactId` is set on that path.
+ *
+ * Source is "ringcentral" (dialer-sourced inbound), notes null (the
+ * activity-feed badge carries the disposition). Contact pre-flight +
+ * AI-cache bust + revalidate mirror the outbound action exactly.
+ */
+export const recordInboundCall = orgAction
+  .metadata({ actionName: "call_log.recorded_inbound" })
+  .inputSchema(recordInboundCallInput)
+  .action(async ({ parsedInput, ctx }) => {
+    if (parsedInput.contactId) {
+      const [contact] = await ctx.db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.id, parsedInput.contactId),
+            eq(contacts.organizationId, ctx.activeOrg.id),
+            isNull(contacts.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!contact) {
+        throw new ActionError("VALIDATION", "Contact not found in this organization.")
+      }
+    }
+
+    const id = createId()
+    await ctx.db.insert(callLog).values({
+      id,
+      organizationId: ctx.activeOrg.id,
+      contactId: parsedInput.contactId ?? null,
+      userId: ctx.session.user.id,
+      direction: "incoming",
+      disposition: parsedInput.disposition,
+      startedAt: new Date(parsedInput.startedAt),
+      durationSeconds: parsedInput.durationSeconds,
+      notes: null,
+      recordingFileId: null,
+      source: "ringcentral",
+      externalId: parsedInput.externalId ?? null,
+      externalMetadata: {
+        phoneNumber: parsedInput.phoneNumber,
+        disposition: parsedInput.disposition,
+        reason: parsedInput.reason ?? null,
+      },
+      createdBy: ctx.session.user.id,
+      updatedBy: ctx.session.user.id,
+    })
+
+    if (parsedInput.contactId) {
+      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    }
+
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "call_log.recorded_inbound",
       {
         resourceType: "call_log",
         resourceId: id,

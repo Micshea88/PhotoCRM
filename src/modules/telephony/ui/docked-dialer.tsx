@@ -3,7 +3,13 @@
 import { ChevronDown, Phone } from "lucide-react"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import { useDialer } from "./dialer-context"
-import { DialerActions, DialerHeader, DialerStatusRow, formatDuration } from "./dialer-controls"
+import {
+  DialerActions,
+  DialerHeader,
+  DialerStatusRow,
+  IncomingCall,
+  formatDuration,
+} from "./dialer-controls"
 
 /**
  * Docked floating dialer widget — fixed bottom-right of the (app)
@@ -33,14 +39,39 @@ export function DockedDialer() {
   // React 19's react-hooks/refs rule misfires on the entire context
   // object because it contains the setAudioElement callback function.
   // Spreading + reading individual primitives sidesteps the heuristic.
-  const { isAvailable, widgetExpanded, setAudioElement } = useDialer()
+  const { isAvailable, widgetExpanded, setAudioElement, state } = useDialer()
   if (!isAvailable) return null
+
+  // An inbound ring takes over the widget regardless of collapse state —
+  // the user must see Answer / Decline.
+  const inbound = state.kind === "inbound_ringing"
 
   return (
     <div className="fixed right-4 bottom-4 z-50">
-      {widgetExpanded ? <ExpandedPanel /> : <CollapsedPill />}
+      {inbound ? <IncomingCallPanel /> : widgetExpanded ? <ExpandedPanel /> : <CollapsedPill />}
       {/* Audio MUST stay mounted across expand/collapse — see file header. */}
       <audio ref={setAudioElement} autoPlay />
+    </div>
+  )
+}
+
+function IncomingCallPanel() {
+  const { state, answerInbound, declineInbound } = useDialer()
+  if (state.kind !== "inbound_ringing") return null
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-lg"
+      style={{ width: "360px" }}
+      role="dialog"
+      aria-label="Incoming call"
+    >
+      <IncomingCall
+        fromNumber={state.fromNumber}
+        contactName={state.contactName}
+        contactId={state.contactId}
+        onAnswer={answerInbound}
+        onDecline={declineInbound}
+      />
     </div>
   )
 }
@@ -100,6 +131,8 @@ function collapsedLabel(state: ReturnType<typeof useDialer>["state"], now: numbe
   switch (state.kind) {
     case "idle":
       return "Dialer · ready"
+    case "inbound_ringing":
+      return "Incoming call…"
     case "starting":
       return `Calling ${state.contactLabel ?? formatPhoneDisplay(state.toNumber)}…`
     case "ringing":

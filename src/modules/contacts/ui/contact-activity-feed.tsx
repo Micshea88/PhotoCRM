@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils"
 import { useDialer } from "@/modules/telephony/ui/dialer-context"
 import { updateContactNote, deleteContactNote } from "@/modules/contacts/actions"
 import { updateCall, deleteCall } from "@/modules/calls/actions"
+import { dispositionDisplayLabel, type RecordedCallDisposition } from "@/modules/calls/types"
 import { updateMeeting, deleteMeeting } from "@/modules/meetings/actions"
 import { updateSms, deleteSms } from "@/modules/sms-messages/actions"
 import { updateEmail, deleteEmail } from "@/modules/email-log/actions"
@@ -92,6 +93,55 @@ export interface ActivityEntry {
    *  "note-" / "call-" etc.; the raw id without the prefix is what
    *  update/delete actions expect). */
   rawId?: string
+  /** Disposition for call entries only. Drives the color-coded
+   *  badge in the activity-card header. `null` means the row
+   *  pre-dates the 2026-06-11 disposition push OR was logged
+   *  manually without selecting an outcome — in either case no
+   *  badge renders (graceful degradation). The string is typed
+   *  loosely here to absorb any DB value; the badge component
+   *  narrows to `RecordedCallDisposition` at render time and
+   *  short-circuits on unknown values. */
+  callDisposition?: string | null
+}
+
+/**
+ * Color-coded badge for call dispositions. Inspired by HubSpot's
+ * outcome chips on the activity timeline. Color mapping anchored to
+ * the broader CRM-industry convention:
+ *   - Green (Connected) — successful contact
+ *   - Amber (No Answer) — neutral non-final outcome
+ *   - Red (Busy / Failed / Wrong Number) — negative outcome
+ *   - Gray (Cancelled) — early abort, no signal
+ *   - Blue (Transferred / Left Voicemail) — informational
+ */
+const DISPOSITION_BADGE_CLASSES: Record<RecordedCallDisposition, string> = {
+  completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  no_answer: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  busy: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  cancelled: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
+  transferred: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  voicemail: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  wrong_number: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+}
+
+function isKnownDisposition(value: string): value is RecordedCallDisposition {
+  return value in DISPOSITION_BADGE_CLASSES
+}
+
+export function DispositionBadge({ disposition }: { disposition: string | null | undefined }) {
+  if (!disposition || !isKnownDisposition(disposition)) return null
+  return (
+    <span
+      data-testid={`disposition-badge-${disposition}`}
+      className={cn(
+        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        DISPOSITION_BADGE_CLASSES[disposition],
+      )}
+    >
+      {dispositionDisplayLabel(disposition)}
+    </span>
+  )
 }
 
 function timeAgo(t: Date): string {
@@ -124,7 +174,27 @@ const PLACEHOLDER_FILTERS: Partial<Record<FilterKey, string>> = {
   task: "Tasks ship in Push 7. Once they exist they'll surface here.",
 }
 
-function entryTitleText(e: ActivityEntry): string {
+/**
+ * Builds the header text for an activity card.
+ *
+ * For most kinds, the loader's `title` is generic ("Note added",
+ * "SMS (outbound)"), so when an `actor` is known the card historically
+ * substitutes `"<Kind> by <Actor>"` — more informative than the generic
+ * loader title.
+ *
+ * **Calls are the exception.** The loader pre-formats a structured
+ * title for calls (e.g., `"Call (outgoing) · 0:42"`) that carries
+ * direction + duration. Discarding it for the generic actor-by pattern
+ * loses that signal — Mike saw "Call by Mike" on every dialer-logged
+ * call with no direction / no duration. Preserve the loader's title
+ * for the call kind. Actor attribution for calls is retained in the
+ * audit log + the in-call dialer header; the activity feed doesn't
+ * surface it inline.
+ *
+ * (Exported so `tests/unit/entry-title-text.test.tsx` can verify the
+ * per-kind contract without rendering the whole card.)
+ */
+export function entryTitleText(e: ActivityEntry): string {
   const kindLabel = (() => {
     switch (e.kind) {
       case "note":
@@ -141,6 +211,9 @@ function entryTitleText(e: ActivityEntry): string {
         return "Audit"
     }
   })()
+  if (e.kind === "call") {
+    return e.title || kindLabel
+  }
   if (e.actor) {
     // P-email-log mockup uses " · " for email headers; the other kinds
     // keep the existing " by " idiom.
@@ -895,6 +968,7 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
         </button>
         <span className="shrink-0">{kindIcon(entry.kind)}</span>
         <h3 className="flex-1 truncate text-sm font-medium">{entryTitleText(entry)}</h3>
+        {entry.kind === "call" && <DispositionBadge disposition={entry.callDisposition} />}
         <time className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
           {timeAgo(entry.timestamp)}
         </time>

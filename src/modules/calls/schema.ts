@@ -43,6 +43,23 @@ export const callLog = pgTable(
     }),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     direction: text("direction").notNull(),
+    /**
+     * Outcome of the call as a structured value. Drives the
+     * activity-feed badge UI and is the unifying enum for
+     * system-detected (auto-log from dialer) and user-selected
+     * (manual logCall composer) outcomes. See
+     * `RECORDED_CALL_DISPOSITIONS` in `./types.ts` for the eight
+     * canonical values.
+     *
+     * Nullable for graceful degradation: pre-existing rows from
+     * before the 2026-06-11 disposition push have NULL here. The
+     * activity feed renders no badge for null. Auto-log rows
+     * written before 2026-06-11 carry their original value in
+     * `external_metadata.disposition` and are backfilled to this
+     * column via a one-time post-deploy SQL operation (documented
+     * in the commit message).
+     */
+    disposition: text("disposition"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     durationSeconds: integer("duration_seconds"),
     notes: text("notes"),

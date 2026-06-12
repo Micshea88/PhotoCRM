@@ -72,6 +72,7 @@ export async function loadContactActivityWithDb(
         id: callLog.id,
         startedAt: callLog.startedAt,
         direction: callLog.direction,
+        disposition: callLog.disposition,
         durationSeconds: callLog.durationSeconds,
         notes: callLog.notes,
         actorName: user.name,
@@ -168,9 +169,15 @@ export async function loadContactActivityWithDb(
     }
 
     for (const c of callsRows) {
+      // Duration format aligns with the in-call dialer timer
+      // (`src/modules/telephony/ui/dialer-controls.tsx::formatDuration`).
+      // M:SS keeps sub-minute calls legible — a 42-second dialer call
+      // should not flatten to "1m" via integer rounding; the activity
+      // feed mirrors the duration the user just saw on the dialer.
+      // Null / 0 / negative → no suffix.
       const dur =
         c.durationSeconds && c.durationSeconds > 0
-          ? ` · ${String(Math.round(c.durationSeconds / 60))}m`
+          ? ` · ${String(Math.floor(c.durationSeconds / 60))}:${String(c.durationSeconds % 60).padStart(2, "0")}`
           : ""
       entries.push({
         id: `call-${c.id}`,
@@ -180,6 +187,7 @@ export async function loadContactActivityWithDb(
         title: `Call (${c.direction})${dur}`,
         body: c.notes,
         actor: actor(c.actorName, c.actorEmail),
+        callDisposition: c.disposition,
       })
     }
 

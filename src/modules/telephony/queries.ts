@@ -172,30 +172,6 @@ export interface DialerBootstrap {
   accessTokenExpiresAt: Date
   sipInfo: unknown
   externalUserId: string
-  /** The transfer target for the dialer's "Transfer to phone"
-   *  action. Field name is `userMobile` for historical reasons
-   *  (3a originally targeted the user's personal cell); the
-   *  ACTUAL VALUE is now the user's RingCentral DirectNumber
-   *  (their personal business DID). RC's call-handling rules on
-   *  that DID delegate ringing to all the user's RC endpoints
-   *  (mobile app, desktop app, desk phone), so a transfer here
-   *  reaches the user wherever they're configured to be reachable
-   *  — without exposing their personal cell number to Pathway and
-   *  without consuming carrier minutes (it stays VoIP).
-   *
-   *  See `fetchTransferTarget` below for the discovery path.
-   *  Undefined when the user has no DirectNumber assigned OR the
-   *  probe failed (graceful degradation: transfer button renders
-   *  disabled). */
-  userMobile?: string
-  /** True iff `fetchTransferTarget` got a 403 from RC, meaning the
-   *  user's OAuth grant doesn't include `ReadAccounts` (a scope
-   *  added 2026-06-08 — existing connections from before that point
-   *  don't have it). The UI surfaces this via a "Reconnect RingCentral…"
-   *  tooltip on the disabled Transfer button. Mutually exclusive with
-   *  `userMobile` being set — a 403 means we never got a value.
-   *  See memory:ringcentral-oauth-scopes. */
-  userMobileNeedsReconnect?: boolean
 }
 
 /**
@@ -274,20 +250,11 @@ export async function getDialerBootstrapImpl(
       .where(eq(telephonyConnections.id, row.id))
   }
 
-  // 4. Transfer target — the user's RC DirectNumber. Result
-  //    discriminates between (a) success → value set, (b) silent
-  //    failure → both fields undefined → tooltip says "Configure your
-  //    RC business number…", and (c) 403 → needsReconnect → tooltip
-  //    says "Reconnect RingCentral in Settings → Integrations…".
-  const transferResult = await fetchTransferTarget(accessToken)
-
   return {
     accessToken,
     accessTokenExpiresAt: row.accessTokenExpiresAt,
     sipInfo,
     externalUserId: row.externalUserId,
-    userMobile: transferResult.value,
-    userMobileNeedsReconnect: transferResult.needsReconnect,
   }
 }
 
@@ -385,152 +352,4 @@ async function fetchSipProvisioning(accessToken: string): Promise<unknown> {
     "[sip-provision] transient error from RingCentral",
   )
   throw new RingCentralTransientError(providerCode, providerDetail)
-}
-
-/**
- * GET `/restapi/v1.0/account/~/extension/~/phone-number` — returns
- * the inventory of phone numbers assigned to the authenticated
- * user's extension. Probes for the user's RingCentral
- * **DirectNumber** — their personal business DID, used as the
- * target of the dialer's "Transfer to phone" action.
- *
- * Why business DID, not personal cell:
- *   - RC's call-handling rules on the user's DID delegate routing
- *     to all their configured endpoints (mobile app, desktop app,
- *     desk phone) per their simultaneous-ring config. Transferring
- *     to the DID lets the user pick up wherever they want.
- *   - No carrier minutes used; quality stays end-to-end VoIP. No
- *     need to read or store the user's personal cell number in
- *     Pathway.
- *   - Matches best-in-class CRM "Transfer to my business line"
- *     semantics (HubSpot, Aircall, Dialpad).
- *
- * Why `/extension/~/phone-number`, not `/extension/~` /
- * `contact.businessPhone`:
- *   - RC's own docs note `contact.businessPhone` is "the best
- *     contact phone number" and is "blank for most records" —
- *     unreliable as a discovery source.
- *   - `/phone-number` is the canonical inventory of numbers
- *     assigned to the extension. Filter `records[]` where
- *     `usageType === "DirectNumber"`; prefer `primary === true` if
- *     multiple DirectNumber records exist on the user.
- *
- * Why DirectNumber, not MainCompanyNumber:
- *   - `MainCompanyNumber` is the company's shared main DID. Routing
- *     there goes through the company auto-attendant rules, not the
- *     individual user's call-handling. We want the user's personal
- *     endpoint routing.
- *
- * OAuth scope: `ReadAccounts`. The Telephony 3a OAuth flow's
- * original SCOPES list did NOT include this — existing connected
- * users will see this endpoint return 403 until they reconnect
- * (the new token grant will include ReadAccounts because we added
- * it to SCOPES on 2026-06-08, and `prompt=consent` on the authorize
- * URL guarantees the user sees + grants the new scope explicitly).
- * We detect 403 specifically and return `{ needsReconnect: true }`
- * so the UI surfaces a "Reconnect RingCentral…" tooltip on the
- * disabled Transfer button. See memory:ringcentral-oauth-scopes for
- * the scope-vs-endpoint matrix.
- *
- * API stability: the `/phone-number` endpoint is NOT part of RC's
- * v1.0 → v2 user-call-handling migration (that migration covers
- * answering-rules / forwarding-number / call-handling RULES, a
- * different family). v1.0 phone-number is safe for the long term
- * as of 2026-06.
- *
- * Like `fetchSipProvisioning`, errors here do NOT throw — any
- * failure (network, non-403 RC error, no DirectNumber assigned)
- * returns `{}` → transfer button stays disabled with the
- * "Configure your RC business number…" tooltip. The dialer
- * functions fine without a transfer target; failing the whole
- * bootstrap because we couldn't probe the DID would be incorrect UX.
- *
- * Return shape — discriminated:
- *   - `{ value: string }`        → DirectNumber found
- *   - `{ needsReconnect: true }` → 403 from RC (scope gap)
- *   - `{}`                       → any other failure / no DirectNumber
- *
- * NEVER logs the access token. NEVER logs the phone number itself —
- * only "found" / "not found" / RC error code signals at pino warn
- * level with `feature: "telephony.transfer-target"`.
- */
-async function fetchTransferTarget(
-  accessToken: string,
-): Promise<{ value?: string; needsReconnect?: boolean }> {
-  const { RINGCENTRAL_SERVER_URL } = env
-  if (!RINGCENTRAL_SERVER_URL) {
-    return {}
-  }
-  const url = `${RINGCENTRAL_SERVER_URL.replace(/\/$/, "")}/restapi/v1.0/account/~/extension/~/phone-number`
-
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    log.warn(
-      { feature: "telephony.transfer-target", err: detail },
-      "[transfer-target] network error reaching RingCentral; transfer disabled this session",
-    )
-    return {}
-  }
-
-  // 403 is structurally distinct from other non-OK statuses: it means
-  // our OAuth grant doesn't include ReadAccounts. The fix is for the
-  // user to disconnect+reconnect RC (the new token's scope will
-  // include ReadAccounts since we added it to SCOPES). Surface this
-  // up the stack so the UI can render the "Reconnect…" tooltip
-  // instead of the generic "Configure your RC business number…" one.
-  if (res.status === 403) {
-    log.warn(
-      { feature: "telephony.transfer-target", status: 403 },
-      "[transfer-target] RC returned 403 — OAuth grant missing ReadAccounts; user must reconnect",
-    )
-    return { needsReconnect: true }
-  }
-
-  if (!res.ok) {
-    log.warn(
-      { feature: "telephony.transfer-target", status: res.status },
-      "[transfer-target] RC returned non-OK; transfer disabled this session",
-    )
-    return {}
-  }
-
-  let body: {
-    records?: { phoneNumber?: string; usageType?: string; primary?: boolean }[]
-  }
-  try {
-    body = (await res.json()) as typeof body
-  } catch {
-    log.warn(
-      { feature: "telephony.transfer-target", status: res.status },
-      "[transfer-target] response body did not parse as JSON; transfer disabled this session",
-    )
-    return {}
-  }
-
-  const directNumbers = (body.records ?? []).filter(
-    (r) =>
-      r.usageType === "DirectNumber" &&
-      typeof r.phoneNumber === "string" &&
-      r.phoneNumber.length > 0,
-  )
-  if (directNumbers.length === 0) {
-    return {}
-  }
-
-  // Prefer primary === true if multiple DirectNumber records exist
-  // (e.g., users with vanity numbers assigned alongside their main
-  // DID). Falls back to the first record when no explicit primary
-  // flag is set on any record.
-  const primary = directNumbers.find((r) => r.primary === true) ?? directNumbers[0]
-  return primary?.phoneNumber ? { value: primary.phoneNumber } : {}
 }

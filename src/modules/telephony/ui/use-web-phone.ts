@@ -10,7 +10,7 @@ import type { SipInfo } from "ringcentral-web-phone/types"
  * Owns:
  *  - WebPhone construction + start() / dispose() in a useEffect with
  *    cleanup
- *  - outboundCall listener (attached BEFORE first call() per the SDK
+ *  - outboundCall listener (attached BEFORE start() per the SDK
  *    README — `await webPhone.call(...)` resolves AFTER the call is
  *    answered or has failed, too late to attach session listeners on
  *    the returned session)
@@ -19,31 +19,20 @@ import type { SipInfo } from "ringcentral-web-phone/types"
  *  - reducer + state machine
  *  - duration tick for the connected-state counter
  *  - ended → idle auto-transition (1.5s)
- *  - Public handlers: startCall, hangup, toggleMute, sendDtmf,
- *    transferToMobile
+ *  - Public handlers: startCall, hangup, toggleMute, sendDtmf
  *
  * Does NOT own:
  *  - Widget collapse/expand state (that lives in dialer-context.tsx)
- *  - Audit recording (the context calls recordCallTransferred via the
- *    onTransferred callback and recordOutboundCall via the
- *    onCallEnded callback — both fire on transferred calls; see
- *    onCallEnded's JSDoc below for the rationale)
+ *  - Audit recording (the context calls recordOutboundCall via the
+ *    onCallEnded callback)
  *  - The audio element itself (the docked widget renders it, but this
  *    hook owns the ref the SDK writes srcObject to)
+ *  - Inbound call handling (scoped to 3b — see comment in SDK init)
  *
  * SDK constraint reminder (memory:web-phone-no-runtime-token-api):
  * the SIP session authenticates via SipInfo's embedded digest
  * credentials, NOT the OAuth access token. There is NO mid-call
  * refresh because there is no token to refresh on the SDK side.
- *
- * Transfer race protection (per Mike's Clarification 2): the success
- * dispatch (`session_ended` with reason="transferred") is fired
- * EXPLICITLY from the resolved-await branch of session.transfer().
- * We do NOT rely on the disposed event to fire it. If the transfer
- * throws, no dispatch happens — the user stays connected and can
- * retry. The disposed event handler always dispatches an unreasoned
- * session_ended; the reducer's existing same-kind guards make the
- * second dispatch a no-op when we already transitioned to ended.
  */
 
 type CallSession = WebPhone["callSessions"][number]
@@ -73,6 +62,14 @@ export type DialerUiState =
       contactLabel?: string
       durationMs: number
       reason?: string
+      /**
+       * Reducer state immediately before transitioning to "ended".
+       * Threaded through to the disposition classifier; currently
+       * unused on the no-reason path (SDK's `answered` event fires
+       * unreliably per 2026-06-11 [TELEPHONY-DIAG] capture) but kept
+       * for future use in case SDK behavior changes.
+       */
+      previousKind: "starting" | "ringing" | "connected"
     }
   | { kind: "sdk_init_failed"; error: string }
   | { kind: "no_microphone"; error: string }
@@ -130,6 +127,7 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
           contactLabel: state.contactLabel,
           durationMs: Date.now() - state.startedAt,
           reason: action.reason,
+          previousKind: state.kind,
         }
       }
       if (state.kind === "starting") {
@@ -140,11 +138,13 @@ function reducer(state: DialerUiState, action: Action): DialerUiState {
           contactLabel: state.contactLabel,
           durationMs: 0,
           reason: action.reason,
+          previousKind: "starting",
         }
       }
-      // Any other kind (already ended, idle, sdk failure, etc.) — no-op
-      // Critical: this makes the transfer's explicit-dispatch + later
-      // disposed-event-dispatch sequence safe (the second one is dropped).
+      // Any other kind (already ended, idle, sdk failure, etc.) —
+      // no-op. The same-kind guard makes redundant session_ended
+      // dispatches safe (e.g., disposed firing after a failed event
+      // we've already processed).
       return state
     case "toggle_mute":
       if (state.kind !== "connected") return state
@@ -164,24 +164,20 @@ function noop(): void {
 
 export interface UseWebPhoneArgs {
   sipInfo: unknown
-  userMobile?: string
-  /** Called AFTER a successful transfer. The context wires this to
-   *  the recordCallTransferred server action (audit-log entry with
-   *  masked last-4 of the transfer target). */
-  onTransferred?: (mobile: string) => void
-  /** Called exactly once whenever a call reaches the "ended" state,
-   *  REGARDLESS of how (completed / failed / transferred). The
-   *  context wires this to the recordOutboundCall server action so a
-   *  `call_log` row is written for every dialer call. Fires from a
-   *  useEffect that watches the reducer's transition to "ended" —
-   *  the reducer's same-kind guard absorbs the redundant
-   *  `disposed`-event dispatch that follows a transfer's explicit
-   *  session_ended, so the effect fires exactly once per call.
+  /** Called exactly once whenever a call reaches the "ended" state.
+   *  The context wires this to the recordOutboundCall server action
+   *  so a `call_log` row is written for every dialer call.
    *
-   *  `recordCallTransferred` (forensic audit) and `recordOutboundCall`
-   *  (CRM activity feed) intentionally BOTH fire on transferred
-   *  calls — they serve different audiences. */
-  onCallEnded?: (details: { durationMs: number; reason?: string }) => void
+   *  `previousKind` is the reducer state at the moment of transition
+   *  (one of `"starting"` / `"ringing"` / `"connected"`); the
+   *  classifier currently ignores it on the no-reason path (SDK's
+   *  `answered` event fires unreliably; verified 2026-06-11) but the
+   *  field is kept for future use. */
+  onCallEnded?: (details: {
+    durationMs: number
+    reason?: string
+    previousKind: "starting" | "ringing" | "connected"
+  }) => void
 }
 
 export interface UseWebPhoneResult {
@@ -198,12 +194,10 @@ export interface UseWebPhoneResult {
    *  the duration as `now - state.startedAt` (purity-rule compliant). */
   now: number
   isReady: boolean
-  canTransfer: boolean
   startCall: (args: { phoneNumber: string; contactLabel?: string }) => void
   hangup: () => void
   toggleMute: () => void
   sendDtmf: (digit: string) => void
-  transferToMobile: () => void
 }
 
 export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
@@ -222,7 +216,6 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const pendingStreamRef = useRef<MediaStream | null>(null)
   const cancelledRef = useRef(false)
-  const isTransferringRef = useRef(false)
 
   const setAudioElement = useCallback((node: HTMLAudioElement | null) => {
     audioElementRef.current = node
@@ -254,6 +247,18 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     void (async () => {
       try {
         const phone = new WebPhone({ sipInfo: args.sipInfo as SipInfo })
+
+        // Inbound handling: scoped to the 3b push. The SDK's default
+        // behavior on inbound INVITE is to auto-reply 180 Ringing
+        // (see `node_modules/ringcentral-web-phone/dist/index.mjs:
+        // 23-59`); without a `phone.on("inboundCall", ...)` handler
+        // here, the session sits in `phone.callSessions[]` with the
+        // SDK acknowledging 180 Ringing — surfacing as the "laptop
+        // hijack" symptom (ringback audio + dialer-widget ring with
+        // no answer UI). 3b will register a handler that wires the
+        // session into a real inbound-answer/decline UI. Until then,
+        // this is a known gap.
+
         // Listener for outbound call sessions — attached BEFORE
         // start() so we never miss the outboundCall emission.
         phone.on("outboundCall", (session: CallSession) => {
@@ -271,9 +276,6 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             sessionRef.current = null
           })
           session.on("disposed", () => {
-            // If transfer's success path already fired session_ended
-            // with reason="transferred", the reducer's guard makes
-            // this dispatch a no-op (state.kind is already "ended").
             dispatch({ type: "session_ended" })
             sessionRef.current = null
           })
@@ -375,17 +377,16 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     onCallEndedRef.current = args.onCallEnded
   }, [args.onCallEnded])
 
-  // Fires exactly once on the transition into "ended". The reducer's
-  // session_ended same-kind guard (returns the existing state ref
-  // when state.kind is already "ended") makes the redundant disposed
-  // dispatch that follows a transfer's explicit session_ended a
-  // no-op at React's reconciliation layer, so this effect doesn't
-  // double-fire.
+  // Fires exactly once on the transition into "ended".
   useEffect(() => {
     if (state.kind !== "ended") return
     const cb = onCallEndedRef.current
     if (!cb) return
-    cb({ durationMs: state.durationMs, reason: state.reason })
+    cb({
+      durationMs: state.durationMs,
+      reason: state.reason,
+      previousKind: state.previousKind,
+    })
   }, [state])
 
   // ─── Handlers ────────────────────────────────────────────────────
@@ -432,55 +433,14 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     session.sendDtmf(digit)
   }, [])
 
-  // Capture onTransferred + userMobile in stable refs so the handler
-  // identity doesn't churn on every render (which would invalidate
-  // any memoization downstream).
-  const userMobileRef = useRef(args.userMobile)
-  const onTransferredRef = useRef(args.onTransferred)
-  useEffect(() => {
-    userMobileRef.current = args.userMobile
-    onTransferredRef.current = args.onTransferred
-  }, [args.userMobile, args.onTransferred])
-
-  const transferToMobile = useCallback(() => {
-    const cur = stateRef.current
-    if (cur.kind !== "connected") return
-    const session = sessionRef.current
-    if (!session) return
-    const target = userMobileRef.current
-    if (!target) return
-    isTransferringRef.current = true
-    void (async () => {
-      try {
-        await session.transfer(target)
-        // Transfer succeeded. Explicit dispatch BEFORE the disposed
-        // event arrives — race-free per Clarification 2. If disposed
-        // dispatches session_ended later, the reducer's same-kind
-        // guard (`state.kind === "ended"` → no-op) absorbs it.
-        dispatch({ type: "session_ended", reason: "transferred" })
-        sessionRef.current = null
-        const cb = onTransferredRef.current
-        if (cb) cb(target)
-      } catch {
-        // Transfer failed at the SDK / RC layer. Do NOT dispatch — the
-        // SIP session is still alive, the user stays connected and can
-        // retry or hangup. The silent-self-healing UX applies (no
-        // toast / no error surface).
-        isTransferringRef.current = false
-      }
-    })()
-  }, [])
-
   return {
     state,
     setAudioElement,
     now,
     isReady: sdkReady,
-    canTransfer: !!args.userMobile,
     startCall,
     hangup,
     toggleMute,
     sendDtmf,
-    transferToMobile,
   }
 }

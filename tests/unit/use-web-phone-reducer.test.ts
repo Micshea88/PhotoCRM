@@ -150,6 +150,13 @@ describe("dialer reducer — inbound transitions", () => {
 })
 
 describe("dialer reducer — outbound direction regression guards", () => {
+  it("idle + dial (from the idle DialPad's Call) → starting with the typed number", () => {
+    const next = reducer(idle, { type: "dial", toNumber: "7275551234" })
+    expect(next.kind).toBe("starting")
+    if (next.kind !== "starting") throw new Error("unreachable")
+    expect(next.toNumber).toBe("7275551234")
+  })
+
   it("session_answered stamps direction=outgoing", () => {
     const starting = reducer(INITIAL_STATE, { type: "dial", toNumber: "5559998888" })
     const ringing = reducer(starting, { type: "session_ringing", sessionId: "out1" })

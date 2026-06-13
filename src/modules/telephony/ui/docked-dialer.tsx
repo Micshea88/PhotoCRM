@@ -4,6 +4,7 @@ import { ChevronDown, Phone } from "lucide-react"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import { useDialer } from "./dialer-context"
 import {
+  DialPad,
   DialerActions,
   DialerHeader,
   DialerStatusRow,
@@ -99,12 +100,20 @@ function ExpandedPanel() {
       </div>
       <DialerHeader externalUserId={dialer.externalUserId} state={dialer.state} />
       <DialerStatusRow state={dialer.state} now={dialer.now} />
-      <DialerActions
-        state={dialer.state}
-        onHangup={dialer.hangup}
-        onMute={dialer.toggleMute}
-        onKeypadDigit={dialer.sendDtmf}
-      />
+      {dialer.state.kind === "idle" ? (
+        <DialPad
+          onCall={(phoneNumber) => {
+            dialer.startCall({ phoneNumber })
+          }}
+        />
+      ) : (
+        <DialerActions
+          state={dialer.state}
+          onHangup={dialer.hangup}
+          onMute={dialer.toggleMute}
+          onKeypadDigit={dialer.sendDtmf}
+        />
+      )}
     </div>
   )
 }

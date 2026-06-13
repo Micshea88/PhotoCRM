@@ -1,17 +1,22 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react"
 import { formatPhoneDisplay } from "@/lib/format/phone"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { assertNever, type DialerUiState } from "./use-web-phone"
 
 /**
- * Pure-JSX render components for the dialer UI. Extracted from the
- * popup-era dialer-shell.tsx (3a popup branch) and reused in the
- * inline architecture via the DockedDialer's ExpandedPanel.
+ * Render components for the dialer UI. Extracted from the popup-era
+ * dialer-shell.tsx (3a popup branch) and reused in the inline
+ * architecture via the DockedDialer's ExpandedPanel.
  *
- * No state ownership here — every component is purely a function of
- * its props. State lives in `use-web-phone.ts` (the SDK lifecycle
- * hook) and `dialer-context.tsx` (the widget collapse/expand state).
+ * Most components are pure functions of their props; the small
+ * exceptions own only ephemeral UI state (the idle DialPad's typed
+ * number, a KeypadKey's press-flash). Call-machine state lives in
+ * `use-web-phone.ts`; widget collapse/expand lives in `dialer-context.tsx`.
  */
 
 const KEYPAD_ROWS: readonly (readonly string[])[] = [
@@ -20,6 +25,13 @@ const KEYPAD_ROWS: readonly (readonly string[])[] = [
   ["7", "8", "9"],
   ["*", "0", "#"],
 ]
+
+/** Dialable characters: digits plus the two DTMF symbols the keypad
+ *  emits. Everything else (parens, spaces, dashes, "+1", letters) is
+ *  stripped so a pasted "(727) 555-1234" or "+1 727 555 1234" just works. */
+function sanitizeDialInput(raw: string): string {
+  return raw.replace(/[^0-9*#]/g, "")
+}
 
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
@@ -142,6 +154,46 @@ export function DialerActions({
   return null
 }
 
+/** Keypad key with a brief press-flash. A pure CSS `:active` style only
+ *  highlights WHILE the button is physically held, so a normal fast click
+ *  shows nothing perceptible. Instead we flash on `onPointerDown` (fires
+ *  for mouse AND touch) and hold the highlight ~140ms so even a quick tap
+ *  is visible. */
+function KeypadKey({ digit, onPress }: { digit: string; onPress: (digit: string) => void }) {
+  const [flashing, setFlashing] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    },
+    [],
+  )
+  const flash = () => {
+    setFlashing(true)
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => {
+      setFlashing(false)
+    }, 140)
+  }
+  return (
+    <button
+      type="button"
+      onPointerDown={flash}
+      onClick={() => {
+        onPress(digit)
+      }}
+      className={cn(
+        "touch-manipulation rounded-md py-2 text-base font-medium transition-colors select-none",
+        flashing
+          ? "bg-[var(--color-accent)] text-[var(--color-accent-foreground)]"
+          : "bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-secondary)]/80",
+      )}
+    >
+      {digit}
+    </button>
+  )
+}
+
 function Keypad({ onDigit }: { onDigit: (digit: string) => void }) {
   return (
     <div
@@ -151,22 +203,56 @@ function Keypad({ onDigit }: { onDigit: (digit: string) => void }) {
       style={{ width: "260px" }}
     >
       {KEYPAD_ROWS.flat().map((digit) => (
-        <button
-          key={digit}
-          type="button"
-          onClick={() => {
-            onDigit(digit)
-          }}
-          // Pressed feedback via CSS :active (fires on mouse-down AND
-          // touch, so no JS state needed): the key highlights with the
-          // accent token while held and returns to normal on release.
-          // `touch-manipulation` keeps taps snappy + `select-none` stops
-          // text selection on rapid presses.
-          className="touch-manipulation rounded-md bg-[var(--color-secondary)] py-2 text-base font-medium text-[var(--color-secondary-foreground)] transition-colors select-none hover:bg-[var(--color-secondary)]/80 active:bg-[var(--color-accent)] active:text-[var(--color-accent-foreground)]"
-        >
-          {digit}
-        </button>
+        <KeypadKey key={digit} digit={digit} onPress={onDigit} />
       ))}
+    </div>
+  )
+}
+
+/**
+ * Idle dialer: a number field + Call button + the shared keypad. Lets the
+ * user place an outbound call from the dialer itself (no contact page
+ * needed). Owns only the typed-number string. Input is sanitized to
+ * dialable characters (digits + * / #) so pasting a formatted number works.
+ * Submits through the SAME `startCall` flow the contact page uses (the
+ * parent wires `onCall` → `dialer.startCall({ phoneNumber })`).
+ */
+export function DialPad({ onCall }: { onCall: (phoneNumber: string) => void }) {
+  const [value, setValue] = useState("")
+  const submit = () => {
+    const number = value.trim()
+    if (!number) return
+    onCall(number)
+  }
+  return (
+    <div className="mt-auto flex flex-col items-center gap-3 pb-1">
+      <div className="flex w-full items-center gap-2">
+        <Input
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
+          placeholder="Enter number"
+          aria-label="Phone number"
+          value={value}
+          onChange={(e) => {
+            setValue(sanitizeDialInput(e.target.value))
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              submit()
+            }
+          }}
+        />
+        <Button type="button" onClick={submit} disabled={!value.trim()}>
+          Call
+        </Button>
+      </div>
+      <Keypad
+        onDigit={(digit) => {
+          setValue((v) => v + digit)
+        }}
+      />
     </div>
   )
 }

@@ -245,6 +245,47 @@ function safeRemoteNumber(session: CallSession): string {
   }
 }
 
+/**
+ * Defensive per-call teardown (Fix B). Explicitly stops the mic tracks
+ * and closes the RTCPeerConnection so the NEXT call's getUserMedia never
+ * contends with a still-live capture of the built-in mic (the muffled-
+ * audio + can't-redial-for-60s regressions). Previously we relied 100%
+ * on the SDK's `dispose()`, which only runs when its dispatcher sees an
+ * inbound BYE/CANCEL — not guaranteed on every end path, and not before a
+ * fast re-dial from the new in-dialer keypad.
+ *
+ * We deliberately do NOT call `session.dispose()` here: the SDK's
+ * dispose() emits "disposed" BEFORE `removeAllListeners()`, so invoking it
+ * from inside our own "disposed" handler would recurse infinitely. We free
+ * the same two resources (tracks + peer connection) directly; both ops are
+ * idempotent, so calling this on a path where the SDK already disposed is
+ * harmless.
+ */
+export function releaseSession(session: CallSession | null): void {
+  if (!session) return
+  const tracks = session.mediaStream?.getTracks() ?? []
+  // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; stripped in follow-up once Mike confirms
+  console.log("[TELEPHONY-DIAG]", "releaseSession", {
+    sessionId: session.callId,
+    micTracks: tracks.length,
+  })
+  for (const track of tracks) {
+    try {
+      track.stop()
+    } catch {
+      // Track already ended — best-effort.
+    }
+  }
+  try {
+    // Typed non-null, but undefined at runtime for a ringing-only inbound
+    // session that never answered (init() — which creates the PC — never
+    // ran). The try/catch covers that + a double-close.
+    session.rtcPeerConnection.close()
+  } catch {
+    // No peer connection yet, or already closed — best-effort.
+  }
+}
+
 export interface UseWebPhoneArgs {
   sipInfo: unknown
   /** Called exactly once whenever a call reaches the "ended" state.
@@ -487,6 +528,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             }
             // else: an answered call's BYE — the disposed handler drives
             // the shared ended/log path.
+            releaseSession(sessionRef.current)
             detachInboundSipHandler()
             sessionRef.current = null
             inboundSessionRef.current = null
@@ -506,6 +548,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
               // path logs it.
               dispatch({ type: "session_ended" })
             }
+            releaseSession(sessionRef.current)
             detachInboundSipHandler()
             sessionRef.current = null
             inboundSessionRef.current = null
@@ -519,6 +562,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
             }
             // The inbound_ringing teardown is handled by sipMsgHandler
             // (it needs the CANCEL's Reason header this event lacks).
+            releaseSession(sessionRef.current)
             detachInboundSipHandler()
             sessionRef.current = null
             inboundSessionRef.current = null
@@ -539,10 +583,12 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
           })
           session.on("failed", (subject: unknown) => {
             const reason = typeof subject === "string" ? subject : "failed"
+            releaseSession(sessionRef.current)
             dispatch({ type: "session_ended", reason })
             sessionRef.current = null
           })
           session.on("disposed", () => {
+            releaseSession(sessionRef.current)
             dispatch({ type: "session_ended" })
             sessionRef.current = null
           })
@@ -590,6 +636,13 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
 
   useEffect(() => {
     if (state.kind !== "ended") return
+    // Backstop: by the time we reach "ended" the end handler has already
+    // released + nulled the session, so this is normally a no-op — but it
+    // guarantees no live mic/peer-connection survives into the idle state
+    // regardless of which path got us here.
+    releaseSession(sessionRef.current)
+    sessionRef.current = null
+    inboundSessionRef.current = null
     const timer = window.setTimeout(() => {
       dispatch({ type: "auto_reset_to_idle" })
     }, 1500)
@@ -627,6 +680,17 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     if (cur.kind !== "idle" && cur.kind !== "ended") return
     const phone = webPhoneRef.current
     if (!phone) return
+    // Safety net for the redial scenario: if a prior session ref somehow
+    // lingers (an end path that didn't fire its event), release its mic +
+    // peer connection NOW, before the SDK's next getUserMedia opens a new
+    // capture. Normally a no-op (teardown already nulled the refs).
+    releaseSession(sessionRef.current)
+    sessionRef.current = null
+    inboundSessionRef.current = null
+    // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; stripped in follow-up once Mike confirms
+    console.log("[TELEPHONY-DIAG]", "startCall → getUserMedia imminent", {
+      to: callArgs.phoneNumber,
+    })
     dispatch({ type: "dial", toNumber: callArgs.phoneNumber, contactLabel: callArgs.contactLabel })
     // Fire-and-forget. Per the SDK README, `await phone.call(...)`
     // resolves AFTER answered/failed; the session events drive state.
@@ -670,6 +734,8 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     if (stateRef.current.kind !== "inbound_ringing") return
     const session = inboundSessionRef.current
     if (!session) return
+    // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; stripped in follow-up once Mike confirms
+    console.log("[TELEPHONY-DIAG]", "answerInbound → getUserMedia imminent")
     // SDK negotiates SDP and emits `answered`; our session-level
     // `answered` listener drives the state transition + onInboundAnswered.
     void session.answer().catch(noop)
@@ -688,6 +754,9 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     // outcome. Contrast the caller-abandoned path (sipMsgHandler), which
     // DOES log no_answer — that's a genuine miss Pathway witnessed.
     void session.decline().catch(noop)
+    // Ringing-only session (never answered) holds no mic/PC, so this is a
+    // no-op today — kept for uniformity with the other teardown paths.
+    releaseSession(sessionRef.current)
     dispatch({ type: "inbound_dismissed" })
     detachInboundSipHandler()
     sessionRef.current = null

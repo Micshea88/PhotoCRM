@@ -54,7 +54,17 @@ const REDIRECT_PATH = "/api/telephony/ringcentral/callback"
  * memory:ringcentral-oauth-scopes for the full prompt + double-
  * permission discussion.
  */
-const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling ReadAccounts"
+// RC-sync (Build 1) adds two scopes:
+//   - ReadCallRecording: download recording content for the transcript pipeline.
+//   - CallControl: REQUIRED to subscribe to account-level telephony/sessions
+//     webhooks (RC errors "Required application permission [CallControl] is
+//     missing" otherwise). Used in Build 3.
+// Both must be enabled on the app in the RC Developer Console BEFORE they can
+// be requested, and the user must RECONNECT (prompt=consent) — RC silently
+// re-grants the prior scope set otherwise. See memory:ringcentral-oauth-scopes.
+// (RingSense / `ai` speech-to-text scope is deliberately NOT added here — it's
+// a by-request beta scope, added in Build 4.)
+const SCOPES = "ReadCallLog ReadMessages SMS VoipCalling ReadAccounts ReadCallRecording CallControl"
 
 export class RingCentralOAuthNotConfigured extends Error {
   constructor() {

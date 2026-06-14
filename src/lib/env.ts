@@ -106,6 +106,11 @@ export const env = createEnv({
     // Sandbox: https://platform.devtest.ringcentral.com
     // Production: https://platform.ringcentral.com
     RINGCENTRAL_SERVER_URL: z.url().optional(),
+    // Developer-set "Verification Token" RC includes as a header on every
+    // webhook event (RC webhooks are not HMAC-signed — this token is the
+    // per-event auth). Optional so non-RC deploys still boot; the webhook
+    // route (Build 3) rejects events when it's unset/mismatched.
+    RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -141,6 +146,7 @@ export const env = createEnv({
     RINGCENTRAL_CLIENT_ID: process.env.RINGCENTRAL_CLIENT_ID,
     RINGCENTRAL_CLIENT_SECRET: process.env.RINGCENTRAL_CLIENT_SECRET,
     RINGCENTRAL_SERVER_URL: process.env.RINGCENTRAL_SERVER_URL,
+    RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN: process.env.RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

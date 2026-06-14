@@ -9,17 +9,26 @@ import { files } from "@/modules/files/schema"
  * (the V1 "Log Call" button on a contact detail) AND a future
  * RingCentral integration without rework.
  *
+ * `source` taxonomy (three values — keep all three distinct):
  *   - `source = "manual"`      → user-entered via the Log Call form.
  *                                `external_id` + `external_metadata` are
  *                                null.
- *   - `source = "ringcentral"` → auto-synced via the RingCentral webhook
- *                                (lands in a later commit). `external_id`
- *                                is RingCentral's call id; the partial
- *                                unique index below prevents duplicate
- *                                webhook deliveries from creating
- *                                duplicate rows. `external_metadata` holds
- *                                any provider-specific payload we want to
- *                                retain (raw event, recording url, etc.).
+ *   - `source = "ringcentral"` → **Pathway-witnessed** call auto-logged by
+ *                                the inline dialer (the existing
+ *                                recordOutboundCall / recordInboundCall
+ *                                paths). The disposition is the heuristic
+ *                                badge shown the instant the user hangs up
+ *                                (`disposition_source = "heuristic"`).
+ *   - `source = "rc_sync"`     → created by the RC call-log sync layer from
+ *                                RingCentral's authoritative call log — the
+ *                                cell-answered / Kelly-answered / desk-app
+ *                                calls Pathway never witnessed. Always
+ *                                `disposition_source = "rc_authoritative"`.
+ *
+ * RC-sync columns (`rc_*`, `transcript*`, `ai_notes*`, `disposition_source`)
+ * are populated by the rc-sync module. A Pathway-witnessed row keeps its
+ * heuristic disposition until a sync job overwrites it with RC truth
+ * (matched on `rc_call_id`, guarded by `rc_last_modified_time` monotonicity).
  *
  * `recording_file_id` FKs to the files table (Vercel Blob). When a manual
  * call is logged with an audio file, the upload goes through the standard
@@ -69,6 +78,34 @@ export const callLog = pgTable(
     source: text("source").notNull(),
     externalId: text("external_id"),
     externalMetadata: jsonb("external_metadata").$type<Record<string, unknown>>(),
+    // ─── RC call-log sync (module rc-sync) ───────────────────────────
+    /** RingCentral's authoritative call id. The dedup + reconciliation
+     *  key; partial-unique per org (see index below). Null until a sync
+     *  job links/creates the row. */
+    rcCallId: text("rc_call_id"),
+    /** RC's `lastModifiedTime` for this record. Monotonicity guard so a
+     *  stale reconciliation sweep can never overwrite newer RC truth. */
+    rcLastModifiedTime: timestamp("rc_last_modified_time", { withTimezone: true }),
+    /** Provenance of `disposition`: "heuristic" (Pathway's instant badge)
+     *  or "rc_authoritative" (overwritten by RC's measured result). */
+    dispositionSource: text("disposition_source").notNull().default("heuristic"),
+    /** RC's raw result string, e.g. "Call connected" / "Missed" / "Voicemail". */
+    rcResult: text("rc_result"),
+    /** Expiring RC-hosted recording link — NOT a source of truth (RC purges it). */
+    rcRecordingUrl: text("rc_recording_url"),
+    /** Stable RC recording id — the re-fetchable handle for transcription. */
+    rcRecordingId: text("rc_recording_id"),
+    /** Call transcript (RC Audio AI speech-to-text — Build 4). */
+    transcript: text("transcript"),
+    /** "pending" | "ready" | "unavailable" | "failed". */
+    transcriptStatus: text("transcript_status"),
+    /** Editable structured AI notes (JSON string) — Build 5. */
+    aiNotes: text("ai_notes"),
+    /** Immutable first Haiku output (JSON string), preserved for audit/diff
+     *  even after the user edits `ai_notes`. Written once, never updated. */
+    aiNotesOriginal: text("ai_notes_original"),
+    /** "pending" | "ready" | "failed" | "manual_override". */
+    aiNotesStatus: text("ai_notes_status"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
@@ -92,6 +129,12 @@ export const callLog = pgTable(
     uniqueIndex("call_log_org_source_external_uidx")
       .on(t.organizationId, t.source, t.externalId)
       .where(sql`${t.externalId} IS NOT NULL`),
+    // RC-sync dedup + reconciliation key. Partial unique — one row per
+    // (org, rc_call_id) so webhook + targeted-pull + sweep can ON CONFLICT
+    // upsert without ever creating duplicate rows for the same RC call.
+    uniqueIndex("call_log_org_rc_call_id_uidx")
+      .on(t.organizationId, t.rcCallId)
+      .where(sql`${t.rcCallId} IS NOT NULL`),
   ],
 )
 

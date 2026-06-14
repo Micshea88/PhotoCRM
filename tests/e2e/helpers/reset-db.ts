@@ -40,6 +40,7 @@ const TABLES_TO_TRUNCATE = [
   "terminology_map",
   "ai_assistant_messages",
   "ai_workflow_drafts",
+  "rc_sync_jobs",
   "workflow_executions",
   "workflow_steps",
   "workflows",

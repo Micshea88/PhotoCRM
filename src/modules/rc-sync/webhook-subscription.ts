@@ -117,18 +117,52 @@ export async function ensureWebhookSubscription(
           feature: "rc-sync.webhook",
           organizationId: args.organizationId,
           status: err instanceof RingCentralApiError ? err.status : undefined,
+          rcBody: err instanceof RingCentralApiError ? err.body : undefined,
         },
         "[rc-sync] subscription renew failed (gone/expired) — recreating",
       )
     }
   }
 
-  const created = await client.subscribeWebhook({
+  // Log the exact request shape we send so a create failure is diagnosable
+  // from logs alone (RC's 400 bodies are specific). NEVER log the verification
+  // token value — it's a shared secret; its length is enough to confirm it's set.
+  const requestShape = {
+    feature: "rc-sync.webhook",
+    organizationId: args.organizationId,
     eventFilters: [TELEPHONY_SESSIONS_EVENT_FILTER],
     address,
     expiresIn: WEBHOOK_EXPIRES_IN_SECONDS,
-    verificationToken,
-  })
+    verificationTokenLength: verificationToken.length,
+  }
+  log.info(requestShape, "[rc-sync] creating webhook subscription")
+
+  let created
+  try {
+    created = await client.subscribeWebhook({
+      eventFilters: [TELEPHONY_SESSIONS_EVENT_FILTER],
+      address,
+      expiresIn: WEBHOOK_EXPIRES_IN_SECONDS,
+      verificationToken,
+    })
+  } catch (err) {
+    if (err instanceof RingCentralApiError) {
+      // Surface RC's exact response body — this is the diagnostic that was
+      // missing (handleServerError logs .message/.stack but not the custom
+      // .body property, so without this the 400 body was lost).
+      log.error(
+        { ...requestShape, status: err.status, rcBody: err.body },
+        "[rc-sync] subscription create failed",
+      )
+    } else {
+      log.error(
+        { ...requestShape, err: err instanceof Error ? err.message : String(err) },
+        "[rc-sync] subscription create failed (non-API error)",
+      )
+    }
+    throw err
+  }
+
   await tx
     .update(telephonyConnections)
     .set({ webhookSubscriptionId: created.id, updatedAt: new Date() })

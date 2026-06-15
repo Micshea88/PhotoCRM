@@ -4,6 +4,7 @@ import { z } from "zod"
 import { and, eq, isNull } from "drizzle-orm"
 import { orgAction, ActionError } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
+import { RingCentralApiError } from "@/lib/ringcentral/client"
 import { telephonyConnections } from "@/modules/telephony/schema"
 import { enqueueIfNoActiveJob } from "@/modules/rc-sync/queries"
 import { isRcSyncEnabled, kickRcSyncConsumer } from "@/modules/rc-sync/runner"
@@ -90,10 +91,22 @@ export const bootstrapRcWebhook = orgAction
     }
     const userId = liveRows.find((r) => r.userId === ctx.activeOrg.userId)?.userId ?? firstUserId
 
-    const result = await ensureWebhookSubscription(ctx.db, {
-      organizationId: ctx.activeOrg.id,
-      userId,
-    })
+    let result
+    try {
+      result = await ensureWebhookSubscription(ctx.db, {
+        organizationId: ctx.activeOrg.id,
+        userId,
+      })
+    } catch (err) {
+      // Surface RC's exact response body so the operator sees the actual cause
+      // ("RC 400: <body>") instead of a bare "RingCentral API error 400". The
+      // body is bounded (RC returns short JSON) but truncate defensively.
+      if (err instanceof RingCentralApiError) {
+        const body = (err.body || "(empty body)").slice(0, 400)
+        throw new ActionError("VALIDATION", `RingCentral ${String(err.status)}: ${body}`)
+      }
+      throw err
+    }
     if (result.action === "skipped") {
       throw new ActionError(
         "VALIDATION",

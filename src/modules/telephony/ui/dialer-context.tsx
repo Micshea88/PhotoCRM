@@ -11,6 +11,7 @@ import {
 } from "react"
 import { recordInboundCall, recordOutboundCall } from "@/modules/calls/actions"
 import { lookupContactByPhone } from "@/modules/telephony/actions"
+import { enqueueCallSync } from "@/modules/rc-sync/actions"
 import { classifyDisposition } from "@/modules/telephony/classify-disposition"
 import { useWebPhone, type DialerUiState } from "./use-web-phone"
 
@@ -161,6 +162,7 @@ function DialerProviderInner({
       durationMs: number
       reason?: string
       previousKind: "starting" | "ringing" | "connected"
+      telephonySessionId?: string
     }) => {
       const call = currentCallRef.current
       if (!call) return
@@ -178,12 +180,20 @@ function DialerProviderInner({
         disposition,
         reason: details.reason ?? null,
         externalId: null,
+        telephonySessionId: details.telephonySessionId ?? null,
       }
       // Best-effort either way. The call already happened; a failed
       // server write (network blip, contact deleted mid-call) is not
       // surfaced — the dialer UX is independent of the activity write.
       const write = call.direction === "incoming" ? recordInboundCall : recordOutboundCall
       void write(row).catch(noop)
+      // RC-sync Layer 2: enqueue a targeted pull keyed by the telephony
+      // session id so the worker overwrites the provisional heuristic
+      // disposition with RC's authoritative truth. No-op when the flag is
+      // off (the action gates on RC_SYNC_ENABLED). Best-effort.
+      if (details.telephonySessionId) {
+        void enqueueCallSync({ telephonySessionId: details.telephonySessionId }).catch(noop)
+      }
     },
     [],
   )

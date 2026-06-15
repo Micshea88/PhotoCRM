@@ -163,6 +163,9 @@ export const recordOutboundCallInput = z.object({
   disposition: recordedCallDispositionSchema,
   reason: z.string().max(1000).nullable().optional(),
   externalId: z.string().nullable().optional(),
+  // Telephony session id from the SDK — the RC-sync Layer-2 precise
+  // reconciliation key (Rule 0). Null when the SDK didn't surface one.
+  telephonySessionId: z.string().max(128).nullable().optional(),
 })
 
 /**
@@ -189,6 +192,9 @@ export const recordInboundCallInput = z.object({
   disposition: recordedCallDispositionSchema,
   reason: z.string().max(1000).nullable().optional(),
   externalId: z.string().nullable().optional(),
+  // Telephony session id from the SDK — the RC-sync Layer-2 precise
+  // reconciliation key (Rule 0). Null when the SDK didn't surface one.
+  telephonySessionId: z.string().max(128).nullable().optional(),
 })
 
 export type LogCallInput = z.infer<typeof logCallInput>

@@ -301,6 +301,9 @@ export interface UseWebPhoneArgs {
     durationMs: number
     reason?: string
     previousKind: "starting" | "ringing" | "connected"
+    /** RC telephony session id of the just-ended call (when the SDK
+     *  surfaced one) — the RC-sync Layer-2 precise reconciliation key. */
+    telephonySessionId?: string
   }) => void
   /** Fired when an inbound call starts ringing. The context expands
    *  the widget and kicks off the caller-ID → contact lookup, pushing
@@ -372,6 +375,11 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const pendingStreamRef = useRef<MediaStream | null>(null)
   const cancelledRef = useRef(false)
+  // RC telephony session id of the current call, captured from the SDK at
+  // end (populated by then). Threaded through onCallEnded so the row + the
+  // RC-sync Layer-2 job carry the precise reconciliation key. Cleared at the
+  // start of each new call so a stale id never leaks across calls.
+  const telephonySessionIdRef = useRef<string | null>(null)
 
   // Inbound callbacks — stashed in refs so the SDK-init effect (which
   // depends only on sipInfo) always reads the latest identity without
@@ -476,6 +484,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
           }
           sessionRef.current = session
           inboundSessionRef.current = session
+          telephonySessionIdRef.current = null
           const sessionId = session.callId || `inbound-${Date.now().toString(36)}`
           const fromNumber = safeRemoteNumber(session)
           dispatch({ type: "inbound_ringing", sessionId, fromNumber })
@@ -538,6 +547,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
 
           session.on("failed", () => {
             const snap = stateRef.current
+            if (session.sessionId) telephonySessionIdRef.current = session.sessionId
             if (snap.kind === "inbound_ringing") {
               // Technical failure before answer (negotiation error, etc.)
               // — dismiss the ring UI but write NO row: a failure is not
@@ -556,6 +566,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
 
           session.on("disposed", () => {
             const snap = stateRef.current
+            if (session.sessionId) telephonySessionIdRef.current = session.sessionId
             if (snap.kind !== "inbound_ringing") {
               // Answered call ended → shared ended path logs the row.
               dispatch({ type: "session_ended" })
@@ -583,11 +594,13 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
           })
           session.on("failed", (subject: unknown) => {
             const reason = typeof subject === "string" ? subject : "failed"
+            if (session.sessionId) telephonySessionIdRef.current = session.sessionId
             releaseSession(sessionRef.current)
             dispatch({ type: "session_ended", reason })
             sessionRef.current = null
           })
           session.on("disposed", () => {
+            if (session.sessionId) telephonySessionIdRef.current = session.sessionId
             releaseSession(sessionRef.current)
             dispatch({ type: "session_ended" })
             sessionRef.current = null
@@ -670,6 +683,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
       durationMs: state.durationMs,
       reason: state.reason,
       previousKind: state.previousKind,
+      telephonySessionId: telephonySessionIdRef.current ?? undefined,
     })
   }, [state])
 
@@ -687,6 +701,7 @@ export function useWebPhone(args: UseWebPhoneArgs): UseWebPhoneResult {
     releaseSession(sessionRef.current)
     sessionRef.current = null
     inboundSessionRef.current = null
+    telephonySessionIdRef.current = null
     // eslint-disable-next-line no-console -- TELEPHONY-DIAG temporary; stripped in follow-up once Mike confirms
     console.log("[TELEPHONY-DIAG]", "startCall → getUserMedia imminent", {
       to: callArgs.phoneNumber,

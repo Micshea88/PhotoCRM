@@ -224,6 +224,7 @@ export const recordOutboundCall = orgAction
       notes,
       recordingFileId: null,
       source: "ringcentral",
+      telephonySessionId: parsedInput.telephonySessionId ?? null,
       externalId: parsedInput.externalId ?? null,
       // `external_metadata` retains phoneNumber + reason for
       // debugging / 3b webhook reconciliation. `disposition` is also
@@ -319,6 +320,7 @@ export const recordInboundCall = orgAction
       notes: null,
       recordingFileId: null,
       source: "ringcentral",
+      telephonySessionId: parsedInput.telephonySessionId ?? null,
       externalId: parsedInput.externalId ?? null,
       externalMetadata: {
         phoneNumber: parsedInput.phoneNumber,

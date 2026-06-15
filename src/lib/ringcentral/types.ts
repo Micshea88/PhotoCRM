@@ -45,9 +45,10 @@ export interface RcCallLogRecord {
   recording?: RcRecording
 }
 
-/** List response wrapper for the call-log endpoint. */
+/** List response wrapper for the call-log endpoint. `records` is optional —
+ *  RC omits it when there are no matches, so callers must guard. */
 export interface RcCallLogListResponse {
-  records: RcCallLogRecord[]
+  records?: RcCallLogRecord[]
   paging?: { page?: number; perPage?: number; totalPages?: number; totalElements?: number }
 }
 

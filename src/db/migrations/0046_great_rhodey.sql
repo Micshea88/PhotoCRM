@@ -1,0 +1,2 @@
+ALTER TABLE "call_log" ADD COLUMN "telephony_session_id" text;--> statement-breakpoint
+CREATE INDEX "call_log_org_telephony_session_idx" ON "call_log" USING btree ("organization_id","telephony_session_id") WHERE "call_log"."telephony_session_id" IS NOT NULL;

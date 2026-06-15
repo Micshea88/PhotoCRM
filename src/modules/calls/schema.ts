@@ -83,6 +83,12 @@ export const callLog = pgTable(
      *  key; partial-unique per org (see index below). Null until a sync
      *  job links/creates the row. */
     rcCallId: text("rc_call_id"),
+    /** Telephony session id captured from the SDK at hangup on a
+     *  Pathway-witnessed call. The PRECISE Layer-2 reconciliation key
+     *  (Rule 0): the sync worker matches the RC record to THIS exact row
+     *  by session id rather than the fuzzy phone+time merge. Non-unique
+     *  (RC can emit >1 call-log record per session, e.g. transfers). */
+    telephonySessionId: text("telephony_session_id"),
     /** RC's `lastModifiedTime` for this record. Monotonicity guard so a
      *  stale reconciliation sweep can never overwrite newer RC truth. */
     rcLastModifiedTime: timestamp("rc_last_modified_time", { withTimezone: true }),
@@ -135,6 +141,12 @@ export const callLog = pgTable(
     uniqueIndex("call_log_org_rc_call_id_uidx")
       .on(t.organizationId, t.rcCallId)
       .where(sql`${t.rcCallId} IS NOT NULL`),
+    // Layer-2 precise reconciliation lookup (Rule 0). NON-unique partial
+    // (RC may emit >1 call-log record per telephony session, e.g. a
+    // transferred call) — fast lookup, mirrors the rc_call_id partial.
+    index("call_log_org_telephony_session_idx")
+      .on(t.organizationId, t.telephonySessionId)
+      .where(sql`${t.telephonySessionId} IS NOT NULL`),
   ],
 )
 

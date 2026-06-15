@@ -1,7 +1,7 @@
 import "server-only"
 import { env } from "@/lib/env"
 import { getValidAccessToken } from "@/modules/telephony/token-refresh"
-import type { RcCallLogRecord, RcSubscriptionResponse } from "./types"
+import type { RcCallLogRecord, RcCallLogListResponse, RcSubscriptionResponse } from "./types"
 
 /**
  * Single seam for every RingCentral REST call in the rc-sync layer.
@@ -101,6 +101,20 @@ export class RingCentralClient {
     return this.request<RcCallLogRecord>(
       `/restapi/v1.0/account/~/call-log/${encodeURIComponent(rcCallId)}?view=Detailed`,
     )
+  }
+
+  /**
+   * Resolve the authoritative call-log record for a telephony session id — the
+   * Layer-2 precise lookup. Returns the first matching record, or null if RC
+   * hasn't populated the call log yet (the worker then re-defers + retries).
+   * ⚠️ VERIFY the `telephonySessionId` query param against RC docs at build;
+   * if unsupported, fall back to a recent-window list + client-side filter.
+   */
+  async getCallBySessionId(telephonySessionId: string): Promise<RcCallLogRecord | null> {
+    const res = await this.request<RcCallLogListResponse>(
+      `/restapi/v1.0/account/~/call-log?view=Detailed&telephonySessionId=${encodeURIComponent(telephonySessionId)}`,
+    )
+    return res.records?.[0] ?? null
   }
 
   /** Create an account-level telephony/sessions webhook subscription. Used in

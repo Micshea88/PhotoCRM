@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
 import { log } from "@/lib/log"
-import { ringCentralClientForUser } from "@/lib/ringcentral/client"
+import { ringCentralClientWithToken } from "@/lib/ringcentral/client"
+import type { RcCallLogRecord } from "@/lib/ringcentral/types"
 import { listConnectedProvidersForOrgImpl } from "@/modules/telephony/queries"
 import { getValidAccessToken } from "@/modules/telephony/token-refresh"
 import { reconcileCallRecord } from "@/modules/rc-sync/reconcile"
@@ -44,67 +45,81 @@ async function rcConnectionUserId(
   return rows.find((r) => r.provider === "ringcentral")?.userId ?? null
 }
 
-async function processJob(job: DueRcSyncJob): Promise<"done" | "failed" | "dead" | "skipped"> {
+type JobTx = Parameters<typeof claimRcSyncJob>[0]
+type JobOutcome = "done" | "failed" | "dead" | "skipped"
+
+/** Fetch the RC call-log record for a job using a MACHINE-context client built
+ *  from a pre-fetched, tx-bound token (no ALS lookup). Default implementation;
+ *  injectable in tests so the worker path is exercised without real RC HTTP. */
+export type RcRecordFetcher = (
+  job: DueRcSyncJob,
+  accessToken: string,
+) => Promise<RcCallLogRecord | null>
+
+const defaultRecordFetcher: RcRecordFetcher = (job, accessToken) => {
+  const client = ringCentralClientWithToken(accessToken)
+  if (job.telephonySessionId) return client.getCallBySessionId(job.telephonySessionId)
+  if (job.rcCallId) return client.getCall(job.rcCallId)
+  return Promise.resolve(null)
+}
+
+/**
+ * Process one job inside an already-org-scoped tx. CRITICAL: the token is
+ * fetched via `getValidAccessToken(args, tx)` — tx-bound, so it needs NO
+ * request ALS context (the bug that bit the first live test was building the
+ * client via the request-context `ringCentralClientForUser`, whose token getter
+ * called `getValidAccessToken` WITHOUT a tx → `withOrgContext` → "no org context
+ * in scope"). Exported + DI on the record fetcher so a no-ALS test can reproduce
+ * + guard this exact regression.
+ */
+export async function runRcSyncJobInTx(
+  tx: JobTx,
+  job: DueRcSyncJob,
+  fetchRecord: RcRecordFetcher = defaultRecordFetcher,
+): Promise<JobOutcome> {
+  const claimed = await claimRcSyncJob(tx, job.id)
+  if (!claimed) return "skipped" // another worker took it
+
+  // Build 2 handles kind="call_log" only; transcript/ai_notes are later builds.
+  if (job.kind !== "call_log") {
+    await markRcSyncJobFailed(tx, job.id, job.attempts, `unsupported kind "${job.kind}" in Build 2`)
+    return "failed"
+  }
+
+  try {
+    const userId = await rcConnectionUserId(tx)
+    if (!userId) {
+      const r = await markRcSyncJobFailed(tx, job.id, job.attempts, "no live RC connection for org")
+      return r.dead ? "dead" : "failed"
+    }
+    // Tx-bound token fetch — no ALS context required.
+    const { token } = await getValidAccessToken({ organizationId: job.organizationId, userId }, tx)
+    const record = await fetchRecord(job, token)
+    if (!record) {
+      // RC call-log not populated yet — re-defer per backoff.
+      const r = await markRcSyncJobFailed(tx, job.id, job.attempts, "RC record not ready")
+      return r.dead ? "dead" : "failed"
+    }
+    await reconcileCallRecord(tx, job.organizationId, record, {
+      telephonySessionId: job.telephonySessionId ?? undefined,
+    })
+    await markRcSyncJobDone(tx, job.id)
+    return "done"
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const r = await markRcSyncJobFailed(tx, job.id, job.attempts, msg)
+    return r.dead ? "dead" : "failed"
+  }
+}
+
+async function processJob(job: DueRcSyncJob): Promise<JobOutcome> {
   return db.transaction(async (tx) => {
-    // Per-job org context (defense-in-depth: enforce RLS during the write).
+    // Per-job org context (defense-in-depth: enforce RLS during the write) —
+    // matches the workflow-execute machine pattern.
     await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
     await tx.execute(sql`SELECT set_config('app.current_org', ${job.organizationId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
-
-    const claimed = await claimRcSyncJob(tx, job.id)
-    if (!claimed) return "skipped" // another worker took it
-
-    // Build 2 handles kind="call_log" only; transcript/ai_notes are later builds.
-    if (job.kind !== "call_log") {
-      await markRcSyncJobFailed(
-        tx,
-        job.id,
-        job.attempts,
-        `unsupported kind "${job.kind}" in Build 2`,
-      )
-      return "failed"
-    }
-
-    let outcome: "done" | "failed" | "dead" = "done"
-    try {
-      const userId = await rcConnectionUserId(tx)
-      if (!userId) {
-        const r = await markRcSyncJobFailed(
-          tx,
-          job.id,
-          job.attempts,
-          "no live RC connection for org",
-        )
-        return r.dead ? "dead" : "failed"
-      }
-      // Pre-flight the token in THIS tx (RLS-scoped SELECT FOR UPDATE); the
-      // client then reuses the rotated token for the HTTP call.
-      await getValidAccessToken({ organizationId: job.organizationId, userId }, tx)
-      const client = ringCentralClientForUser({ organizationId: job.organizationId, userId })
-
-      const record = job.telephonySessionId
-        ? await client.getCallBySessionId(job.telephonySessionId)
-        : job.rcCallId
-          ? await client.getCall(job.rcCallId)
-          : null
-
-      if (!record) {
-        // RC call-log not populated yet — re-defer per backoff.
-        const r = await markRcSyncJobFailed(tx, job.id, job.attempts, "RC record not ready")
-        return r.dead ? "dead" : "failed"
-      }
-
-      await reconcileCallRecord(tx, job.organizationId, record, {
-        telephonySessionId: job.telephonySessionId ?? undefined,
-      })
-      await markRcSyncJobDone(tx, job.id)
-      outcome = "done"
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      const r = await markRcSyncJobFailed(tx, job.id, job.attempts, msg)
-      outcome = r.dead ? "dead" : "failed"
-    }
-    return outcome
+    return runRcSyncJobInTx(tx, job)
   })
 }
 

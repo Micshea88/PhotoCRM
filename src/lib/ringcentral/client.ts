@@ -160,9 +160,12 @@ function rcServerUrl(): string {
 }
 
 /**
- * Production factory: a client authed as a specific (org, user) RingCentral
- * connection. Wraps `getValidAccessToken` — which opens its own transactional
- * org-context + handles rotation — so callers just `await client.getCall(...)`.
+ * REQUEST-CONTEXT factory: a client authed as a specific (org, user) RC
+ * connection. Its token getter calls `getValidAccessToken` WITHOUT a tx, which
+ * falls back to `withOrgContext` — so it ONLY works where an org ALS context is
+ * established (orgAction / server components). It THROWS "no org context in
+ * scope" from jobs/cron/webhooks. For those machine contexts use
+ * `ringCentralClientWithToken` with a token fetched via `getValidAccessToken(args, tx)`.
  */
 export function ringCentralClientForUser(args: {
   organizationId: string
@@ -171,5 +174,18 @@ export function ringCentralClientForUser(args: {
   return new RingCentralClient({
     baseUrl: rcServerUrl(),
     getAccessToken: async () => (await getValidAccessToken(args)).token,
+  })
+}
+
+/**
+ * MACHINE-CONTEXT factory: a client that uses an already-fetched access token.
+ * Jobs/cron/webhooks fetch the token via `getValidAccessToken(args, tx)` (which
+ * stays inside the worker's tx and needs no ALS context), then build the client
+ * with it — avoiding the `withOrgContext` ALS lookup entirely.
+ */
+export function ringCentralClientWithToken(accessToken: string): RingCentralClient {
+  return new RingCentralClient({
+    baseUrl: rcServerUrl(),
+    getAccessToken: () => Promise.resolve(accessToken),
   })
 }

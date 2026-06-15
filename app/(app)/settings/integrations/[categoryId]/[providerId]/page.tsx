@@ -7,7 +7,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { getCategoryById, getProviderById } from "@/modules/integrations/registry"
 import type { IntegrationProvider } from "@/modules/integrations/types"
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
-import { listConnectedProvidersForUser } from "@/modules/telephony/queries"
+import { listConnectedProvidersForUser, orgRcCallSyncEnabled } from "@/modules/telephony/queries"
 
 /**
  * /settings/integrations/[categoryId]/[providerId] — provider wizard.
@@ -81,9 +81,24 @@ export default async function IntegrationsProviderPage({
 
   const canManage = true
 
+  // RingCentral only: is the account telephony webhook already bootstrapped?
+  // Org-level read (the webhook is one-per-account, not per-user). Only when
+  // connected — the button lives in the connected branch.
+  const callSyncEnabled =
+    staticProvider.id === "ringcentral" && hasLiveRow
+      ? await runWithOrgContext({ orgId, role: extendedRole, userId: session.user.id }, async () =>
+          orgRcCallSyncEnabled(),
+        )
+      : false
+
   return (
     <div className="p-6">
-      <ProviderDetail category={category} provider={provider} canManage={canManage} />
+      <ProviderDetail
+        category={category}
+        provider={provider}
+        canManage={canManage}
+        callSyncEnabled={callSyncEnabled}
+      />
     </div>
   )
 }

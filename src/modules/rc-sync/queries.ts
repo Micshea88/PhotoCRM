@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, lte, asc, sql } from "drizzle-orm"
+import { and, eq, inArray, lte, asc, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import type * as schema from "@/db/schema"
@@ -34,6 +34,52 @@ export async function enqueueRcSyncJob(tx: DbHandle, args: EnqueueRcSyncArgs): P
     scheduledFor: secondsFromNow(RC_SYNC_BACKOFF_SECONDS[0]),
   })
   return id
+}
+
+/**
+ * Dedup-aware enqueue: insert a job ONLY if no active (pending|running) job
+ * already exists for the same (org, kind, key). The key is the
+ * telephony_session_id when present (the Rule-0 reconciliation key), else the
+ * rc_call_id. Returns whether a new row was inserted plus the relevant job id.
+ *
+ * This is the convergence point for the two producers that race on the same
+ * call: the dialer's post-hangup enqueue (Layer 2) and the account webhook
+ * (Layer 1) both fire for the same telephony session id; whoever lands first
+ * creates the job, the other is a no-op. Runs inside the caller's
+ * org-context tx (RLS on rc_sync_jobs scopes the existence check to the org).
+ */
+export async function enqueueIfNoActiveJob(
+  tx: DbHandle,
+  args: EnqueueRcSyncArgs,
+): Promise<{ enqueued: boolean; id: string }> {
+  const keyCondition = args.telephonySessionId
+    ? eq(rcSyncJobs.telephonySessionId, args.telephonySessionId)
+    : args.rcCallId
+      ? eq(rcSyncJobs.rcCallId, args.rcCallId)
+      : null
+  // No usable dedup key → fall back to a plain insert (shouldn't happen for
+  // the webhook/dialer paths, which always carry a session id).
+  if (!keyCondition) {
+    const id = await enqueueRcSyncJob(tx, args)
+    return { enqueued: true, id }
+  }
+
+  const [existing] = await tx
+    .select({ id: rcSyncJobs.id })
+    .from(rcSyncJobs)
+    .where(
+      and(
+        eq(rcSyncJobs.organizationId, args.organizationId),
+        eq(rcSyncJobs.kind, args.kind),
+        keyCondition,
+        inArray(rcSyncJobs.status, ["pending", "running"]),
+      ),
+    )
+    .limit(1)
+  if (existing) return { enqueued: false, id: existing.id }
+
+  const id = await enqueueRcSyncJob(tx, args)
+  return { enqueued: true, id }
 }
 
 export interface DueRcSyncJob {

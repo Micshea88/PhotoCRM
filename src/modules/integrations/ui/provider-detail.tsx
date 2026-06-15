@@ -21,6 +21,7 @@ import type {
 } from "@/modules/integrations/types"
 import { ProviderConnectButton } from "./provider-connect-button"
 import { ProviderDisconnectButton } from "./provider-disconnect-button"
+import { ProviderCallSyncButton } from "./provider-call-sync-button"
 
 /**
  * Provider wizard shell — server component. Renders the provider
@@ -115,10 +116,14 @@ export function ProviderDetail({
   category,
   provider,
   canManage,
+  callSyncEnabled = false,
 }: {
   category: IntegrationCategory
   provider: IntegrationProvider
   canManage: boolean
+  /** RingCentral only — whether the account telephony webhook is bootstrapped.
+   *  Drives the "Enable call sync" button state. */
+  callSyncEnabled?: boolean
 }) {
   const enabledCapabilities = (Object.keys(provider.capabilityFlags) as (keyof CapabilityFlags)[])
     .filter((k) => provider.capabilityFlags[k])
@@ -177,13 +182,21 @@ export function ProviderDetail({
       <Card className={cn("p-6", canManage ? null : "bg-[var(--color-muted)]/40")}>
         {canManage ? (
           isConnected ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <ProviderDisconnectButton providerId={provider.id} providerName={provider.name} />
                 <span className="text-xs text-[var(--color-muted-foreground)]">
                   Disconnecting stops {provider.name} from being available for calls and SMS.
                 </span>
               </div>
+              {provider.id === "ringcentral" ? (
+                <div className="border-t border-[var(--color-border)] pt-4">
+                  <ProviderCallSyncButton
+                    providerId={provider.id}
+                    initialEnabled={callSyncEnabled}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-3">

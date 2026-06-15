@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, lt } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { log } from "@/lib/log"
 import { withOrgContext } from "@/lib/org-context"
@@ -9,6 +9,8 @@ import {
   RingCentralTransientError,
   refreshConnectionUnconditionally,
 } from "@/modules/telephony/token-refresh"
+import { isRcSyncEnabled } from "@/modules/rc-sync/runner"
+import { ensureWebhookSubscription } from "@/modules/rc-sync/webhook-subscription"
 
 /**
  * Daily resurrection cron for RingCentral connections.
@@ -135,6 +137,53 @@ export async function GET(request: Request) {
     }
   }
 
+  // RC-sync Layer 3 (renewal half): renew EXISTING webhook subscriptions so
+  // they never hit RC's ~7-day expiry. Only touches connections that already
+  // carry a webhookSubscriptionId — bootstrap (first create) is the explicit
+  // one-time Settings button, never auto-enabled here. Flag-gated + fully
+  // best-effort: a failure logs and is retried next run, never breaks token
+  // refresh above.
+  let webhookRenewed = 0
+  let webhookErrors = 0
+  if (isRcSyncEnabled()) {
+    const subscribed = await db
+      .select({
+        id: telephonyConnections.id,
+        organizationId: telephonyConnections.organizationId,
+        userId: telephonyConnections.userId,
+      })
+      .from(telephonyConnections)
+      .where(
+        and(
+          eq(telephonyConnections.provider, "ringcentral"),
+          isNull(telephonyConnections.deletedAt),
+          isNotNull(telephonyConnections.webhookSubscriptionId),
+        ),
+      )
+      .limit(BATCH_LIMIT)
+
+    for (const c of subscribed) {
+      try {
+        const res = await withOrgContext(
+          (tx) =>
+            ensureWebhookSubscription(tx, { organizationId: c.organizationId, userId: c.userId }),
+          { orgId: c.organizationId, role: "owner", userId: c.userId },
+        )
+        if (res.action === "renewed" || res.action === "created") webhookRenewed += 1
+      } catch (err) {
+        webhookErrors += 1
+        log.warn(
+          {
+            feature: "rc-sync.webhook.cron",
+            connectionId: c.id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "[rc-sync] webhook renewal failed — next cron run will retry",
+        )
+      }
+    }
+  }
+
   return Response.json({
     ok: true,
     total: candidates.length,
@@ -142,6 +191,8 @@ export async function GET(request: Request) {
     authErrors,
     transientErrors,
     unknownErrors,
+    webhookRenewed,
+    webhookErrors,
     batchLimit: BATCH_LIMIT,
     moreToProcess: candidates.length === BATCH_LIMIT,
   })

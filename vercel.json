@@ -6,6 +6,7 @@
     { "path": "/api/jobs/cron/purge-deleted", "schedule": "0 4 * * *" },
     { "path": "/api/jobs/cron/workflow-trigger-matcher", "schedule": "* * * * *" },
     { "path": "/api/jobs/cron/workflow-execute", "schedule": "* * * * *" },
-    { "path": "/api/jobs/cron/refresh-telephony-tokens", "schedule": "30 4 * * *" }
+    { "path": "/api/jobs/cron/refresh-telephony-tokens", "schedule": "30 4 * * *" },
+    { "path": "/api/jobs/cron/rc-sync-sweep", "schedule": "*/5 * * * *" }
   ]
 }

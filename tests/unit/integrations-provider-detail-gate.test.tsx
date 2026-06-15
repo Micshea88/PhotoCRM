@@ -11,6 +11,13 @@ vi.mock("@/modules/telephony/actions", () => ({
   disconnectTelephony: vi.fn(() => Promise.resolve({ data: { ok: true } })),
 }))
 
+// ProviderCallSyncButton (RingCentral connected branch) imports the rc-sync
+// server action, which transitively pulls @/lib/db → @/lib/env (same client
+// guard problem as the telephony actions above). Stub it too.
+vi.mock("@/modules/rc-sync/actions", () => ({
+  bootstrapRcWebhook: vi.fn(() => Promise.resolve({ data: { ok: true, action: "created" } })),
+}))
+
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
 import { getCategoryById, getProviderById } from "@/modules/integrations/registry"
 

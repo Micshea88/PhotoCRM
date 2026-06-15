@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
 import { withOrgContext } from "@/lib/org-context"
@@ -97,6 +97,36 @@ export async function listConnectedProvidersForUser(
   userId: string,
 ): Promise<ConnectedProviderRow[]> {
   return withOrgContext((tx) => listConnectedProvidersForUserImpl(tx, userId))
+}
+
+/**
+ * Org-level "is call sync enabled?" — does ANY live RingCentral connection in
+ * the current org carry a webhook subscription id? Drives the Settings →
+ * Integrations "Enable call sync" button state (Enabled vs not). The webhook is
+ * account-level (one-per-RC-account), so the subscription lives on whichever
+ * connection bootstrapped it; this checks org-wide rather than per-user.
+ *
+ * `webhook_subscription_id` is an opaque RC id, not a secret — safe to reduce
+ * to a boolean for the client. Tokens/validationToken are never read here.
+ */
+export async function orgRcCallSyncEnabledImpl(tx: DbHandle): Promise<boolean> {
+  const rows = await tx
+    .select({ id: telephonyConnections.id })
+    .from(telephonyConnections)
+    .where(
+      and(
+        eq(telephonyConnections.provider, "ringcentral"),
+        isNull(telephonyConnections.deletedAt),
+        isNotNull(telephonyConnections.webhookSubscriptionId),
+      ),
+    )
+    .limit(1)
+  return rows.length > 0
+}
+
+/** Public wrapper — org-context read of the call-sync enabled flag. */
+export async function orgRcCallSyncEnabled(): Promise<boolean> {
+  return withOrgContext(orgRcCallSyncEnabledImpl)
 }
 
 /**

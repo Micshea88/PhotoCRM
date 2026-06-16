@@ -110,7 +110,22 @@ export const env = createEnv({
     // webhook event (RC webhooks are not HMAC-signed — this token is the
     // per-event auth). Optional so non-RC deploys still boot; the webhook
     // route (Build 3) rejects events when it's unset/mismatched.
-    RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN: z.string().min(1).optional(),
+    //
+    // Max length: RC enforces an UNDOCUMENTED ceiling on
+    // deliveryMode.verificationToken — a 48-char value is rejected at
+    // subscription-create with CMN-101 "value is invalid" (confirmed against
+    // prod 2026-06-15; RC's own docs example is "hello-world", 11 chars). The
+    // schema has no published max, so we cap at 40 to fail fast at boot with a
+    // clear message instead of surfacing as a runtime RC 400 on the bootstrap
+    // button.
+    RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN: z
+      .string()
+      .min(1)
+      .max(40, {
+        message:
+          "RC rejects verification tokens above ~40 chars — generate with openssl rand -hex 16 for a safe 32-char value",
+      })
+      .optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),

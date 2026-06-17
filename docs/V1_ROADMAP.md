@@ -233,7 +233,8 @@ RIGHT: [Phone]  [Notifications]  [Settings]  [User dropdown]
 - **CENTER:** tabs (Overview / Activities / Intelligence) → Data Highlights → Recent Activities → Associated records
 - **RIGHT sidebar:** related-record panels (Companies, Events, Tasks, Payments, Notes)
 
-Activities tab sub-tabs: All / Notes / Emails / Calls / Tasks / Meetings.
+Center tabs: Overview / Activities / Tasks (Tasks is a top-level tab — Mike, 2026-06-16).
+Activities sub-tabs (communications only): All / Notes / Emails / Calls / Meetings / SMS.
 
 ---
 

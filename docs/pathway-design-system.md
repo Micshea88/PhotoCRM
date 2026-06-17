@@ -371,38 +371,35 @@ Raw renders are a bug.
 
 ## 7. Center column tabs (polish #5 Fix 7a)
 
-The contact-detail center column has **two** main tabs:
+The contact-detail center column has **three** top-level tabs:
 
 ```
-        Overview  Activities
-        ──────    ─────────
+        Overview  Activities  Tasks
+        ──────    ─────────   ─────
 ```
 
 - Tabs are **center-aligned** (HubSpot pattern).
 - Underline-on-active styling.
-- The legacy "To-Do's" tab is removed. Tasks live under the
-  Activities sub-filter strip — when Push 7 ships contact-scoped
-  tasks, the Tasks tab inside Activities surfaces the data.
+- **Tasks is a top-level tab** (override of the earlier "Tasks lives
+  under the Activities sub-filter" decision — Mike, 2026-06-16). The
+  Contact Tasks build fills it; it is NOT an Activities sub-filter.
+  The communications types (Notes / Calls / Emails / Meetings / SMS)
+  remain sub-filters under Activities.
+- The legacy "To-Do's" tab is removed.
 
 ### Activities sub-filter strip (polish #5 Fix 7b)
 
-Inside the Activities tab, a 7-tab HubSpot underline strip filters
-the feed. Counts render inline.
+Inside the Activities tab, a 6-tab HubSpot underline strip filters
+the feed (the communications types only — Tasks is now its own
+top-level tab). Counts render inline.
 
 ```
-All activities (N)  Notes (N)  Calls (N)  Emails (0)  Tasks (0)  Meetings (N)  SMS (N)
+All activities (N)  Notes (N)  Calls (N)  Emails (N)  Meetings (N)  SMS (N)
 ```
 
 Active tab = underline + primary color. Inactive = muted text.
 
-Placeholder filters (Emails / Tasks / SMS) selected → an
-intentional empty state surfaces the ship-target sentence:
-
-- Emails → "Email logging ships in Push 5+ once the integration lands."
-- Tasks → "Tasks ship in Push 7. Once they exist they'll surface here."
-- SMS → "SMS logging ships in Push 5+ once the provider integration lands."
-
-Mobile (`<lg`) renders the same 7-tab strip with `overflow-x-auto`
+Mobile (`<lg`) renders the same 6-tab strip with `overflow-x-auto`
 
 - `whitespace-nowrap` so it scrolls horizontally on narrow viewports.
 

@@ -34,6 +34,11 @@ describe("hotfix 0041 — orgAction write path under app_authenticated", () => {
     const client = await pool.connect()
     try {
       await client.query("BEGIN")
+      // Migration 0047: the contacts overlay reads app.current_view_all_events
+      // instead of the role string. Default it on for the owner-context seed +
+      // the mirrored orgAction sequence below (org-clamp still enforces
+      // isolation, which is what this test proves).
+      await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
 
       // ── Setup: seed two orgs + a user who is a member of orgA ──
       const userId = createId()
@@ -82,10 +87,12 @@ describe("hotfix 0041 — orgAction write path under app_authenticated", () => {
       expect(m.rows.length).toBe(1)
       expect(m.rows[0]?.role).toBe("owner")
 
-      // 3. GUC sets (provisional Better Auth role).
+      // 3. GUC sets (provisional Better Auth role + visibility flag, matching
+      //    the updated orgAction which resolves view_all_events override-aware).
       await client.query("SELECT set_config('app.current_org', $1, true)", [orgA])
       await client.query("SELECT set_config('app.current_role', 'owner', true)")
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId])
+      await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
 
       // 4. Action body — first an INSERT against an RLS-protected
       //    table (contacts), then a SELECT to confirm cross-org

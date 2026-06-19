@@ -9,6 +9,7 @@ import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { projects } from "@/modules/projects/schema"
+import { contacts } from "@/modules/contacts/schema"
 import { member } from "@/modules/auth/schema"
 import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
@@ -17,9 +18,11 @@ import { recomputeTaskStatus, sweepDependentsAfterStatusChange } from "./depende
 import {
   addTaskChecklistItemInput,
   addTaskDependencyInput,
+  associateTaskEventInput,
   createProjectStageInput,
   createTaskInput,
   deleteProjectStageInput,
+  removeTaskEventInput,
   deleteTaskInput,
   markTaskDoneInput,
   markTaskInProgressInput,
@@ -54,6 +57,35 @@ async function assertProjectInOrg(db: DbHandle, projectId: string, orgId: string
   if (!row) {
     throw new ActionError("VALIDATION", "Project not found in this organization.")
   }
+}
+
+async function assertContactInOrg(db: DbHandle, contactId: string, orgId: string) {
+  const [row] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.id, contactId),
+        eq(contacts.organizationId, orgId),
+        isNull(contacts.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!row) {
+    throw new ActionError("VALIDATION", "Contact not found in this organization.")
+  }
+}
+
+/**
+ * Revalidate the page(s) a task (or project-stage) surfaces on. A task can be
+ * scoped to an Event (project) page, a contact page, or both — revalidate
+ * whichever links it carries so the contact Tasks tab + the Event tasks list
+ * both refresh. `contactId` is optional so project-stage actions (which only
+ * carry a projectId) can reuse it.
+ */
+function revalidateTaskScope(task: { projectId: string | null; contactId?: string | null }) {
+  if (task.projectId) revalidatePath(`/events/${task.projectId}`)
+  if (task.contactId) revalidatePath(`/contacts/${task.contactId}`)
 }
 
 async function assertTaskInOrg(db: DbHandle, taskId: string, orgId: string) {
@@ -124,7 +156,14 @@ export const createTask = orgAction
   .metadata({ actionName: "tasks.create" })
   .inputSchema(createTaskInput)
   .action(async ({ parsedInput, ctx }) => {
-    await assertProjectInOrg(ctx.db, parsedInput.projectId, ctx.activeOrg.id)
+    // Contact Tasks: scope to a project (Event), a contact, or both. The Zod
+    // .refine guarantees at least one; assert whichever is present is in-org.
+    if (parsedInput.projectId) {
+      await assertProjectInOrg(ctx.db, parsedInput.projectId, ctx.activeOrg.id)
+    }
+    if (parsedInput.contactId) {
+      await assertContactInOrg(ctx.db, parsedInput.contactId, ctx.activeOrg.id)
+    }
     if (parsedInput.projectStageId) {
       await assertProjectStageInOrg(ctx.db, parsedInput.projectStageId, ctx.activeOrg.id)
     }
@@ -136,7 +175,8 @@ export const createTask = orgAction
     await ctx.db.insert(tasks).values({
       id,
       organizationId: ctx.activeOrg.id,
-      projectId: parsedInput.projectId,
+      projectId: parsedInput.projectId ?? null,
+      contactId: parsedInput.contactId ?? null,
       projectStageId: parsedInput.projectStageId ?? null,
       title: parsedInput.title,
       description: parsedInput.description ?? null,
@@ -161,10 +201,17 @@ export const createTask = orgAction
       {
         resourceType: "task",
         resourceId: id,
-        metadata: { projectId: parsedInput.projectId, title: parsedInput.title },
+        metadata: {
+          projectId: parsedInput.projectId ?? null,
+          contactId: parsedInput.contactId ?? null,
+          title: parsedInput.title,
+        },
       },
     )
-    revalidatePath(`/events/${parsedInput.projectId}`)
+    revalidateTaskScope({
+      projectId: parsedInput.projectId ?? null,
+      contactId: parsedInput.contactId ?? null,
+    })
     return { id }
   })
 
@@ -207,7 +254,7 @@ export const updateTask = orgAction
       .where(
         and(eq(tasks.id, id), eq(tasks.organizationId, ctx.activeOrg.id), isNull(tasks.deletedAt)),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Task not found")
@@ -223,7 +270,7 @@ export const updateTask = orgAction
       "tasks.updated",
       { resourceType: "task", resourceId: id, metadata: rest },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id }
   })
 
@@ -248,7 +295,7 @@ export const markTaskDone = orgAction
           isNull(tasks.deletedAt),
         ),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Task not found")
@@ -267,7 +314,7 @@ export const markTaskDone = orgAction
       "tasks.done",
       { resourceType: "task", resourceId: parsedInput.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id: parsedInput.id }
   })
 
@@ -294,7 +341,7 @@ export const markTaskNotDone = orgAction
           isNull(tasks.deletedAt),
         ),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Task not found")
@@ -312,7 +359,7 @@ export const markTaskNotDone = orgAction
       "tasks.not_done",
       { resourceType: "task", resourceId: parsedInput.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id: parsedInput.id }
   })
 
@@ -335,7 +382,7 @@ export const markTaskInProgress = orgAction
           isNull(tasks.deletedAt),
         ),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Task not found")
@@ -351,7 +398,7 @@ export const markTaskInProgress = orgAction
       "tasks.in_progress",
       { resourceType: "task", resourceId: parsedInput.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id: parsedInput.id }
   })
 
@@ -374,7 +421,7 @@ export const markTaskNotStarted = orgAction
           isNull(tasks.deletedAt),
         ),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Task not found")
@@ -395,7 +442,7 @@ export const markTaskNotStarted = orgAction
       "tasks.not_started",
       { resourceType: "task", resourceId: parsedInput.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id: parsedInput.id }
   })
 
@@ -413,7 +460,7 @@ export const deleteTask = orgAction
           isNull(tasks.deletedAt),
         ),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Task not found or already deleted")
@@ -429,7 +476,7 @@ export const deleteTask = orgAction
       "tasks.deleted",
       { resourceType: "task", resourceId: parsedInput.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id: parsedInput.id }
   })
 
@@ -447,7 +494,7 @@ export const restoreTask = orgAction
           isNotNull(tasks.deletedAt),
         ),
       )
-      .returning({ id: tasks.id, projectId: tasks.projectId })
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
     const first = result[0]
     if (!first) {
       throw new ActionError("NOT_FOUND", "Deleted task not found")
@@ -463,7 +510,116 @@ export const restoreTask = orgAction
       "tasks.restored",
       { resourceType: "task", resourceId: parsedInput.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
+    return { id: parsedInput.id }
+  })
+
+// ─── EVENT ASSOCIATION (Contact Tasks) ─────────────────────────────────
+
+/**
+ * Link an existing task to an Event (project). Keeps any existing contact
+ * link so the task rolls up to both the contact's Tasks tab and the Event's
+ * task list. The CHECK is satisfied either way (project_id becomes non-null).
+ */
+export const associateTaskEvent = orgAction
+  .metadata({ actionName: "tasks.associate_event" })
+  .inputSchema(associateTaskEventInput)
+  .action(async ({ parsedInput, ctx }) => {
+    await assertProjectInOrg(ctx.db, parsedInput.projectId, ctx.activeOrg.id)
+    const result = await ctx.db
+      .update(tasks)
+      .set({
+        projectId: parsedInput.projectId,
+        updatedAt: new Date(),
+        updatedBy: ctx.session.user.id,
+      })
+      .where(
+        and(
+          eq(tasks.id, parsedInput.id),
+          eq(tasks.organizationId, ctx.activeOrg.id),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .returning({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
+    const first = result[0]
+    if (!first) {
+      throw new ActionError("NOT_FOUND", "Task not found")
+    }
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "tasks.event_associated",
+      {
+        resourceType: "task",
+        resourceId: parsedInput.id,
+        metadata: { projectId: parsedInput.projectId },
+      },
+    )
+    revalidateTaskScope(first)
+    return { id: parsedInput.id }
+  })
+
+/**
+ * Remove a task's Event link, reverting it to contact-scoped. Blocked when the
+ * task has no contact to fall back to (a project-only task can't drop its
+ * event — it would violate the at-least-one-scope rule).
+ */
+export const removeTaskEvent = orgAction
+  .metadata({ actionName: "tasks.remove_event" })
+  .inputSchema(removeTaskEventInput)
+  .action(async ({ parsedInput, ctx }) => {
+    const [existing] = await ctx.db
+      .select({ id: tasks.id, projectId: tasks.projectId, contactId: tasks.contactId })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.id, parsedInput.id),
+          eq(tasks.organizationId, ctx.activeOrg.id),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!existing) {
+      throw new ActionError("NOT_FOUND", "Task not found")
+    }
+    if (!existing.contactId) {
+      throw new ActionError(
+        "VALIDATION",
+        "Add a contact before removing the event — a task must belong to an event or a contact.",
+      )
+    }
+    await ctx.db
+      .update(tasks)
+      .set({ projectId: null, updatedAt: new Date(), updatedBy: ctx.session.user.id })
+      .where(
+        and(
+          eq(tasks.id, parsedInput.id),
+          eq(tasks.organizationId, ctx.activeOrg.id),
+          isNull(tasks.deletedAt),
+        ),
+      )
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "tasks.event_removed",
+      {
+        resourceType: "task",
+        resourceId: parsedInput.id,
+        metadata: { previousProjectId: existing.projectId },
+      },
+    )
+    // Revalidate the old Event page (link removed) + the contact page (now shows it).
+    revalidateTaskScope({ projectId: existing.projectId, contactId: existing.contactId })
     return { id: parsedInput.id }
   })
 
@@ -733,7 +889,7 @@ export const updateProjectStage = orgAction
       "project_stages.updated",
       { resourceType: "project_stage", resourceId: id, metadata: rest },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id }
   })
 
@@ -767,6 +923,6 @@ export const deleteProjectStage = orgAction
       "project_stages.deleted",
       { resourceType: "project_stage", resourceId: first.id },
     )
-    revalidatePath(`/events/${first.projectId}`)
+    revalidateTaskScope(first)
     return { id: first.id }
   })

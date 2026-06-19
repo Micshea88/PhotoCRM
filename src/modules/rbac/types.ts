@@ -86,6 +86,17 @@ export const PERMISSION_KEYS = [
   "view_events",
   "edit_events",
   "delete_events",
+  /**
+   * Visibility scope on the assignment-scoped overlay (contacts / events /
+   * tasks). Granted = sees ALL of the org's contacts/events/tasks; not
+   * granted = sees only the ones assigned to them (project assignment, or —
+   * for tasks — direct assignee). Defaults: owner/admin/manager/accountant
+   * granted; `user` (team member) NOT granted (least privilege). The
+   * assignment-scoped RLS reads the resolved value off the
+   * `app.current_view_all_events` GUC. Owner toggles a specific team member
+   * up via the Phase 4 member-settings UI (the contractor→employee case).
+   */
+  "view_all_events",
   "view_financial_data",
   "view_reports",
   "send_invoices",

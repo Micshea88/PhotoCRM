@@ -43,8 +43,17 @@ export async function setOrgContext(
   orgId: string,
   role = "owner",
   userId: string | null = null,
+  // app.current_view_all_events (migration 0047) — the visibility flag the
+  // assignment-scoped overlay reads instead of the role string. Derived from
+  // role by default (role !== 'user' → true), mirroring the production
+  // withOrgContext fallback, so sees-all roles keep seeing all. Pass
+  // explicitly to probe an override.
+  viewAllEvents: boolean = role !== "user",
 ) {
   await db.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)
   await db.execute(sql`SELECT set_config('app.current_role', ${role}, true)`)
   await db.execute(sql`SELECT set_config('app.current_user_id', ${userId ?? ""}, true)`)
+  await db.execute(
+    sql`SELECT set_config('app.current_view_all_events', ${viewAllEvents ? "true" : "false"}, true)`,
+  )
 }

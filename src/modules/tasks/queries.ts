@@ -1,6 +1,7 @@
 import "server-only"
 import { and, eq, gte, isNull, lte } from "drizzle-orm"
 import { withOrgContext } from "@/lib/org-context"
+import { projects } from "@/modules/projects/schema"
 import { tasks, taskDependencies, taskChecklistItems, projectStages } from "./schema"
 
 export type Task = typeof tasks.$inferSelect
@@ -15,6 +16,26 @@ export async function listTasksForProject(projectId: string, opts: ListOptions =
       ? eq(tasks.projectId, projectId)
       : and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt))
     return tx.select().from(tasks).where(where).orderBy(tasks.order, tasks.dueDate)
+  })
+}
+
+/**
+ * Contact Tasks tab — every task scoped to this contact (Open + Completed),
+ * with the linked Event's name for the inline tag (null when the task isn't
+ * event-linked, or when the viewer can't see that project under RLS). The UI
+ * (ContactTasksPane) partitions Open vs Completed and renders the event chips.
+ */
+export async function listTasksForContact(contactId: string, opts: ListOptions = {}) {
+  return withOrgContext(async (tx) => {
+    const where = opts.withDeleted
+      ? eq(tasks.contactId, contactId)
+      : and(eq(tasks.contactId, contactId), isNull(tasks.deletedAt))
+    return tx
+      .select({ task: tasks, eventName: projects.name })
+      .from(tasks)
+      .leftJoin(projects, eq(projects.id, tasks.projectId))
+      .where(where)
+      .orderBy(tasks.dueDate, tasks.order)
   })
 }
 

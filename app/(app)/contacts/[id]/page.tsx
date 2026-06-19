@@ -14,6 +14,9 @@ import { listDistinctContactTags } from "@/modules/contacts/filter-spec"
 import { contactLabel } from "@/modules/contacts/display"
 import { loadContactActivity } from "@/modules/contacts/activity-loader"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
+import { listProjectsForOrg } from "@/modules/projects/queries"
+import { listTasksForContact } from "@/modules/tasks/queries"
+import { ContactTasksPane, type ContactTaskItem } from "@/modules/tasks/ui/contact-tasks-pane"
 import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { userHasConnectedPhoneProvider } from "@/modules/telephony/queries"
@@ -95,6 +98,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           allContacts,
           allTags,
           hasConnectedPhoneProvider,
+          contactTaskRows,
+          projectRows,
         ] = await Promise.all([
           listContactCompanyAssociations(id),
           loadContactActivity(orgId, id),
@@ -108,7 +113,21 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           // select-1 existence check; inherits the inner runWithOrgContext
           // ALS ctx so RLS role + GUCs are already set.
           userHasConnectedPhoneProvider(session.user.id),
+          // Contact Tasks tab: this contact's tasks (Open + Completed, with
+          // event name), plus the org's events for the picker/chips.
+          listTasksForContact(id),
+          listProjectsForOrg(),
         ])
+        const contactTasks: ContactTaskItem[] = contactTaskRows.map(({ task, eventName }) => ({
+          id: task.id,
+          title: task.title,
+          dueDate: task.dueDate,
+          status: task.status,
+          completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+          projectId: task.projectId,
+          eventName: eventName ?? null,
+        }))
+        const eventOptions = projectRows.map((p) => ({ id: p.id, name: p.name }))
         return {
           row,
           associations,
@@ -117,6 +136,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           leadSourceValues: leadSources,
           hiddenLeadSources: hiddenSources,
           hasConnectedPhoneProvider,
+          contactTasks,
+          eventOptions,
           // P3 (C6c polish #2) — referrals = every contact in the org
           // except this one. ContactRefPicker filters client-side.
           referralOptions: allContacts
@@ -144,6 +165,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     referralOptions,
     tagOptions,
     hasConnectedPhoneProvider,
+    contactTasks,
+    eventOptions,
   } = data
   const { contact, company } = row
   // P3 (C6c polish #2) — find the referred-by contact's display name
@@ -318,6 +341,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             primaryPhone={contact.primaryPhone}
           />
         )
+        const tasksBlock = (
+          <ContactTasksPane
+            contactId={contact.id}
+            tasks={contactTasks}
+            eventOptions={eventOptions}
+          />
+        )
         return (
           <>
             {/* P3 (C6d) — mobile single-column tabbed shell (<lg).
@@ -344,6 +374,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                     {activityBlock}
                   </div>
                 }
+                tasks={tasksBlock}
                 associations={<ContactDetailRight associations={associationsView} />}
                 about={<ContactDetailLeft {...leftBaseProps} panes={["info", "about"]} />}
               />
@@ -358,7 +389,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 activity still grows the row past the viewport. */}
             <div className="hidden gap-6 lg:grid lg:min-h-[calc(100vh-14rem)] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
               <ContactDetailLeft {...leftBaseProps} />
-              <ContactDetailCenter overview={aiBlock} activity={activityBlock} />
+              <ContactDetailCenter overview={aiBlock} activity={activityBlock} tasks={tasksBlock} />
               <ContactDetailRight associations={associationsView} />
             </div>
           </>

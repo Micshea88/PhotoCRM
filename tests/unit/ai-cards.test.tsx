@@ -176,7 +176,7 @@ describe("ContactActivityFeed", () => {
     },
   ]
 
-  it("renders all entries + the locked 7-tab sub-filter strip", () => {
+  it("renders all entries + the 6-tab communications sub-filter strip (Tasks moved to its own tab)", () => {
     render(<ContactActivityFeed contactId="test-c" entries={entries} />)
     // Title format: "<Kind> by <Actor>" for non-call kinds (Polish #5
     // Fix 6 original contract). Calls are the exception — they preserve
@@ -185,15 +185,16 @@ describe("ContactActivityFeed", () => {
     // 2026-06-10 "Call by Mike" regression on dialer-logged calls.
     expect(screen.getByText("Note by Alice")).toBeInTheDocument()
     expect(screen.getByText("Call (outgoing)")).toBeInTheDocument()
-    // Polish #5 Fix 7b — sub-tab strip with 7 fixed tabs, counts inline.
+    // Contact Tasks build — the strip is communications-only (6 tabs);
+    // Tasks is now a top-level contact tab, not a sub-filter here.
     expect(screen.getByRole("tab", { name: /All activities \(2\)/ })).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: /Notes \(1\)/ })).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: /Calls \(1\)/ })).toBeInTheDocument()
-    // Placeholder filters surface with zero counts but always present.
     expect(screen.getByRole("tab", { name: /Emails \(0\)/ })).toBeInTheDocument()
-    expect(screen.getByRole("tab", { name: /Tasks \(0\)/ })).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: /Meetings \(0\)/ })).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: /SMS \(0\)/ })).toBeInTheDocument()
+    // Tasks is no longer a sub-filter tab.
+    expect(screen.queryByRole("tab", { name: /Tasks \(/ })).toBeNull()
   })
 
   it("filter tab narrows the visible entries", async () => {
@@ -327,17 +328,24 @@ describe("ContactActivityFeed", () => {
 })
 
 describe("ContactDetailCenter — tab strip", () => {
-  // Polish #5 Fix 7a — center column now has 2 tabs only:
-  // Overview / Activities. To-Do's removed; Tasks moved to the
-  // Activities sub-filter strip (Push 7 wires it).
-  it("renders Overview / Activities and starts on Overview", async () => {
+  // Contact Tasks build — center column now has 3 tabs:
+  // Overview / Activities / Tasks. To-Do's removed; Tasks is its own
+  // top-level tab (was the Activities sub-filter placeholder).
+  it("renders Overview / Activities / Tasks and starts on Overview", async () => {
     const { ContactDetailCenter } = await import("@/modules/contacts/ui/contact-detail-center")
-    render(<ContactDetailCenter overview={<div>OV</div>} activity={<div>AC</div>} />)
+    render(
+      <ContactDetailCenter
+        overview={<div>OV</div>}
+        activity={<div>AC</div>}
+        tasks={<div>TK</div>}
+      />,
+    )
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByRole("tab", { name: "Activities" })).toHaveAttribute(
       "aria-selected",
       "false",
     )
+    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute("aria-selected", "false")
     expect(screen.queryByRole("tab", { name: "To-Do's" })).toBeNull()
     expect(screen.getByText("OV")).toBeInTheDocument()
   })
@@ -345,7 +353,13 @@ describe("ContactDetailCenter — tab strip", () => {
   it("clicking a tab switches active state + content", async () => {
     const { ContactDetailCenter } = await import("@/modules/contacts/ui/contact-detail-center")
     const user = userEvent.setup()
-    render(<ContactDetailCenter overview={<div>OV</div>} activity={<div>AC</div>} />)
+    render(
+      <ContactDetailCenter
+        overview={<div>OV</div>}
+        activity={<div>AC</div>}
+        tasks={<div>TK</div>}
+      />,
+    )
     await user.click(screen.getByRole("tab", { name: "Activities" }))
     expect(screen.getByRole("tab", { name: "Activities" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByText("AC")).toBeInTheDocument()

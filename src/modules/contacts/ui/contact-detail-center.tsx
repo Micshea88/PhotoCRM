@@ -6,24 +6,28 @@ import { cn } from "@/lib/utils"
 /**
  * Push 3 (C6c) — center column with the tab strip.
  *
- * Polish #5 Fix 7a — dropped the "To-Do's" tab. Tasks moved under
- * `Activities → Tasks` filter inside `ContactActivityFeed` (when
- * Push 7 lands). The strip now has TWO tabs only: Overview and
- * Activities. The wrapper is center-aligned (HubSpot pattern).
+ * Polish #5 Fix 7a dropped the "To-Do's" tab. The Contact Tasks build
+ * (Mike, 2026-06-16) promotes Tasks to its OWN top-level tab — design-system
+ * §7 updated. The strip now has THREE tabs: Overview | Activities | Tasks.
+ * Communications types stay as sub-filters under Activities. The wrapper is
+ * center-aligned (HubSpot pattern).
  */
-type TabKey = "overview" | "activities"
-const TAB_ORDER: TabKey[] = ["overview", "activities"]
+type TabKey = "overview" | "activities" | "tasks"
+const TAB_ORDER: TabKey[] = ["overview", "activities", "tasks"]
 const TAB_LABEL: Record<TabKey, string> = {
   overview: "Overview",
   activities: "Activities",
+  tasks: "Tasks",
 }
 
 export function ContactDetailCenter({
   overview,
   activity,
+  tasks,
 }: {
   overview: ReactNode
   activity: ReactNode
+  tasks: ReactNode
 }) {
   const [active, setActive] = useState<TabKey>("overview")
 
@@ -82,6 +86,7 @@ export function ContactDetailCenter({
       >
         {active === "overview" && overview}
         {active === "activities" && activity}
+        {active === "tasks" && tasks}
       </div>
     </section>
   )

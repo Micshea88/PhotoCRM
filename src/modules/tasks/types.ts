@@ -31,18 +31,28 @@ const customFieldsSchema = z.record(z.string(), z.unknown()).optional().nullable
 
 // ─── Task CRUD ─────────────────────────────────────────────────────────
 
-export const createTaskInput = z.object({
-  projectId: z.string(),
-  projectStageId: z.string().nullable().optional(),
-  title: z.string().min(1).max(300),
-  description: optionalText(10000).optional(),
-  assigneeUserId: z.string().nullable().optional(),
-  assigneeRole: optionalText(120).optional(),
-  dueDate: isoDateNullable.optional(),
-  priority: taskPrioritySchema.optional(),
-  order: z.number().int().nonnegative().default(0),
-  customFields: customFieldsSchema,
-})
+export const createTaskInput = z
+  .object({
+    // Contact Tasks: a task is scoped to a project (Event), a contact, or
+    // both — at least one is required (the .refine below). Project-scoped
+    // creation (Event detail, template instantiation) passes projectId;
+    // contact-scoped creation (the contact Tasks tab) passes contactId.
+    projectId: z.string().nullable().optional(),
+    contactId: z.string().nullable().optional(),
+    projectStageId: z.string().nullable().optional(),
+    title: z.string().min(1).max(300),
+    description: optionalText(10000).optional(),
+    assigneeUserId: z.string().nullable().optional(),
+    assigneeRole: optionalText(120).optional(),
+    dueDate: isoDateNullable.optional(),
+    priority: taskPrioritySchema.optional(),
+    order: z.number().int().nonnegative().default(0),
+    customFields: customFieldsSchema,
+  })
+  .refine((v) => !!v.projectId || !!v.contactId, {
+    message: "A task must belong to an event or a contact.",
+    path: ["contactId"],
+  })
 
 /**
  * updateTask explicitly EXCLUDES `status` and `completedAt` —
@@ -65,6 +75,16 @@ export const updateTaskInput = z.object({
   // exposed as a separate input — the action infers it.
   customFields: customFieldsSchema,
 })
+
+// Contact Tasks: associate an existing task with an Event (project), or clear
+// the association. Associate keeps the contact link (rolls up to both);
+// remove reverts a task to contact-scoped (the action rejects clearing the
+// last scope — a project-only task can't drop its event without a contact).
+export const associateTaskEventInput = z.object({
+  id: z.string(),
+  projectId: z.string().min(1),
+})
+export const removeTaskEventInput = z.object({ id: z.string() })
 
 export const markTaskDoneInput = z.object({ id: z.string() })
 export const markTaskNotDoneInput = z.object({ id: z.string() })

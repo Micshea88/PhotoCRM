@@ -33,6 +33,11 @@ async function withAppAuthClient<T>(
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    // Migration 0047: the contacts overlay reads app.current_view_all_events
+    // instead of the role string. Default it on (full visibility) so the
+    // owner-context seeds + the applyGuc owner context insert/read as before;
+    // org isolation is still enforced by the org-clamp, which these tests probe.
+    await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
     try {
       // Seed two orgs + one contact in each. The seeds must happen
       // BEFORE the role switch — RLS is FORCE, so inserts under

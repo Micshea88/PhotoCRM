@@ -7,6 +7,7 @@ import { paymentInstallments } from "@/modules/invoices/schema"
 import { contacts, contactNotes } from "@/modules/contacts/schema"
 import { callLog } from "@/modules/calls/schema"
 import { emailLog } from "@/modules/email-log/schema"
+import { tasks } from "@/modules/tasks/schema"
 import { faqEntries } from "@/modules/help/schema"
 import { audit } from "@/modules/audit/audit"
 import { blob } from "@/lib/blob"
@@ -247,6 +248,34 @@ export async function GET(request: Request) {
   // pattern as call recordings — their lifecycle is owned by the
   // `files` purge above; we don't cascade from email_log.
 
+  // -------- Tasks (Contact Tasks build — closes pre-existing gap) --------
+  // tasks carried deletedAt/deletedBy since the PM engine but were never
+  // purged. Hard-delete soft-deleted tasks past retention. task_dependencies
+  // and task_checklist_items cascade via their FK ON DELETE CASCADE.
+  const taskRows = await db
+    .select({ id: tasks.id, organizationId: tasks.organizationId })
+    .from(tasks)
+    .where(and(isNotNull(tasks.deletedAt), lt(tasks.deletedAt, cutoff)))
+    .limit(BATCH_LIMIT)
+
+  const taskOrgCounts = new Map<string, number>()
+  for (const r of taskRows) {
+    taskOrgCounts.set(r.organizationId, (taskOrgCounts.get(r.organizationId) ?? 0) + 1)
+  }
+  for (const [orgId, count] of taskOrgCounts) {
+    await audit({ db, organizationId: orgId, actorUserId: null }, "purge.tasks", {
+      metadata: { count, retentionDays: RETENTION_DAYS },
+    })
+  }
+  if (taskRows.length > 0) {
+    await db.delete(tasks).where(
+      inArray(
+        tasks.id,
+        taskRows.map((r) => r.id),
+      ),
+    )
+  }
+
   // -------- FAQ entries (P4.2 — global, no organization_id) --------
   // FAQ entries are product-level, not org-scoped. Audit rows here
   // would have organizationId=null, which the audit() helper accepts
@@ -275,6 +304,7 @@ export async function GET(request: Request) {
       contactNotes: contactNoteRows.length,
       callLog: callRows.length,
       emailLog: emailRows.length,
+      tasks: taskRows.length,
       faqEntries: faqRows.length,
     },
     cutoff: cutoff.toISOString(),
@@ -287,6 +317,7 @@ export async function GET(request: Request) {
       contactNoteRows.length === BATCH_LIMIT ||
       callRows.length === BATCH_LIMIT ||
       emailRows.length === BATCH_LIMIT ||
+      taskRows.length === BATCH_LIMIT ||
       faqRows.length === BATCH_LIMIT,
   })
 }

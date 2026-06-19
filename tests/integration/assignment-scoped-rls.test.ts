@@ -82,10 +82,12 @@ async function seedAdminContext(client: PoolClient): Promise<Scenario> {
     [createId(), orgId, adminUserId, createId(), orgId, photogUserId],
   )
 
-  // Operate as owner to seed the rest.
+  // Operate as owner to seed the rest. Owner = sees-all → view_all_events true
+  // (migration 0047 — the overlay now reads this GUC, not the role string).
   await client.query("SELECT set_config('app.current_org', $1, true)", [orgId])
   await client.query("SELECT set_config('app.current_role', 'owner', true)")
   await client.query("SELECT set_config('app.current_user_id', $1, true)", [adminUserId])
+  await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
 
   const projectAssignedId = createId()
   const projectUnassignedId = createId()
@@ -153,9 +155,14 @@ async function seedAdminContext(client: PoolClient): Promise<Scenario> {
   }
 }
 
-async function switchToTeamMember(client: PoolClient, teamMemberUserId: string) {
+async function switchToTeamMember(client: PoolClient, teamMemberUserId: string, viewAll = false) {
   await client.query("SELECT set_config('app.current_role', 'user', true)")
   await client.query("SELECT set_config('app.current_user_id', $1, true)", [teamMemberUserId])
+  // Migration 0047: the overlay keys on this flag. Team member defaults to
+  // assignment-scoped (false); pass viewAll=true to probe an override grant.
+  await client.query("SELECT set_config('app.current_view_all_events', $1, true)", [
+    viewAll ? "true" : "false",
+  ])
 }
 
 describe("assignment-scoped RLS overlay — projects", () => {
@@ -297,6 +304,7 @@ describe("assignment-scoped RLS overlay — full-visibility control roles", () =
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
       await client.query("SELECT set_config('app.current_role', 'admin', true)")
+      await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
       const r = await client.query(`SELECT id FROM projects WHERE organization_id = $1`, [s.orgId])
       expect(r.rows.length).toBe(2)
     })
@@ -306,6 +314,7 @@ describe("assignment-scoped RLS overlay — full-visibility control roles", () =
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
       await client.query("SELECT set_config('app.current_role', 'manager', true)")
+      await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
       const r = await client.query(`SELECT id FROM projects WHERE organization_id = $1`, [s.orgId])
       expect(r.rows.length).toBe(2)
     })
@@ -315,6 +324,7 @@ describe("assignment-scoped RLS overlay — full-visibility control roles", () =
     await withRawClient(async (client) => {
       const s = await seedAdminContext(client)
       await client.query("SELECT set_config('app.current_role', 'accountant', true)")
+      await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
       const r = await client.query(`SELECT id FROM projects WHERE organization_id = $1`, [s.orgId])
       expect(r.rows.length).toBe(2)
     })
@@ -358,9 +368,11 @@ describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST
         [createId(), orgB, a.projectAssignedId, photogB],
       )
 
-      // Now operate as team member B in org B context.
+      // Now operate as team member B in org B context (assignment-scoped:
+      // relies on the forged project_photographers row, not view-all).
       await client.query("SELECT set_config('app.current_role', 'user', true)")
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [photogB])
+      await client.query("SELECT set_config('app.current_view_all_events', 'false', true)")
 
       // Probe org A's project. The new policy's outer AND-clamp is
       // `organization_id = current_setting('app.current_org', true)` —
@@ -394,6 +406,7 @@ describe("assignment-scoped RLS overlay — cross-org attack (org isolation MUST
       await client.query("SELECT set_config('app.current_org', $1, true)", [a.orgId])
       await client.query("SELECT set_config('app.current_role', 'user', true)")
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [a.photogUserId])
+      await client.query("SELECT set_config('app.current_view_all_events', 'false', true)")
       const r = await client.query(`SELECT id FROM projects WHERE id = $1`, [orgBProjectId])
       expect(r.rows.length).toBe(0)
     })
@@ -449,6 +462,48 @@ describe("assignment-scoped RLS overlay — write gate on contacts/projects", ()
         `UPDATE projects SET name = 'Mutated' WHERE id = $1 RETURNING id`,
         [s.projectAssignedId],
       )
+      expect(r.rows.length).toBe(0)
+    })
+  })
+})
+
+describe("view_all_events flag — per-user visibility override (migration 0047)", () => {
+  it("team member WITH view_all_events=true sees ALL projects/contacts/tasks in-org", async () => {
+    await withRawClient(async (client) => {
+      const s = await seedAdminContext(client)
+      // The contractor→employee grant: same `user` role, flag overridden on.
+      await switchToTeamMember(client, s.photogUserId, true)
+
+      const proj = await client.query(`SELECT id FROM projects WHERE organization_id = $1`, [
+        s.orgId,
+      ])
+      const projIds = proj.rows.map((row: { id: string }) => row.id)
+      expect(projIds).toContain(s.projectAssignedId)
+      expect(projIds).toContain(s.projectUnassignedId)
+
+      const c = await client.query(`SELECT id FROM contacts WHERE id = $1`, [
+        s.contactOnUnassignedId,
+      ])
+      expect(c.rows.length).toBe(1)
+
+      const t = await client.query(`SELECT id FROM tasks WHERE id = $1`, [s.taskOnUnassignedId])
+      expect(t.rows.length).toBe(1)
+    })
+  })
+
+  it("a view_all_events=true session STILL cannot cross orgs (flag respects the org clamp)", async () => {
+    await withRawClient(async (client) => {
+      const a = await seedAdminContext(client)
+      const orgB = createId()
+      await client.query(
+        `INSERT INTO organization (id, name, slug, created_at) VALUES ($1, 'Org B', $2, NOW())`,
+        [orgB, `orgb-${orgB.slice(0, 8)}`],
+      )
+      // Operate in org B with view-all ON — org A's project must stay hidden.
+      await client.query("SELECT set_config('app.current_org', $1, true)", [orgB])
+      await client.query("SELECT set_config('app.current_role', 'owner', true)")
+      await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
+      const r = await client.query(`SELECT id FROM projects WHERE id = $1`, [a.projectAssignedId])
       expect(r.rows.length).toBe(0)
     })
   })

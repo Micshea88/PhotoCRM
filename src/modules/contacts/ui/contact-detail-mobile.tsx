@@ -13,32 +13,32 @@ import { cn } from "@/lib/utils"
  *   ─────────────────────────────────────
  *   ActionIconRow (6 icons)
  *   ─────────────────────────────────────
- *   [Activity | Associations | About]
+ *   [Activity | Tasks | Associations | About]
  *     [active tab content]
  *
  * Tabs:
  *   - Activity   → AI Summary card + AI Insights card + activity feed
+ *   - Tasks      → ContactTasksPane (Contact Tasks build, Mike 2026-06-16)
  *   - Associations → ContactDetailRight content (sections stack as cards)
  *   - About      → ContactDetailLeft panes=["info","about"]
- *
- * To-Do's is intentionally omitted from the mobile tab strip — when
- * Push 7 ships Tasks the placement gets re-evaluated per a focused
- * design pass. See docs/pathway-build-roadmap.md "Mobile patterns".
  */
-type MobileTabKey = "activity" | "associations" | "about"
-const TAB_ORDER: MobileTabKey[] = ["activity", "associations", "about"]
+type MobileTabKey = "activity" | "tasks" | "associations" | "about"
+const TAB_ORDER: MobileTabKey[] = ["activity", "tasks", "associations", "about"]
 const TAB_LABEL: Record<MobileTabKey, string> = {
   activity: "Activity",
+  tasks: "Tasks",
   associations: "Associations",
   about: "About",
 }
 
 export function ContactDetailMobile({
   activity,
+  tasks,
   associations,
   about,
 }: {
   activity: ReactNode
+  tasks: ReactNode
   associations: ReactNode
   about: ReactNode
 }) {
@@ -98,6 +98,7 @@ export function ContactDetailMobile({
         aria-labelledby={`contact-mobile-tab-${active}`}
       >
         {active === "activity" && activity}
+        {active === "tasks" && tasks}
         {active === "associations" && associations}
         {active === "about" && about}
       </div>

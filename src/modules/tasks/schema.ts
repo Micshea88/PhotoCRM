@@ -9,9 +9,11 @@ import {
   date,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core"
 import { organization, user } from "@/modules/auth/schema"
 import { projects } from "@/modules/projects/schema"
+import { contacts } from "@/modules/contacts/schema"
 
 /**
  * The PM-engine tables per Requirements §4.8 + §6.29, Tech Arch §2.3,
@@ -85,9 +87,18 @@ export const tasks = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "restrict" }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    // Contact Tasks build: project_id is now NULLABLE. A task belongs to a
+    // project (Event), a contact, or both — enforced by the table CHECK below
+    // (at least one non-null). Project-scoped tasks (template instantiation,
+    // Event detail) keep working unchanged; contact-scoped tasks are the new
+    // lead-phase case.
+    projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+    // Contact this task belongs to (lead-phase / general task). NULL for a
+    // pure project task. ON DELETE SET NULL so deleting a contact reverts its
+    // task to project-scoped rather than destroying it — the CHECK still holds
+    // as long as project_id is set (a contact-only task is purged with its
+    // contact via the soft-delete + purge-deleted cron).
+    contactId: text("contact_id").references(() => contacts.id, { onDelete: "set null" }),
     projectStageId: text("project_stage_id").references(() => projectStages.id, {
       onDelete: "set null",
     }),
@@ -135,6 +146,14 @@ export const tasks = pgTable(
     ),
     index("tasks_org_due_date_idx").on(t.organizationId, t.dueDate, t.deletedAt),
     index("tasks_org_status_idx").on(t.organizationId, t.status, t.deletedAt),
+    // Contact Tasks: the per-contact Tasks tab read path.
+    index("tasks_org_contact_deleted_idx").on(t.organizationId, t.contactId, t.deletedAt),
+    // A task is never orphaned: it must belong to a project, a contact, or
+    // both. The three valid states are (contact-only), (project-only), (both).
+    check(
+      "tasks_project_or_contact_chk",
+      sql`${t.projectId} IS NOT NULL OR ${t.contactId} IS NOT NULL`,
+    ),
   ],
 )
 

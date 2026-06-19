@@ -19,7 +19,7 @@ import { Pool, type PoolClient } from "pg"
  *   - The transaction always ROLLBACKs at the end; tests cannot mutate state.
  */
 export async function withRawOrgContext<T>(
-  args: { orgId: string; role: string; userId?: string | null },
+  args: { orgId: string; role: string; userId?: string | null; viewAllEvents?: boolean },
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   if (!process.env.DATABASE_URL) {
@@ -33,6 +33,12 @@ export async function withRawOrgContext<T>(
       await client.query("SELECT set_config('app.current_org', $1, true)", [args.orgId])
       await client.query("SELECT set_config('app.current_role', $1, true)", [args.role])
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [args.userId ?? ""])
+      // Migration 0047: the assignment-scoped overlay reads this flag, not the
+      // role string. Derive from role (role !== 'user' → true), mirroring the
+      // production withOrgContext fallback; override explicitly when probing.
+      await client.query("SELECT set_config('app.current_view_all_events', $1, true)", [
+        (args.viewAllEvents ?? args.role !== "user") ? "true" : "false",
+      ])
       return await fn(client)
     } finally {
       await client.query("ROLLBACK")
@@ -44,10 +50,19 @@ export async function withRawOrgContext<T>(
 }
 
 /**
- * Convenience: the same shape as `withRawOrgContext` but with NO RLS settings
- * applied. Use this when the test needs to seed data under an admin role (or
- * to verify what the DB looks like with no `app.current_org` in scope —
- * which under a correctly-configured policy means "see nothing").
+ * Convenience: the same shape as `withRawOrgContext` but with NO org/role RLS
+ * settings applied. Use this when the test seeds/probes by setting
+ * `app.current_org` itself (or to verify that with no org in scope a correct
+ * policy means "see nothing").
+ *
+ * One default IS applied: `app.current_view_all_events='true'`. Migration 0047
+ * re-keyed the assignment-scoped overlay (contacts/projects/tasks) from the
+ * role string onto this flag; before it, an unset role meant "sees all" via
+ * `NOT IN ('user')`. Defaulting the flag to 'true' restores that full-
+ * visibility baseline for raw seeders that don't set a role, so existing
+ * cross-org / no-context / financial-role tests behave unchanged. Org
+ * isolation is NOT affected (the org-clamp still governs); a test probing
+ * assignment-scoping sets `app.current_view_all_events='false'` explicitly.
  */
 export async function withRawClient<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   if (!process.env.DATABASE_URL) {
@@ -57,6 +72,7 @@ export async function withRawClient<T>(fn: (client: PoolClient) => Promise<T>): 
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
     try {
       return await fn(client)
     } finally {

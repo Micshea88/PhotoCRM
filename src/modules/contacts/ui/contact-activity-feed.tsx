@@ -156,22 +156,18 @@ function timeAgo(t: Date): string {
   return t.toLocaleDateString()
 }
 
-type FilterKey = "all" | "note" | "call" | "email" | "task" | "meeting" | "sms"
+// Tasks is no longer a sub-filter here — it moved to its own top-level contact
+// tab (Contact Tasks build, Mike 2026-06-16). This strip is communications only.
+type FilterKey = "all" | "note" | "call" | "email" | "meeting" | "sms"
 
-const FILTER_ORDER: FilterKey[] = ["all", "note", "call", "email", "task", "meeting", "sms"]
+const FILTER_ORDER: FilterKey[] = ["all", "note", "call", "email", "meeting", "sms"]
 const FILTER_LABEL: Record<FilterKey, string> = {
   all: "All activities",
   note: "Notes",
   call: "Calls",
   email: "Emails",
-  task: "Tasks",
   meeting: "Meetings",
   sms: "SMS",
-}
-const PLACEHOLDER_FILTERS: Partial<Record<FilterKey, string>> = {
-  // P-email-log shipped — Email is a real filter now; only Tasks
-  // remains as a ship-target placeholder.
-  task: "Tasks ship in Push 7. Once they exist they'll surface here.",
 }
 
 /**
@@ -336,7 +332,6 @@ export function ContactActivityFeed({
       note: entries.filter((e) => e.kind === "note").length,
       call: entries.filter((e) => e.kind === "call").length,
       email: entries.filter((e) => e.kind === "email").length,
-      task: 0,
       meeting: entries.filter((e) => e.kind === "meeting").length,
       sms: entries.filter((e) => e.kind === "sms").length,
     }
@@ -357,9 +352,8 @@ export function ContactActivityFeed({
               ? entries.filter((e) => e.kind === "email")
               : activeTab === "meeting"
                 ? entries.filter((e) => e.kind === "meeting")
-                : activeTab === "sms"
-                  ? entries.filter((e) => e.kind === "sms")
-                  : []
+                : // activeTab === "sms" (exhaustive last case)
+                  entries.filter((e) => e.kind === "sms")
     return applyFilters(byTab, filters)
   }, [entries, activeTab, allTabTypeFilter, filters])
 
@@ -530,17 +524,6 @@ export function ContactActivityFeed({
             </Button>
           </>
         )}
-        {activeTab === "task" && (
-          <Button
-            type="button"
-            size="sm"
-            disabled
-            title="Contact-scoped tasks ship in Push 7."
-            data-testid="activity-create-task"
-          >
-            <Plus className="mr-1 size-3.5" aria-hidden="true" /> Create a task
-          </Button>
-        )}
         {activeTab === "meeting" && (
           <>
             <Button
@@ -667,12 +650,8 @@ export function ContactActivityFeed({
         />
       )}
 
-      {/* Empty / placeholder states. */}
-      {PLACEHOLDER_FILTERS[activeTab] && visible.length === 0 ? (
-        <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
-          {PLACEHOLDER_FILTERS[activeTab]}
-        </p>
-      ) : visible.length === 0 ? (
+      {/* Empty state. */}
+      {visible.length === 0 ? (
         <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
           {entries.length === 0
             ? "No activity yet — use the create/log buttons above to start the feed."

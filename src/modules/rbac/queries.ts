@@ -31,6 +31,8 @@ const ROLE_DEFAULTS: Record<ExtendedRole, ReadonlySet<PermissionKey>> = {
     "edit_contacts",
     "view_events",
     "edit_events",
+    // Sees all events/contacts/tasks org-wide (not assignment-scoped).
+    "view_all_events",
     "send_contracts",
     "manage_workflows",
     "manage_templates",
@@ -54,6 +56,9 @@ const ROLE_DEFAULTS: Record<ExtendedRole, ReadonlySet<PermissionKey>> = {
     "view_contractor_pay",
     "export_data",
     "use_ai_assistant",
+    // Preserves the pre-re-key behavior: accountant was in the
+    // "NOT IN ('user')" sees-all branch, so it keeps full visibility.
+    "view_all_events",
   ]),
   // Client: parked role for the future client-portal V2 work. No
   // permissions in V1.
@@ -133,6 +138,34 @@ export async function hasPermission(
       .limit(1)
     return override ? override.granted : defaultGranted
   })
+}
+
+/**
+ * Tx-bound resolution of one boolean permission for an already-known role.
+ * Used by `orgAction` (src/lib/safe-action.ts), which already holds the
+ * org-context tx and the resolved extended role and must set the
+ * `app.current_view_all_events` GUC mid-middleware — it CANNOT call
+ * `hasPermission` (that opens its own `withOrgContext`, which would nest a
+ * second transaction). Same resolution rule as `hasPermission`: per-user
+ * override row wins, else the role default.
+ */
+export async function resolvePermissionInTx(
+  tx: DbHandle,
+  userId: string,
+  role: ExtendedRole,
+  permissionKey: PermissionKey,
+): Promise<boolean> {
+  const [override] = await tx
+    .select({ granted: memberPermissionOverride.granted })
+    .from(memberPermissionOverride)
+    .where(
+      and(
+        eq(memberPermissionOverride.userId, userId),
+        eq(memberPermissionOverride.permissionKey, permissionKey),
+      ),
+    )
+    .limit(1)
+  return override ? override.granted : ROLE_DEFAULTS[role].has(permissionKey)
 }
 
 /**

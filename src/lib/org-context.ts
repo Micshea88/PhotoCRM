@@ -46,6 +46,28 @@ export interface OrgContext {
   orgId: string
   role: ExtendedRole
   userId: string
+  /**
+   * Whether this user sees ALL of the org's contacts/events/tasks (true) or
+   * only assignment-scoped rows (false) — the `view_all_events` permission,
+   * read by the assignment-scoped RLS via `app.current_view_all_events`.
+   *
+   * OPTIONAL: when omitted, `withOrgContext` falls back to the role-based
+   * default (`role !== 'user'`), which reproduces the pre-permission-flag
+   * behavior exactly and is fail-closed (a missing value scopes DOWN, never
+   * a leak). Entry points that must honor per-user OVERRIDES (orgAction, the
+   * contact-detail loader) resolve the real value via
+   * `resolvePermissionInTx` / `hasPermission` and pass it here.
+   */
+  viewAllEvents?: boolean
+}
+
+/**
+ * Effective "sees everything" value for a context: the explicit flag when
+ * provided, else the role-based default (`role !== 'user'`). Centralized so
+ * the GUC set in `withOrgContext` and any future reader agree.
+ */
+function effectiveViewAllEvents(ctx: OrgContext): boolean {
+  return ctx.viewAllEvents ?? ctx.role !== "user"
 }
 
 const storage = new AsyncLocalStorage<OrgContext>()
@@ -101,6 +123,9 @@ export async function withOrgContext<T>(
     await tx.execute(sql`SELECT set_config('app.current_org', ${ctx.orgId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', ${ctx.role}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_user_id', ${ctx.userId}, true)`)
+    await tx.execute(
+      sql`SELECT set_config('app.current_view_all_events', ${effectiveViewAllEvents(ctx) ? "true" : "false"}, true)`,
+    )
     return fn(tx)
   })
 }

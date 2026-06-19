@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { log } from "@/lib/log"
 import { member } from "@/modules/auth/schema"
-import { lookupExtendedMemberRole } from "@/modules/rbac/queries"
+import { lookupExtendedMemberRole, resolvePermissionInTx } from "@/modules/rbac/queries"
 import {
   extendedFromBetterAuth,
   type ExtendedRole,
@@ -231,6 +231,20 @@ export const orgAction = authAction.use(async ({ next, ctx }) => {
       extendedFromBetterAuth(m.role as BetterAuthRole)
     await tx.execute(sql`SELECT set_config('app.current_role', ${extendedRole}, true)`)
 
+    // Resolve the visibility-scope flag (override-aware, in this same tx) and
+    // publish it to the assignment-scoped RLS via app.current_view_all_events.
+    // Writes always carry the precise value; reads via withOrgContext inherit
+    // it through ctx.activeOrg.viewAllEvents below (or fall back role-based).
+    const viewAllEvents = await resolvePermissionInTx(
+      tx,
+      ctx.session.user.id,
+      extendedRole,
+      "view_all_events",
+    )
+    await tx.execute(
+      sql`SELECT set_config('app.current_view_all_events', ${viewAllEvents ? "true" : "false"}, true)`,
+    )
+
     return next({
       ctx: {
         ...ctx,
@@ -239,6 +253,7 @@ export const orgAction = authAction.use(async ({ next, ctx }) => {
           id: activeOrgId,
           role: extendedRole,
           userId: ctx.session.user.id,
+          viewAllEvents,
         },
       },
     })

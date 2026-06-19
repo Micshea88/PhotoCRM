@@ -14,7 +14,7 @@ import {
 } from "@/modules/custom-fields/host-helpers"
 import type { CustomFieldChange } from "@/modules/custom-fields/changes"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
-import { invalidateContactAiCache } from "./ai/cache-invalidation"
+import { touchContactActivity } from "./ai/cache-invalidation"
 import { findDedupConflict, type DedupMatchField } from "./dedup-preflight"
 import {
   addContactCompanyAssociationInput,
@@ -261,6 +261,9 @@ export const updateContact = orgAction
       "contacts.updated",
       { resourceType: "contact", resourceId: id, metadata: auditMetadata },
     )
+    // A change to the contact record itself counts as activity for AI-summary
+    // freshness (Mike's spec) — bump last_activity_at so the summary refreshes.
+    await touchContactActivity(ctx.db, ctx.activeOrg.id, id)
     revalidatePath("/contacts")
     revalidatePath(`/contacts/${id}`)
     return { id }
@@ -493,7 +496,7 @@ export const createContactNote = orgAction
     // P3 polish #5 Fix 8 — null AI cache so the next page render
     // auto-regens with the new activity counts. Atomic with the
     // insert (same orgAction transaction).
-    await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
     await audit(
       {
         db: ctx.db,
@@ -532,7 +535,7 @@ export const updateContactNote = orgAction
     // P-activities — edits to note content feed the AI summary; bust
     // the cache atomically so the next render auto-regens.
     if (result[0]) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {
@@ -567,7 +570,7 @@ export const deleteContactNote = orgAction
     if (result.length === 0) throw new ActionError("NOT_FOUND", "Note not found")
     // P-activities — same cache-bust rule applies on delete.
     if (result[0]) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {

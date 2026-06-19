@@ -6,7 +6,7 @@ import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
-import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
 import { callLog } from "./schema"
 import {
   deleteCallInput,
@@ -66,7 +66,7 @@ export const logCall = orgAction
     // P3 polish #5 Fix 8 — null AI cache so the next page render
     // auto-regens with the new activity counts. Atomic with the
     // insert (same orgAction transaction).
-    await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
 
     await audit(
       {
@@ -126,7 +126,7 @@ export const updateCall = orgAction
     // P-activities — edits to call notes feed the AI summary; bust
     // the cache atomically so the next render auto-regens.
     if (result[0]?.contactId) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {
@@ -241,7 +241,7 @@ export const recordOutboundCall = orgAction
     })
 
     if (parsedInput.contactId) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
     }
 
     await audit(
@@ -332,7 +332,7 @@ export const recordInboundCall = orgAction
     })
 
     if (parsedInput.contactId) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
     }
 
     await audit(
@@ -382,7 +382,7 @@ export const deleteCall = orgAction
     }
     // P-activities — same cache-bust rule applies on delete.
     if (result[0]?.contactId) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {

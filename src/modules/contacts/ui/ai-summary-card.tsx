@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils"
  * Falls back to a neutral empty state when no summary has been
  * cached (first view before regenerate fires).
  */
-function timeAgo(timestamp: Date | null): string {
-  if (!timestamp) return "never"
+/** Relative freshness label: "just now" under a minute, then "Nm/Nh/Nd ago". */
+function timeAgo(timestamp: Date): string {
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp.getTime()) / 1000))
-  if (seconds < 60) return `${String(seconds)}s ago`
+  if (seconds < 60) return "just now"
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${String(minutes)}m ago`
   const hours = Math.floor(minutes / 60)
@@ -32,6 +32,7 @@ export function AiSummaryCard({
   generationModel,
   rightSlot,
   className,
+  refreshing = false,
 }: {
   summary: string | null
   generatedAt: Date | null
@@ -42,6 +43,9 @@ export function AiSummaryCard({
   /** Slot for the Regenerate button or other actions. */
   rightSlot?: React.ReactNode
   className?: string
+  /** True while a background freshness refresh is in flight — shows a
+   *  subtle "Refreshing…" note in the footer. */
+  refreshing?: boolean
 }) {
   // P3 polish #5 Fix 4c — de-card. AI-generated content reads as
   // part of the page; only the heading + body + footer remain. No
@@ -64,8 +68,9 @@ export function AiSummaryCard({
         </p>
       )}
       <footer className="text-[11px] text-[var(--color-muted-foreground)]">
-        Generated {timeAgo(generatedAt)}
+        {generatedAt ? `Updated ${timeAgo(generatedAt)}` : "Not generated yet"}
         {generationModel && <span className="ml-1 opacity-70">· via {generationModel}</span>}
+        {refreshing && <span className="ml-1 opacity-70">· Refreshing…</span>}
       </footer>
     </section>
   )

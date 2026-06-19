@@ -1,30 +1,47 @@
 import "server-only"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
 import { contacts } from "../schema"
 
 /**
- * Push 3 (C6c polish #5 Fix 8) — AI cache invalidation.
+ * Mark that a contact had activity, for AI-summary freshness.
  *
- * Any action that creates or updates contact-scoped activity (notes,
- * calls, meetings, SMS) MUST call this helper after the insert so
- * the next page render sees `aiGeneratedAt = null` and the auto-
- * regen pipeline runs with fresh activity counts. Without this, the
- * 7-day cache TTL holds the stale summary through repeated visits.
+ * (Historically this NULLed all 6 ai_* cache fields — "invalidate." As of the
+ * AI-summary-freshness change it instead **bumps `last_activity_at = now()`
+ * and leaves the cache intact**, so the stale summary stays visible until the
+ * contact page's in-place client swap replaces it. The freshness check
+ * regenerates when `last_activity_at > ai_generated_at` — see
+ * `refreshContactAiSummary`.)
  *
- * Runs atomically with the surrounding orgAction transaction (every
- * orgAction body executes inside `ctx.db.transaction(...)` — see
- * `src/lib/safe-action.ts`). If the activity insert succeeds but
- * this UPDATE fails, both roll back — there's no "ghost note with
- * stale cache" state.
+ * Call this from any action that adds / edits / deletes / completes
+ * contact-scoped activity (notes, calls, meetings, SMS, email, contact-scoped
+ * tasks) OR changes the contact record itself. Runs atomically inside the
+ * surrounding orgAction transaction (see `src/lib/safe-action.ts`).
  *
- * Wiring requirement: when a NEW activity-creating action ships
- * (meetings, sms, future), the action MUST call this helper at the
- * same place createContactNote / logCall do. See
- * `docs/pathway-ai-architecture.md` "Cache invalidation".
+ * NOTE: `last_activity_at` is a BACKEND-ONLY freshness signal — it is never
+ * rendered in the UI (don't confuse it with any user-visible "last contacted"
+ * field).
  */
-export async function invalidateContactAiCache(
+export async function touchContactActivity(
+  db: NodePgDatabase<typeof schema>,
+  orgId: string,
+  contactId: string,
+): Promise<void> {
+  await db
+    .update(contacts)
+    .set({ lastActivityAt: sql`now()` })
+    .where(and(eq(contacts.id, contactId), eq(contacts.organizationId, orgId)))
+}
+
+/**
+ * Hard-reset the AI cache (NULLs all 6 ai_* fields). Reserved for a **contact
+ * merge**: the winner's identity/facts change so fundamentally that the cached
+ * summary describes a now-deleted record — a "show stale then swap" is wrong
+ * here, so we clear it and let the next view regenerate from scratch. Routine
+ * activity uses `touchContactActivity` (bump-don't-null) instead.
+ */
+export async function bustContactAiCache(
   db: NodePgDatabase<typeof schema>,
   orgId: string,
   contactId: string,

@@ -6,7 +6,7 @@ import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
-import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
 import { emailLog } from "./schema"
 import { deleteEmailInput, logEmailInput, updateEmailInput } from "./types"
 
@@ -56,7 +56,7 @@ export const logEmail = orgAction
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
-    await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
 
     await audit(
       {
@@ -113,7 +113,7 @@ export const updateEmail = orgAction
       throw new ActionError("NOT_FOUND", "Email not found")
     }
     if (result[0]?.contactId) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {
@@ -149,7 +149,7 @@ export const deleteEmail = orgAction
       throw new ActionError("NOT_FOUND", "Email not found or already deleted")
     }
     if (result[0]?.contactId) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {

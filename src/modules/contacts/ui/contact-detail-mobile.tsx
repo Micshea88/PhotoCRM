@@ -13,17 +13,19 @@ import { cn } from "@/lib/utils"
  *   ─────────────────────────────────────
  *   ActionIconRow (6 icons)
  *   ─────────────────────────────────────
- *   [Activity | Tasks | Associations | About]
+ *   [About | Activity | Tasks | Associations]
  *     [active tab content]
  *
- * Tabs:
+ * Tabs (default landing tab is Activity, not the first tab):
+ *   - About      → ContactDetailLeft panes=["info","about"]
  *   - Activity   → AI Summary card + AI Insights card + activity feed
  *   - Tasks      → ContactTasksPane (Contact Tasks build, Mike 2026-06-16)
  *   - Associations → ContactDetailRight content (sections stack as cards)
- *   - About      → ContactDetailLeft panes=["info","about"]
  */
 type MobileTabKey = "activity" | "tasks" | "associations" | "about"
-const TAB_ORDER: MobileTabKey[] = ["activity", "tasks", "associations", "about"]
+// Order: About | Activity | Tasks | Associations (Mike, 2026-06-19). The
+// default landing tab stays Activity (useState below), not the first tab.
+const TAB_ORDER: MobileTabKey[] = ["about", "activity", "tasks", "associations"]
 const TAB_LABEL: Record<MobileTabKey, string> = {
   activity: "Activity",
   tasks: "Tasks",

@@ -10,6 +10,7 @@ import { audit } from "@/modules/audit/audit"
 import type * as schema from "@/db/schema"
 import { projects } from "@/modules/projects/schema"
 import { contacts } from "@/modules/contacts/schema"
+import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
 import { member } from "@/modules/auth/schema"
 import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { validateCustomFieldsPayload } from "@/modules/custom-fields/validators"
@@ -86,6 +87,15 @@ async function assertContactInOrg(db: DbHandle, contactId: string, orgId: string
 function revalidateTaskScope(task: { projectId: string | null; contactId?: string | null }) {
   if (task.projectId) revalidatePath(`/events/${task.projectId}`)
   if (task.contactId) revalidatePath(`/contacts/${task.contactId}`)
+}
+
+/**
+ * Mark the linked contact as having activity (AI-summary freshness) when a
+ * task that belongs to a contact is created/changed/completed/deleted. No-op
+ * for pure project tasks (no contactId). Same signal notes/calls/etc. emit.
+ */
+async function touchTaskContact(db: DbHandle, orgId: string, contactId: string | null) {
+  if (contactId) await touchContactActivity(db, orgId, contactId)
 }
 
 async function assertTaskInOrg(db: DbHandle, taskId: string, orgId: string) {
@@ -212,6 +222,7 @@ export const createTask = orgAction
       projectId: parsedInput.projectId ?? null,
       contactId: parsedInput.contactId ?? null,
     })
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, parsedInput.contactId ?? null)
     return { id }
   })
 
@@ -315,6 +326,7 @@ export const markTaskDone = orgAction
       { resourceType: "task", resourceId: parsedInput.id },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -360,6 +372,7 @@ export const markTaskNotDone = orgAction
       { resourceType: "task", resourceId: parsedInput.id },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -399,6 +412,7 @@ export const markTaskInProgress = orgAction
       { resourceType: "task", resourceId: parsedInput.id },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -443,6 +457,7 @@ export const markTaskNotStarted = orgAction
       { resourceType: "task", resourceId: parsedInput.id },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -477,6 +492,7 @@ export const deleteTask = orgAction
       { resourceType: "task", resourceId: parsedInput.id },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -511,6 +527,7 @@ export const restoreTask = orgAction
       { resourceType: "task", resourceId: parsedInput.id },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -561,6 +578,7 @@ export const associateTaskEvent = orgAction
       },
     )
     revalidateTaskScope(first)
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, first.contactId)
     return { id: parsedInput.id }
   })
 
@@ -620,6 +638,7 @@ export const removeTaskEvent = orgAction
     )
     // Revalidate the old Event page (link removed) + the contact page (now shows it).
     revalidateTaskScope({ projectId: existing.projectId, contactId: existing.contactId })
+    await touchTaskContact(ctx.db, ctx.activeOrg.id, existing.contactId)
     return { id: parsedInput.id }
   })
 

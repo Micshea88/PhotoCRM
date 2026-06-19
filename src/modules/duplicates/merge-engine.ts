@@ -7,7 +7,7 @@ import { audit } from "@/modules/audit/audit"
 import { callLog } from "@/modules/calls/schema"
 import { companies } from "@/modules/companies/schema"
 import { contactCompanyAssociations, contactNotes, contacts } from "@/modules/contacts/schema"
-import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { bustContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
 import { meetings } from "@/modules/meetings/schema"
 import { opportunities } from "@/modules/opportunities/schema"
 import { paymentInstallments } from "@/modules/invoices/schema"
@@ -595,7 +595,7 @@ export async function executeContactMerge(
   // newly-relinked activities + the merged field values invalidate
   // any cached classifier output / summary / insights. The next
   // page render auto-regens with fresh facts.
-  await invalidateContactAiCache(db, ctx.organizationId, winnerId)
+  await bustContactAiCache(db, ctx.organizationId, winnerId)
 
   return { winnerId, mergedFromIds: loserIds }
 }

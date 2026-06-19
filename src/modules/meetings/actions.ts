@@ -7,7 +7,7 @@ import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
-import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
 import { meetings } from "./schema"
 
 /**
@@ -78,7 +78,7 @@ export const logMeeting = orgAction
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
-    await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
     await audit(
       {
         db: ctx.db,
@@ -125,7 +125,7 @@ export const updateMeeting = orgAction
       .returning({ id: meetings.id, contactId: meetings.contactId })
     if (result.length === 0) throw new ActionError("NOT_FOUND", "Meeting not found")
     if (result[0]) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {
@@ -161,7 +161,7 @@ export const deleteMeeting = orgAction
       throw new ActionError("NOT_FOUND", "Meeting not found or already deleted")
     }
     if (result[0]) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {

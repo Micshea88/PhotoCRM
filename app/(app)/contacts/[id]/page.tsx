@@ -28,10 +28,9 @@ import { ContactDetailRight } from "@/modules/contacts/ui/contact-detail-right"
 import { ActionIconRow } from "@/modules/contacts/ui/action-icon-row"
 import { ContactActivityFeed } from "@/modules/contacts/ui/contact-activity-feed"
 import { AiStatusBadge } from "@/modules/contacts/ui/ai-status-badge"
-import { AiSummaryCard } from "@/modules/contacts/ui/ai-summary-card"
-import { AiInsightsCard } from "@/modules/contacts/ui/ai-insights-card"
+import { AiSummaryLive } from "@/modules/contacts/ui/ai-summary-live"
 import { RegenerateAiButton } from "@/modules/contacts/ui/regenerate-ai-button"
-import { regenerateContactAiIfMissing } from "@/modules/contacts/ai/auto-regenerate"
+import { isSummaryStale } from "@/modules/contacts/ai/summary-freshness"
 import type { AiInsight } from "@/modules/contacts/ai/insights-detector"
 
 /**
@@ -193,32 +192,20 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   // there's real activity to summarize. Failure (e.g. provider
   // outage) returns null and the page falls back to the cached
   // empty state — the user can still hit Regenerate manually.
-  let liveLeadStatus = contact.aiLeadStatus
-  let liveLeadStatusReasoning = contact.aiLeadStatusReasoning
-  let liveSummaryText = contact.aiSummaryText
-  let liveGeneratedAt = contact.aiGeneratedAt
-  let liveGenerationModel = contact.aiGenerationModel
-  let insights = readCachedInsights(contact.aiInsightsJson)
-  if (contact.aiGeneratedAt === null) {
-    const fresh = await runWithOrgContext(
-      { orgId, role: tentativeRole, userId: session.user.id },
-      async () =>
-        regenerateContactAiIfMissing(contact.id, {
-          organizationId: orgId,
-          userId: session.user.id,
-          ipAddress: null,
-          userAgent: null,
-        }),
-    )
-    if (fresh) {
-      liveLeadStatus = fresh.aiLeadStatus
-      liveLeadStatusReasoning = fresh.aiLeadStatusReasoning
-      liveSummaryText = fresh.aiSummaryText
-      liveGeneratedAt = fresh.aiGeneratedAt
-      liveGenerationModel = fresh.aiGenerationModel
-      insights = fresh.aiInsights
-    }
-  }
+  // AI summary freshness: render cached values immediately; the client wrapper
+  // (AiSummaryLive) regenerates in the background + swaps in place when due. The
+  // server just computes whether a refresh is due so the client can fire on
+  // mount without an extra round-trip:
+  //   - never generated, OR
+  //   - activity newer than the summary (last_activity_at > ai_generated_at), OR
+  //   - 1 hour elapsed since generation.
+  const liveLeadStatus = contact.aiLeadStatus
+  const liveLeadStatusReasoning = contact.aiLeadStatusReasoning
+  const liveSummaryText = contact.aiSummaryText
+  const liveGeneratedAt = contact.aiGeneratedAt
+  const liveGenerationModel = contact.aiGenerationModel
+  const insights = readCachedInsights(contact.aiInsightsJson)
+  const needsAiRefresh = isSummaryStale(contact.aiGeneratedAt, contact.lastActivityAt)
   const associationsView = associations.map(({ company: c, association }) => ({
     label: c.name,
     sub: association.role,
@@ -319,15 +306,19 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           hasConnectedPhoneProvider,
         }
         const aiBlock = (
-          <div className="space-y-4">
-            <AiSummaryCard
-              summary={liveSummaryText}
-              generatedAt={liveGeneratedAt}
-              generationModel={liveGenerationModel}
-              rightSlot={<RegenerateAiButton contactId={contact.id} />}
-            />
-            <AiInsightsCard insights={insights} />
-          </div>
+          <AiSummaryLive
+            // Remount when the SERVER cache changes (e.g. manual Regenerate +
+            // router.refresh) so fresh server values become the initial state;
+            // client-side hourly/activity swaps update in place without remount.
+            key={liveGeneratedAt ? liveGeneratedAt.toISOString() : "ungenerated"}
+            contactId={contact.id}
+            initialSummary={liveSummaryText}
+            initialGeneratedAt={liveGeneratedAt ? liveGeneratedAt.toISOString() : null}
+            initialGenerationModel={liveGenerationModel}
+            initialInsights={insights}
+            needsRefresh={needsAiRefresh}
+            rightSlot={<RegenerateAiButton contactId={contact.id} />}
+          />
         )
         const activityBlock = (
           <ContactActivityFeed

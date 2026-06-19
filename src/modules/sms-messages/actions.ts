@@ -7,7 +7,7 @@ import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
-import { invalidateContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
 import { smsMessages } from "./schema"
 
 /**
@@ -66,7 +66,7 @@ export const logSms = orgAction
       sentAt: parsedInput.sentAt ? new Date(parsedInput.sentAt) : new Date(),
       sentByUserId: ctx.session.user.id,
     })
-    await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
+    await touchContactActivity(ctx.db, ctx.activeOrg.id, parsedInput.contactId)
     await audit(
       {
         db: ctx.db,
@@ -110,7 +110,7 @@ export const updateSms = orgAction
       .returning({ id: smsMessages.id, contactId: smsMessages.contactId })
     if (result.length === 0) throw new ActionError("NOT_FOUND", "SMS not found")
     if (result[0]) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {
@@ -146,7 +146,7 @@ export const deleteSms = orgAction
       throw new ActionError("NOT_FOUND", "SMS not found or already deleted")
     }
     if (result[0]) {
-      await invalidateContactAiCache(ctx.db, ctx.activeOrg.id, result[0].contactId)
+      await touchContactActivity(ctx.db, ctx.activeOrg.id, result[0].contactId)
     }
     await audit(
       {

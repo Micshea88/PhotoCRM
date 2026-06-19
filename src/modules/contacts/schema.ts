@@ -119,6 +119,19 @@ export const contacts = pgTable(
     aiInsightsJson: jsonb("ai_insights_json").$type<Record<string, unknown>>(),
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     aiGenerationModel: text("ai_generation_model"),
+    // AI-summary freshness (backend-only — NOT shown in the UI):
+    //   - lastActivityAt: bumped to now() whenever ANY activity on the
+    //     contact is added/edited/deleted/completed (notes, calls, meetings,
+    //     SMS, email, contact-scoped tasks) OR the contact record itself
+    //     changes. The freshness check regenerates the summary when this is
+    //     newer than aiGeneratedAt (replaces the old "null the cache on
+    //     activity" approach so the stale summary stays visible until the
+    //     in-place client swap lands).
+    //   - aiLastRegenAttemptAt: throttle stamp. The freshness action does an
+    //     atomic compare-and-set on this (1-minute window) so two concurrent
+    //     page loads can't both fire Haiku for the same contact.
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+    aiLastRegenAttemptAt: timestamp("ai_last_regen_attempt_at", { withTimezone: true }),
   },
   (t) => [
     index("contacts_org_deleted_created_idx").on(t.organizationId, t.deletedAt, t.createdAt.desc()),

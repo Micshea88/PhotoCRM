@@ -17,7 +17,7 @@ import { meetings } from "@/modules/meetings/schema"
 import { smsMessages } from "@/modules/sms-messages/schema"
 
 describe("C6a — ai cache columns on contacts (migration 0035)", () => {
-  it("all 6 ai_* columns exist with the expected types", async () => {
+  it("the ai_* columns exist with the expected types", async () => {
     await withTestDb(async (db) => {
       const result = await db.execute<{ column_name: string; data_type: string }>(sql`
         SELECT column_name, data_type
@@ -32,6 +32,8 @@ describe("C6a — ai cache columns on contacts (migration 0035)", () => {
         { name: "ai_generated_at", type: "timestamp with time zone" },
         { name: "ai_generation_model", type: "text" },
         { name: "ai_insights_json", type: "jsonb" },
+        // Added by the AI-summary-freshness change (throttle stamp).
+        { name: "ai_last_regen_attempt_at", type: "timestamp with time zone" },
         { name: "ai_lead_status", type: "text" },
         { name: "ai_lead_status_reasoning", type: "text" },
         { name: "ai_summary_text", type: "text" },

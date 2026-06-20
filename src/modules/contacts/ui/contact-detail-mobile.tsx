@@ -1,7 +1,13 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import {
+  MOBILE_TABS,
+  MOBILE_DEFAULT_TAB,
+  type MobileTab,
+} from "@/modules/contacts/ui/contact-detail-tabs"
 
 /**
  * Push 3 (C6d) — mobile contact detail shell.
@@ -21,12 +27,12 @@ import { cn } from "@/lib/utils"
  *   - Activity   → AI Summary card + AI Insights card + activity feed
  *   - Tasks      → ContactTasksPane (Contact Tasks build, Mike 2026-06-16)
  *   - Associations → ContactDetailRight content (sections stack as cards)
+ *
+ * FIX 1 (Mike, 2026-06-19): the active tab is mirrored to the URL (`?tab=`)
+ * via router.replace so it survives the router.refresh that follows a server
+ * action. `initialTab` comes from the server (normalized from the URL).
  */
-type MobileTabKey = "activity" | "tasks" | "associations" | "about"
-// Order: About | Activity | Tasks | Associations (Mike, 2026-06-19). The
-// default landing tab stays Activity (useState below), not the first tab.
-const TAB_ORDER: MobileTabKey[] = ["about", "activity", "tasks", "associations"]
-const TAB_LABEL: Record<MobileTabKey, string> = {
+const TAB_LABEL: Record<MobileTab, string> = {
   activity: "Activity",
   tasks: "Tasks",
   associations: "Associations",
@@ -38,23 +44,33 @@ export function ContactDetailMobile({
   tasks,
   associations,
   about,
+  initialTab = MOBILE_DEFAULT_TAB,
 }: {
   activity: ReactNode
   tasks: ReactNode
   associations: ReactNode
   about: ReactNode
+  initialTab?: MobileTab
 }) {
-  const [active, setActive] = useState<MobileTabKey>("activity")
+  const router = useRouter()
+  const [active, setActive] = useState<MobileTab>(initialTab)
 
-  function onTabKey(e: React.KeyboardEvent<HTMLButtonElement>, current: MobileTabKey) {
+  function select(tab: MobileTab) {
+    setActive(tab)
+    // Relative query — preserves the pathname, replaces the search. replace
+    // (not push) so the back button isn't polluted by tab switches.
+    router.replace(`?tab=${tab}`, { scroll: false })
+  }
+
+  function onTabKey(e: React.KeyboardEvent<HTMLButtonElement>, current: MobileTab) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return
     e.preventDefault()
-    const idx = TAB_ORDER.indexOf(current)
+    const idx = MOBILE_TABS.indexOf(current)
     const next =
       e.key === "ArrowRight"
-        ? TAB_ORDER[(idx + 1) % TAB_ORDER.length]
-        : TAB_ORDER[(idx - 1 + TAB_ORDER.length) % TAB_ORDER.length]
-    if (next) setActive(next)
+        ? MOBILE_TABS[(idx + 1) % MOBILE_TABS.length]
+        : MOBILE_TABS[(idx - 1 + MOBILE_TABS.length) % MOBILE_TABS.length]
+    if (next) select(next)
   }
 
   return (
@@ -64,7 +80,7 @@ export function ContactDetailMobile({
         aria-label="Contact detail tabs"
         className="flex gap-1 border-b border-[var(--color-border)]"
       >
-        {TAB_ORDER.map((tab) => {
+        {MOBILE_TABS.map((tab) => {
           const isActive = active === tab
           return (
             <button
@@ -76,7 +92,7 @@ export function ContactDetailMobile({
               aria-selected={isActive}
               tabIndex={isActive ? 0 : -1}
               onClick={() => {
-                setActive(tab)
+                select(tab)
               }}
               onKeyDown={(e) => {
                 onTabKey(e, tab)

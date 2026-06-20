@@ -8,6 +8,11 @@ import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/format"
 import { EventPicker, type EventOption } from "@/modules/projects/ui/event-picker"
+import { taskDueState } from "@/modules/tasks/task-due-state"
+import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
+import { HighPriorityFlag } from "@/modules/tasks/ui/high-priority-flag"
+import { useToday } from "@/modules/tasks/ui/use-today"
+import type { TaskPriority } from "@/modules/tasks/types"
 import {
   createTask,
   markTaskDone,
@@ -38,10 +43,49 @@ export interface ContactTaskItem {
   /** Linked event (project) id + name, or null when not event-linked. */
   projectId: string | null
   eventName: string | null
+  /** "low" | "medium" | "high" | null (no priority). */
+  priority: string | null
 }
 
 // Sentinels "all" / "general", or a projectId string (all are strings).
 type ChipKey = string
+
+// Priority picker — "No priority" + Low / Medium / High. Empty string is the
+// "No priority" sentinel; the caller maps it to null.
+const PRIORITY_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "No priority" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+]
+
+// The select holds a plain string; coerce the "No priority" sentinel ("") and
+// any unexpected value to null, otherwise narrow to the TaskPriority union.
+function toPriorityInput(v: string): TaskPriority | null {
+  return v === "low" || v === "medium" || v === "high" ? v : null
+}
+
+function PriorityPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="text-xs text-[var(--color-muted-foreground)]">
+      Priority
+      <select
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value)
+        }}
+        className="ml-2 inline-block h-8 w-auto rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm"
+        data-testid="contact-task-priority"
+      >
+        {PRIORITY_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
 
 export function ContactTasksPane({
   contactId,
@@ -216,6 +260,7 @@ function AddTaskForm({
 }) {
   const [title, setTitle] = useState("")
   const [dueDate, setDueDate] = useState("")
+  const [priority, setPriority] = useState("")
   const [projectId, setProjectId] = useState<string | null>(null)
   const [options, setOptions] = useState<EventOption[]>(eventOptions)
   const [saving, setSaving] = useState(false)
@@ -233,6 +278,7 @@ function AddTaskForm({
       projectId,
       title: title.trim(),
       dueDate: dueDate || undefined,
+      priority: toPriorityInput(priority),
     })
     setSaving(false)
     if (result.serverError) {
@@ -269,6 +315,7 @@ function AddTaskForm({
             className="ml-2 inline-block h-8 w-auto text-sm"
           />
         </label>
+        <PriorityPicker value={priority} onChange={setPriority} />
         <div className="min-w-[220px] flex-1">
           <EventPicker
             options={options}
@@ -303,6 +350,8 @@ function TaskRow({
   onChanged: () => void
 }) {
   const done = task.status === "done"
+  const today = useToday()
+  const dueState = taskDueState(task.dueDate, task.status, today)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -358,7 +407,10 @@ function TaskRow({
         className="size-4 shrink-0"
         data-testid="contact-task-checkbox"
       />
-      <span className={cn("flex-1 text-sm", done && "line-through")}>{task.title}</span>
+      <span className={cn("flex flex-1 items-center gap-1.5 text-sm", done && "line-through")}>
+        <HighPriorityFlag priority={task.priority} />
+        <span className={cn(dueStateTextClass(dueState))}>{task.title}</span>
+      </span>
       {task.eventName && (
         <span className="shrink-0 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[10px] text-[var(--color-muted-foreground)]">
           {task.eventName}
@@ -369,7 +421,12 @@ function TaskRow({
           Completed {formatDate(task.completedAt)}
         </span>
       ) : task.dueDate ? (
-        <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
+        <span
+          className={cn(
+            "shrink-0 text-[11px] tabular-nums",
+            dueStateTextClass(dueState) || "text-[var(--color-muted-foreground)]",
+          )}
+        >
           Due {formatDate(task.dueDate)}
         </span>
       ) : null}
@@ -422,6 +479,7 @@ function EditTaskRow({
 }) {
   const [title, setTitle] = useState(task.title)
   const [dueDate, setDueDate] = useState(task.dueDate ?? "")
+  const [priority, setPriority] = useState(task.priority ?? "")
   const [projectId, setProjectId] = useState<string | null>(task.projectId)
   const [options, setOptions] = useState<EventOption[]>(eventOptions)
   const [saving, setSaving] = useState(false)
@@ -434,11 +492,12 @@ function EditTaskRow({
     }
     setSaving(true)
     setError(null)
-    // Title / due date.
+    // Title / due date / priority.
     const upd = await updateTask({
       id: task.id,
       title: title.trim(),
       dueDate: dueDate || "",
+      priority: toPriorityInput(priority),
     })
     if (upd.serverError) {
       setSaving(false)
@@ -482,6 +541,7 @@ function EditTaskRow({
             className="ml-2 inline-block h-8 w-auto text-sm"
           />
         </label>
+        <PriorityPicker value={priority} onChange={setPriority} />
         <div className="min-w-[220px] flex-1">
           <EventPicker
             options={options}

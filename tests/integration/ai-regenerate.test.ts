@@ -18,6 +18,8 @@ import { createOrganization, createUser } from "../helpers/factories"
 import { contacts } from "@/modules/contacts/schema"
 import { contactNotes } from "@/modules/contacts/schema"
 import { meetings } from "@/modules/meetings/schema"
+import { tasks } from "@/modules/tasks/schema"
+import { projects, projectContacts } from "@/modules/projects/schema"
 import { aiUsageLog } from "@/modules/contacts/ai/ai-usage-schema"
 import {
   computeContactFacts,
@@ -126,6 +128,109 @@ describe("computeContactFacts — DB queries the right activity tables", () => {
 
       const facts = await computeContactFacts(db, orgId, jimmy)
       expect(facts?.referralsMade).toBe(0)
+    })
+  })
+
+  it("openTasks includes contact-scoped AND event tasks, excludes done + other-contact tasks", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      const cid = createId()
+      await db.insert(contacts).values({
+        id: cid,
+        organizationId: orgId,
+        firstName: "Tasky",
+        lastName: "Contact",
+        contactType: "Lead",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+
+      // A — contact-scoped open task (high priority, dated).
+      await db.insert(tasks).values({
+        id: createId(),
+        organizationId: orgId,
+        contactId: cid,
+        title: "Send contract",
+        status: "not_started",
+        dueDate: "2026-07-01",
+        priority: "high",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+
+      // B — event task: the contact is associated to the project, the task
+      // is project-scoped (no contact_id). The OR-via-project_contacts branch
+      // must still surface it.
+      const projectId = createId()
+      await db.insert(projects).values({
+        id: projectId,
+        organizationId: orgId,
+        name: "Smith Wedding",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      await db.insert(projectContacts).values({
+        id: createId(),
+        organizationId: orgId,
+        projectId,
+        contactId: cid,
+        role: "primary",
+        createdBy: userId,
+      })
+      await db.insert(tasks).values({
+        id: createId(),
+        organizationId: orgId,
+        projectId,
+        title: "Confirm timeline",
+        status: "ready",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+
+      // C — a DONE contact task must be excluded.
+      await db.insert(tasks).values({
+        id: createId(),
+        organizationId: orgId,
+        contactId: cid,
+        title: "Already finished",
+        status: "done",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+
+      // D — another contact's open task must NOT leak in.
+      const otherCid = createId()
+      await db.insert(contacts).values({
+        id: otherCid,
+        organizationId: orgId,
+        firstName: "Other",
+        lastName: "Person",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      await db.insert(tasks).values({
+        id: createId(),
+        organizationId: orgId,
+        contactId: otherCid,
+        title: "Not mine",
+        status: "not_started",
+        createdBy: userId,
+        updatedBy: userId,
+      })
+
+      const facts = await computeContactFacts(db, orgId, cid)
+      const titles = facts?.openTasks.map((t) => t.title) ?? []
+      expect(titles).toContain("Send contract")
+      expect(titles).toContain("Confirm timeline")
+      expect(titles).not.toContain("Already finished")
+      expect(titles).not.toContain("Not mine")
+
+      const high = facts?.openTasks.find((t) => t.title === "Send contract")
+      expect(high?.priority).toBe("high")
+      expect(high?.dueDate).toBe("2026-07-01")
     })
   })
 

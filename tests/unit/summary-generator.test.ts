@@ -61,6 +61,7 @@ import {
   buildEmptyContactSummary,
   buildFallbackSummary,
   formatActivityForPrompt,
+  formatOpenTasksForPrompt,
   MAX_ACTIVITY_ENTRIES,
   MAX_ACTIVITY_BODY_CHARS,
 } from "@/modules/contacts/ai/summary-generator"
@@ -97,6 +98,7 @@ function facts(): ContactFacts {
     referralsMade: 0,
     bookingCount: 0,
     highestProposalValue: 0,
+    openTasks: [],
   }
 }
 
@@ -277,5 +279,55 @@ describe("buildEmptyContactSummary — no-AI floor", () => {
     aiCalls.length = 0
     buildEmptyContactSummary(slice())
     expect(aiCalls.length).toBe(0)
+  })
+})
+
+describe("formatOpenTasksForPrompt", () => {
+  const TODAY = "2026-06-19"
+
+  it("returns an empty string when there are no open tasks", () => {
+    expect(formatOpenTasksForPrompt([], TODAY)).toBe("")
+  })
+
+  it("renders a header + one bullet per task", () => {
+    const out = formatOpenTasksForPrompt(
+      [{ title: "Send gallery", dueDate: "2026-06-30", priority: null }],
+      TODAY,
+    )
+    expect(out).toContain("Open tasks (soonest/overdue first):")
+    expect(out).toContain('- "Send gallery" — due 06/30/2026')
+  })
+
+  it("marks an overdue task", () => {
+    const out = formatOpenTasksForPrompt(
+      [{ title: "Pay deposit", dueDate: "2026-06-10", priority: null }],
+      TODAY,
+    )
+    expect(out).toContain("(overdue)")
+  })
+
+  it("marks a due-soon task", () => {
+    const out = formatOpenTasksForPrompt(
+      [{ title: "Confirm timeline", dueDate: "2026-06-20", priority: null }],
+      TODAY,
+    )
+    expect(out).toContain("(due soon)")
+  })
+
+  it("annotates a high-priority task and omits the date part when undated", () => {
+    const out = formatOpenTasksForPrompt(
+      [{ title: "Call back", dueDate: null, priority: "high" }],
+      TODAY,
+    )
+    expect(out).toContain('- "Call back" [high priority]')
+    expect(out).not.toContain("— due")
+  })
+
+  it("does not annotate low/medium priority", () => {
+    const out = formatOpenTasksForPrompt(
+      [{ title: "Tidy notes", dueDate: null, priority: "medium" }],
+      TODAY,
+    )
+    expect(out).not.toContain("[high priority]")
   })
 })

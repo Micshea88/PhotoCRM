@@ -63,6 +63,10 @@ export interface ContactFacts {
   bookingCount: number
   /** Cents — highest proposal value across this contact's opportunities. */
   highestProposalValue: number
+  /** Up to 5 incomplete tasks for this contact (contact-scoped OR on an Event
+   *  the contact is on), soonest/overdue first. Feeds the AI summary's open-
+   *  tasks block so the model can surface deadlines as next-actions. */
+  openTasks: { title: string; dueDate: string | null; priority: string | null }[]
 }
 
 /**
@@ -190,6 +194,29 @@ export async function computeContactFacts(
     )
     .then((r) => r.rows)
 
+  // Open tasks (FIX 2): incomplete tasks scoped to this contact OR to any Event
+  // the contact is on (via project_contacts). Soonest/overdue first, cap 5.
+  const openTasksRows = await db
+    .execute<{ title: string; due_date: string | null; priority: string | null }>(
+      sql`
+    SELECT t.title, t.due_date::text AS due_date, t.priority
+    FROM tasks t
+    WHERE t.organization_id = ${orgId}
+      AND t.deleted_at IS NULL
+      AND t.status <> 'done'
+      AND (
+        t.contact_id = ${contactId}
+        OR t.project_id IN (
+          SELECT pc.project_id FROM project_contacts pc
+          WHERE pc.contact_id = ${contactId} AND pc.organization_id = ${orgId}
+        )
+      )
+    ORDER BY (t.due_date IS NULL), t.due_date ASC
+    LIMIT 5
+  `,
+    )
+    .then((r) => r.rows)
+
   const notesCount = parseInt(notesAgg?.count ?? "0", 10) || 0
   const callsCount = parseInt(callsAgg?.count ?? "0", 10) || 0
   const meetingsCount = parseInt(meetingsAgg?.count ?? "0", 10) || 0
@@ -226,6 +253,11 @@ export async function computeContactFacts(
     // activity-only branches.
     bookingCount: 0,
     highestProposalValue: 0,
+    openTasks: openTasksRows.map((r) => ({
+      title: r.title,
+      dueDate: r.due_date,
+      priority: r.priority,
+    })),
   }
 }
 

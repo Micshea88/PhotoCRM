@@ -1,22 +1,30 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import {
+  DESKTOP_TABS,
+  DESKTOP_DEFAULT_TAB,
+  type DesktopTab,
+} from "@/modules/contacts/ui/contact-detail-tabs"
 
 /**
  * Push 3 (C6c) — center column with the tab strip.
  *
  * Polish #5 Fix 7a dropped the "To-Do's" tab. The Contact Tasks build
  * (Mike, 2026-06-16) promotes Tasks to its OWN top-level tab — design-system
- * §7 updated. The strip now has THREE tabs: Overview | Activities | Tasks.
- * Communications types stay as sub-filters under Activities. The wrapper is
+ * §7 updated. The strip now has THREE tabs: Overview | Activity | Tasks.
+ * Communications types stay as sub-filters under Activity. The wrapper is
  * center-aligned (HubSpot pattern).
+ *
+ * FIX 1 (Mike, 2026-06-19): the active tab is mirrored to the URL (`?tab=`)
+ * via router.replace so it survives the router.refresh that follows a server
+ * action. `initialTab` comes from the server (normalized from the URL).
  */
-type TabKey = "overview" | "activities" | "tasks"
-const TAB_ORDER: TabKey[] = ["overview", "activities", "tasks"]
-const TAB_LABEL: Record<TabKey, string> = {
+const TAB_LABEL: Record<DesktopTab, string> = {
   overview: "Overview",
-  activities: "Activities",
+  activity: "Activity",
   tasks: "Tasks",
 }
 
@@ -24,22 +32,32 @@ export function ContactDetailCenter({
   overview,
   activity,
   tasks,
+  initialTab = DESKTOP_DEFAULT_TAB,
 }: {
   overview: ReactNode
   activity: ReactNode
   tasks: ReactNode
+  initialTab?: DesktopTab
 }) {
-  const [active, setActive] = useState<TabKey>("overview")
+  const router = useRouter()
+  const [active, setActive] = useState<DesktopTab>(initialTab)
 
-  function onTabKey(e: React.KeyboardEvent<HTMLButtonElement>, current: TabKey) {
+  function select(tab: DesktopTab) {
+    setActive(tab)
+    // Relative query — preserves the pathname, replaces the search. replace
+    // (not push) so the back button isn't polluted by tab switches.
+    router.replace(`?tab=${tab}`, { scroll: false })
+  }
+
+  function onTabKey(e: React.KeyboardEvent<HTMLButtonElement>, current: DesktopTab) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return
     e.preventDefault()
-    const idx = TAB_ORDER.indexOf(current)
+    const idx = DESKTOP_TABS.indexOf(current)
     const next =
       e.key === "ArrowRight"
-        ? TAB_ORDER[(idx + 1) % TAB_ORDER.length]
-        : TAB_ORDER[(idx - 1 + TAB_ORDER.length) % TAB_ORDER.length]
-    if (next) setActive(next)
+        ? DESKTOP_TABS[(idx + 1) % DESKTOP_TABS.length]
+        : DESKTOP_TABS[(idx - 1 + DESKTOP_TABS.length) % DESKTOP_TABS.length]
+    if (next) select(next)
   }
 
   return (
@@ -49,7 +67,7 @@ export function ContactDetailCenter({
         aria-label="Contact detail tabs"
         className="flex justify-center gap-4 border-b border-[var(--color-border)]"
       >
-        {TAB_ORDER.map((tab) => {
+        {DESKTOP_TABS.map((tab) => {
           const isActive = active === tab
           return (
             <button
@@ -61,7 +79,7 @@ export function ContactDetailCenter({
               aria-selected={isActive}
               tabIndex={isActive ? 0 : -1}
               onClick={() => {
-                setActive(tab)
+                select(tab)
               }}
               onKeyDown={(e) => {
                 onTabKey(e, tab)
@@ -85,7 +103,7 @@ export function ContactDetailCenter({
         aria-labelledby={`contact-tab-${active}`}
       >
         {active === "overview" && overview}
-        {active === "activities" && activity}
+        {active === "activity" && activity}
         {active === "tasks" && tasks}
       </div>
     </section>

@@ -1,6 +1,8 @@
 import "server-only"
 import { callAiModel } from "@/lib/ai-model"
 import { log } from "@/lib/log"
+import { formatDate, todayISO } from "@/lib/format"
+import { taskDueState } from "@/modules/tasks/task-due-state"
 import type { ActivityEntry } from "../ui/contact-activity-feed"
 import type { ContactFacts } from "./lead-status-rules"
 import type { ContactSlice } from "./lead-status-classifier"
@@ -54,6 +56,7 @@ function buildSystemPrompt(): string {
     "- Prefer first names. Use last names only for disambiguation.",
     "- Reference specific details from the activity (dates, venues, decisions, blockers, what was discussed).",
     "- Write the way a photographer would brief themselves — not the way a database would render a status field.",
+    "- If there are open tasks, surface overdue and due-soon ones as a next-action, woven naturally (e.g. 'still owes Kai a wedding contract, due 6/17 and overdue'). Weight high-priority tasks most prominently. Do NOT list every task or use a rigid count template.",
     "",
     "DON'T:",
     "- Don't use 'is classified as', 'has been categorized as', 'has X count of Y'.",
@@ -163,15 +166,45 @@ function buildUserPrompt(
   if (status) factsLines.push(`- Internal status: ${status}`)
 
   const activity = formatActivityForPrompt(recentActivity)
-  return [
+  const sections = [
     "Facts:",
     factsLines.join("\n"),
     "",
     "Recent activity (most recent first):",
     activity.text,
-    "",
-    "Write the summary paragraph.",
-  ].join("\n")
+  ]
+  const openTasksBlock = formatOpenTasksForPrompt(facts.openTasks)
+  if (openTasksBlock) {
+    sections.push("", openTasksBlock)
+  }
+  sections.push("", "Write the summary paragraph.")
+  return sections.join("\n")
+}
+
+/**
+ * Render the open-tasks block for the Haiku prompt. Format (Mike-locked):
+ *   - "Title" — due MM/DD/YYYY (overdue)|(due soon) [high priority]
+ * Date always shown when present; the (overdue)/(due soon) marker only for
+ * overdue or due-within-3-days (none when >3 days out); [high priority] only
+ * for high-priority tasks. "Today" is the SERVER date (this is a server-
+ * generated artifact) via the shared taskDueState helper. Returns "" when
+ * there are no open tasks (block omitted).
+ *
+ * Exported for unit tests.
+ */
+export function formatOpenTasksForPrompt(
+  openTasks: ContactFacts["openTasks"],
+  today: string = todayISO(),
+): string {
+  if (openTasks.length === 0) return ""
+  const lines = openTasks.map((t) => {
+    const datePart = t.dueDate ? ` — due ${formatDate(t.dueDate)}` : ""
+    const state = taskDueState(t.dueDate, "open", today)
+    const marker = state === "overdue" ? " (overdue)" : state === "due_soon" ? " (due soon)" : ""
+    const priorityPart = t.priority === "high" ? " [high priority]" : ""
+    return `- "${t.title}"${datePart}${marker}${priorityPart}`
+  })
+  return ["Open tasks (soonest/overdue first):", lines.join("\n")].join("\n")
 }
 
 /**

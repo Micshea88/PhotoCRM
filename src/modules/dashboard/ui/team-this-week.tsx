@@ -1,10 +1,20 @@
+"use client"
+
+import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/format"
+import { taskDueState } from "@/modules/tasks/task-due-state"
+import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
+import { HighPriorityFlag } from "@/modules/tasks/ui/high-priority-flag"
+import { useToday } from "@/modules/tasks/ui/use-today"
 
 export interface TeamThisWeekTask {
   id: string
   title: string
   dueDate: string | null
   assigneeUserId: string | null
+  status: string
+  /** "low" | "medium" | "high" | null (no priority). */
+  priority: string | null
 }
 
 export interface TeamThisWeekProps {
@@ -36,8 +46,13 @@ function groupByAssignee(tasks: TeamThisWeekTask[]): Group[] {
  * list (grouped by assignee). Per LOC1 (plain-language empty state):
  * if the saved view doesn't exist for the studio (a fresh studio not
  * yet seeded) we show a "what to do next" message, NOT a blank pane.
+ *
+ * Due-date color + High flag mirror the contact Tasks tab; the state is
+ * computed against the viewer's browser-local today (see useToday).
  */
 export function TeamThisWeek({ tasks, hasSeedView }: TeamThisWeekProps) {
+  const today = useToday()
+
   if (!hasSeedView) {
     return (
       <section className="space-y-2 rounded-lg border border-[var(--color-border)] p-4">
@@ -70,14 +85,25 @@ export function TeamThisWeek({ tasks, hasSeedView }: TeamThisWeekProps) {
               {group.assigneeUserId ? `Assigned to ${group.assigneeUserId}` : "Unassigned"}
             </p>
             <ul className="space-y-1">
-              {group.tasks.map((task) => (
-                <li key={task.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span>{task.title}</span>
-                  <span className="text-xs text-[var(--color-muted-foreground)] tabular-nums">
-                    {task.dueDate ? formatDate(task.dueDate) : "no due date"}
-                  </span>
-                </li>
-              ))}
+              {group.tasks.map((task) => {
+                const dueState = taskDueState(task.dueDate, task.status, today)
+                return (
+                  <li key={task.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-1.5">
+                      <HighPriorityFlag priority={task.priority} />
+                      <span>{task.title}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs tabular-nums",
+                        dueStateTextClass(dueState) || "text-[var(--color-muted-foreground)]",
+                      )}
+                    >
+                      {task.dueDate ? formatDate(task.dueDate) : "no due date"}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           </li>
         ))}

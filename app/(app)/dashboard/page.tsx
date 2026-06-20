@@ -70,6 +70,8 @@ export default async function DashboardPage() {
             title: t.title,
             dueDate: t.dueDate,
             assigneeUserId: t.assigneeUserId,
+            status: t.status,
+            priority: t.priority,
           }))}
           hasSeedView={defaultTeamView !== null}
         />
@@ -80,6 +82,8 @@ export default async function DashboardPage() {
             id: t.id,
             title: t.title,
             dueDate: t.dueDate,
+            status: t.status,
+            priority: t.priority,
           }))}
         />
       </div>

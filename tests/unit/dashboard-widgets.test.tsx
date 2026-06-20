@@ -63,9 +63,30 @@ describe("TeamThisWeek", () => {
       <TeamThisWeek
         hasSeedView={true}
         tasks={[
-          { id: "t1", title: "Edit RAW", dueDate: "2026-05-19", assigneeUserId: "user_a" },
-          { id: "t2", title: "Send invoice", dueDate: "2026-05-21", assigneeUserId: "user_a" },
-          { id: "t3", title: "Confirm venue", dueDate: "2026-05-22", assigneeUserId: "user_b" },
+          {
+            id: "t1",
+            title: "Edit RAW",
+            dueDate: "2026-05-19",
+            assigneeUserId: "user_a",
+            status: "ready",
+            priority: null,
+          },
+          {
+            id: "t2",
+            title: "Send invoice",
+            dueDate: "2026-05-21",
+            assigneeUserId: "user_a",
+            status: "ready",
+            priority: "high",
+          },
+          {
+            id: "t3",
+            title: "Confirm venue",
+            dueDate: "2026-05-22",
+            assigneeUserId: "user_b",
+            status: "ready",
+            priority: null,
+          },
         ]}
       />,
     )
@@ -80,7 +101,16 @@ describe("TeamThisWeek", () => {
     render(
       <TeamThisWeek
         hasSeedView={true}
-        tasks={[{ id: "t1", title: "Orphan task", dueDate: null, assigneeUserId: null }]}
+        tasks={[
+          {
+            id: "t1",
+            title: "Orphan task",
+            dueDate: null,
+            assigneeUserId: null,
+            status: "ready",
+            priority: null,
+          },
+        ]}
       />,
     )
     expect(screen.getByText("Unassigned")).toBeInTheDocument()
@@ -100,9 +130,9 @@ describe("TasksDueList", () => {
       <TasksDueList
         totalCount={5}
         topTasks={[
-          { id: "t1", title: "Task A", dueDate: "2026-05-17" },
-          { id: "t2", title: "Task B", dueDate: "2026-05-18" },
-          { id: "t3", title: "Task C", dueDate: "2026-05-20" },
+          { id: "t1", title: "Task A", dueDate: "2026-05-17", status: "ready", priority: null },
+          { id: "t2", title: "Task B", dueDate: "2026-05-18", status: "ready", priority: "high" },
+          { id: "t3", title: "Task C", dueDate: "2026-05-20", status: "ready", priority: null },
         ]}
       />,
     )
@@ -115,9 +145,26 @@ describe("TasksDueList", () => {
 
   it("handles a task with no due date gracefully", () => {
     render(
-      <TasksDueList totalCount={1} topTasks={[{ id: "t1", title: "Floater", dueDate: null }]} />,
+      <TasksDueList
+        totalCount={1}
+        topTasks={[{ id: "t1", title: "Floater", dueDate: null, status: "ready", priority: null }]}
+      />,
     )
     expect(screen.getByText("Floater")).toBeInTheDocument()
     expect(screen.getByText("no due date")).toBeInTheDocument()
+  })
+
+  it("renders the High-priority flag only for high-priority tasks", () => {
+    render(
+      <TasksDueList
+        totalCount={2}
+        topTasks={[
+          { id: "t1", title: "Plain", dueDate: "2026-05-17", status: "ready", priority: null },
+          { id: "t2", title: "Urgent", dueDate: "2026-05-18", status: "ready", priority: "high" },
+        ]}
+      />,
+    )
+    // One flag total — the high-priority task only (Low/Medium/none render none).
+    expect(screen.getAllByLabelText("High priority")).toHaveLength(1)
   })
 })

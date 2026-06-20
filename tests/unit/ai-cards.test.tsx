@@ -40,7 +40,7 @@ vi.mock("@/modules/email-log/actions", () => ({
 // next/navigation: the activity-card uses useRouter().refresh() on
 // edit-save. In jsdom there's no app router; stub it.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
 }))
 
 // Telephony 3a inline-dialer refactor — ContactActivityFeed and
@@ -329,9 +329,10 @@ describe("ContactActivityFeed", () => {
 
 describe("ContactDetailCenter — tab strip", () => {
   // Contact Tasks build — center column now has 3 tabs:
-  // Overview / Activities / Tasks. To-Do's removed; Tasks is its own
-  // top-level tab (was the Activities sub-filter placeholder).
-  it("renders Overview / Activities / Tasks and starts on Overview", async () => {
+  // Overview / Activity / Tasks. To-Do's removed; Tasks is its own
+  // top-level tab (was the Activity sub-filter placeholder). FIX 1
+  // (2026-06-19) renamed "Activities" → "Activity" (singular).
+  it("renders Overview / Activity / Tasks and starts on Overview", async () => {
     const { ContactDetailCenter } = await import("@/modules/contacts/ui/contact-detail-center")
     render(
       <ContactDetailCenter
@@ -341,10 +342,7 @@ describe("ContactDetailCenter — tab strip", () => {
       />,
     )
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true")
-    expect(screen.getByRole("tab", { name: "Activities" })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    )
+    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "false")
     expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute("aria-selected", "false")
     expect(screen.queryByRole("tab", { name: "To-Do's" })).toBeNull()
     expect(screen.getByText("OV")).toBeInTheDocument()
@@ -360,9 +358,23 @@ describe("ContactDetailCenter — tab strip", () => {
         tasks={<div>TK</div>}
       />,
     )
-    await user.click(screen.getByRole("tab", { name: "Activities" }))
-    expect(screen.getByRole("tab", { name: "Activities" })).toHaveAttribute("aria-selected", "true")
+    await user.click(screen.getByRole("tab", { name: "Activity" }))
+    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByText("AC")).toBeInTheDocument()
     expect(screen.queryByText("OV")).not.toBeInTheDocument()
+  })
+
+  it("honors initialTab from the URL (FIX 1 — survives router.refresh)", async () => {
+    const { ContactDetailCenter } = await import("@/modules/contacts/ui/contact-detail-center")
+    render(
+      <ContactDetailCenter
+        initialTab="tasks"
+        overview={<div>OV</div>}
+        activity={<div>AC</div>}
+        tasks={<div>TK</div>}
+      />,
+    )
+    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByText("TK")).toBeInTheDocument()
   })
 })

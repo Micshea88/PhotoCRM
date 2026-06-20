@@ -24,6 +24,7 @@ import { ContactActionsDropdown } from "@/modules/contacts/ui/contact-actions-dr
 import { ContactDetailLeft } from "@/modules/contacts/ui/contact-detail-left"
 import { ContactDetailCenter } from "@/modules/contacts/ui/contact-detail-center"
 import { ContactDetailMobile } from "@/modules/contacts/ui/contact-detail-mobile"
+import { normalizeDesktopTab, normalizeMobileTab } from "@/modules/contacts/ui/contact-detail-tabs"
 import { ContactDetailRight } from "@/modules/contacts/ui/contact-detail-right"
 import { ActionIconRow } from "@/modules/contacts/ui/action-icon-row"
 import { ContactActivityFeed } from "@/modules/contacts/ui/contact-activity-feed"
@@ -70,8 +71,20 @@ function readCachedInsights(raw: unknown): AiInsight[] {
   return shape.insights as AiInsight[]
 }
 
-export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ContactDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string | string[] }>
+}) {
   const { id } = await params
+  const rawTab = (await searchParams).tab
+  // FIX 1 — the active tab lives in `?tab=`; normalize per surface so a value
+  // valid on one shell (e.g. ?tab=about) falls back cleanly on the other.
+  const rawTabValue = Array.isArray(rawTab) ? rawTab[0] : rawTab
+  const desktopInitialTab = normalizeDesktopTab(rawTabValue)
+  const mobileInitialTab = normalizeMobileTab(rawTabValue)
   const session = await getSession()
   if (!session?.user) redirect("/sign-in")
   const orgId = session.session.activeOrganizationId
@@ -125,6 +138,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           completedAt: task.completedAt ? task.completedAt.toISOString() : null,
           projectId: task.projectId,
           eventName: eventName ?? null,
+          priority: task.priority,
         }))
         const eventOptions = projectRows.map((p) => ({ id: p.id, name: p.name }))
         return {
@@ -359,6 +373,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 />
               </div>
               <ContactDetailMobile
+                initialTab={mobileInitialTab}
                 activity={
                   <div className="space-y-4">
                     {aiBlock}
@@ -380,7 +395,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 activity still grows the row past the viewport. */}
             <div className="hidden gap-6 lg:grid lg:min-h-[calc(100vh-14rem)] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
               <ContactDetailLeft {...leftBaseProps} />
-              <ContactDetailCenter overview={aiBlock} activity={activityBlock} tasks={tasksBlock} />
+              <ContactDetailCenter
+                initialTab={desktopInitialTab}
+                overview={aiBlock}
+                activity={activityBlock}
+                tasks={tasksBlock}
+              />
               <ContactDetailRight associations={associationsView} />
             </div>
           </>

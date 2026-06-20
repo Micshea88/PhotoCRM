@@ -11,7 +11,9 @@ export const TASK_STATUSES = ["not_started", "blocked", "ready", "in_progress", 
 export const taskStatusSchema = z.enum(TASK_STATUSES)
 export type TaskStatus = z.infer<typeof taskStatusSchema>
 
-export const TASK_PRIORITIES = ["low", "medium", "high", "urgent"] as const
+// Low / Medium / High — the HubSpot/Salesforce 3-level pattern (Mike, 2026-06-19).
+// "urgent" was dropped (it existed in the enum but was never used in UI/seed/tests).
+export const TASK_PRIORITIES = ["low", "medium", "high"] as const
 export const taskPrioritySchema = z.enum(TASK_PRIORITIES)
 export type TaskPriority = z.infer<typeof taskPrioritySchema>
 
@@ -45,7 +47,7 @@ export const createTaskInput = z
     assigneeUserId: z.string().nullable().optional(),
     assigneeRole: optionalText(120).optional(),
     dueDate: isoDateNullable.optional(),
-    priority: taskPrioritySchema.optional(),
+    priority: taskPrioritySchema.nullable().optional(),
     order: z.number().int().nonnegative().default(0),
     customFields: customFieldsSchema,
   })
@@ -68,7 +70,7 @@ export const updateTaskInput = z.object({
   assigneeUserId: z.string().nullable().optional(),
   assigneeRole: optionalText(120).optional(),
   dueDate: isoDateNullable.optional(),
-  priority: taskPrioritySchema.optional(),
+  priority: taskPrioritySchema.nullable().optional(),
   order: z.number().int().nonnegative().optional(),
   // Setting `dueDate` explicitly via this action flips
   // due_date_overridden=true (the recompute engine respects that). Not

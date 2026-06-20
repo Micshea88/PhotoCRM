@@ -31,6 +31,7 @@ function baseFacts(): ContactFacts {
     referralsMade: 0,
     bookingCount: 0,
     highestProposalValue: 0,
+    openTasks: [],
   }
 }
 

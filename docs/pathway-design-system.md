@@ -17,6 +17,33 @@ future module design. Two locked exceptions:
 
 ---
 
+## 0. Product positioning — hybrid CRM + Project Management (LOCKED)
+
+**Pathway is a hybrid CRM + Project-Management product, ~50/50 (up to
+60/40).** It serves photographers who manage BOTH the client
+relationship / sales side (leads, inquiries, proposals, contracts,
+payments) AND project delivery (sessions, weddings, post-production,
+edits, gallery delivery). **Both halves are first-class — PM is not
+bolted onto a CRM.**
+
+Design consequence: **the CRM default is not automatically correct.**
+When a relationship/sales convention (HubSpot / Salesforce / Pipedrive
+/ HoneyBook / Dubsado / 17hats / Studio Ninja / Táve / Iris / Sprout)
+and a project-delivery convention (Asana / ClickUp / Monday / Notion /
+Linear / Basecamp) differ, surface BOTH and let Mike choose — never
+silently pick the CRM pattern. Every build-planning audit references
+both sides and includes a "PM-friendly enhancement opportunities"
+section (see `AGENTS.md` → "Build-planning audits — STANDING PROCESS").
+
+Precedent (2026-06-19): tasks gained a 3-day yellow "due soon" state —
+a PM pattern (Asana/ClickUp) absent from HubSpot/Salesforce — chosen
+deliberately because photographers manage project deadlines, not just
+a sales pipeline. New feature decisions that pick a PM convention over
+a CRM convention (or vice versa) should note which side they took and
+why, tracing back to this section.
+
+---
+
 ## 1. Inline edit + autosave UX contract
 
 **Every editable field in Pathway uses `InlineEditField` or

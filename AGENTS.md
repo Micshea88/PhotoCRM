@@ -6,6 +6,27 @@ This is the playbook every coding agent in this repo follows. Read this first.
 
 A Next.js 16 + Postgres + Vercel foundation that Sage will build the Pathway product on top of. The defining design constraint is **agentic-development friendliness for a non-technical owner**: every decision optimizes for an LLM agent being able to add features cleanly, and for the human owner being unable to easily break the security, reliability, or quality fundamentals.
 
+## Product positioning — HYBRID CRM + Project Management (LOCKED)
+
+**Pathway is a hybrid CRM + Project-Management product, ~50/50 (up to 60/40), not a CRM with PM bolted on.** It serves photographers who manage BOTH the client relationship / sales side (leads, inquiries, proposals, contracts, payments) AND project delivery (sessions, weddings, post-production, edits, gallery delivery). Both halves are first-class.
+
+**Consequence for design decisions:** the CRM default is NOT automatically correct. When the relationship/sales convention and the project-delivery convention differ, **surface BOTH and let Mike choose** — do not silently pick the CRM pattern. Pathway is hybrid by design.
+
+- Precedent (2026-06-19): the task color system added a 3-day yellow "due soon" state — a **PM pattern** (Asana/ClickUp) that HubSpot/Salesforce don't do — because it serves photographers managing project deadlines, not just sales pipelines. Mike chose the PM pattern explicitly.
+
+See `docs/pathway-design-system.md` §0 for the design-doc statement of this principle.
+
+## Build-planning audits — STANDING PROCESS (every audit)
+
+Every build-planning / feature audit MUST research and reference best-in-class patterns from BOTH sides, and surface divergences as choices:
+
+1. **CRM / relationship-sales side:** HubSpot, Salesforce, Pipedrive, Close, and the photo-CRMs HoneyBook, Dubsado, 17hats, Studio Ninja, Táve, Iris Works, Sprout Studio.
+2. **Project-Management / delivery side:** Asana, ClickUp, Monday.com, Notion, Linear, Basecamp.
+
+When CRM defaults and PM defaults differ, present BOTH options with trade-offs — never assume the CRM default wins.
+
+Every build-planning audit MUST include a dedicated **"PM-friendly enhancement opportunities"** section alongside the CRM-pattern section, surfacing project-delivery options Mike can choose from (e.g., due-soon states, dependencies, board/timeline views, workload, checklists, recurring tasks). Memory: [[feedback_research_best_in_class_before_design]] now spans both CRM and PM.
+
 ## What to read before editing
 
 1. **This file.**

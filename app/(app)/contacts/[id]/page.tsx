@@ -139,6 +139,7 @@ export default async function ContactDetailPage({
           projectId: task.projectId,
           eventName: eventName ?? null,
           priority: task.priority,
+          assigneeUserId: task.assigneeUserId,
         }))
         const eventOptions = projectRows.map((p) => ({ id: p.id, name: p.name }))
         return {
@@ -197,6 +198,12 @@ export default async function ContactDetailPage({
     id: m.user.id,
     name: m.user.name || m.user.email,
     email: m.user.email,
+  }))
+  // Tasks "Assigned to" filter — members with avatar image (name + photo).
+  const taskMemberOptions = orgMembers.map((m) => ({
+    id: m.user.id,
+    name: m.user.name || m.user.email,
+    image: m.user.image ?? null,
   }))
 
   // P3 polish #5 Fix 8 — auto-regen the AI cache when it's null
@@ -351,6 +358,7 @@ export default async function ContactDetailPage({
             contactId={contact.id}
             tasks={contactTasks}
             eventOptions={eventOptions}
+            members={taskMemberOptions}
           />
         )
         return (

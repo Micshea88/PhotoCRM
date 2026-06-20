@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
@@ -12,6 +13,14 @@ import { taskDueState } from "@/modules/tasks/task-due-state"
 import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
 import { HighPriorityFlag } from "@/modules/tasks/ui/high-priority-flag"
 import { useToday } from "@/modules/tasks/ui/use-today"
+import { TaskFilterStrip, type TaskMemberOption } from "@/modules/tasks/ui/task-filter-strip"
+import {
+  parseTaskFilters,
+  applyTaskFilters,
+  hasActiveFilters,
+  sortOpenTasks,
+  sortCompletedTasks,
+} from "@/modules/tasks/task-filter"
 import type { TaskPriority } from "@/modules/tasks/types"
 import {
   createTask,
@@ -24,11 +33,18 @@ import {
 } from "@/modules/tasks/actions"
 
 /**
- * Contact detail → Tasks tab (top-level, per design-system §7). Shows the
- * contact's tasks split into Open and Completed, with event filter chips and
- * an inline event tag on each task. Add / complete / edit / delete inline.
+ * Contact detail → Tasks tab (top-level, per design-system §7). A HubSpot-style
+ * filter strip (search + 5 dropdowns + pills, URL-persisted — see
+ * TaskFilterStrip) over the contact's tasks. With no filters active the list
+ * splits into a collapsible Open + Completed (Completed collapsed by default);
+ * with any filter active it flattens to a single due-date-ordered list
+ * (Mike-locked 2026-06-20, decision #10).
  *
- * Plain-English throughout: "Open", "Completed", "Add task", "Due",
+ * Filtering is client-side: the full task set is already loaded as props, so
+ * `applyTaskFilters` runs in-memory and the URL is the only state. Color states
+ * + the High-priority flag (prior commit) are preserved on every row.
+ *
+ * Plain-English throughout: "Open", "Completed", "Create a task", "Due",
  * "General" (= not linked to any event). No IDs or jargon surfaced.
  */
 
@@ -45,10 +61,9 @@ export interface ContactTaskItem {
   eventName: string | null
   /** "low" | "medium" | "high" | null (no priority). */
   priority: string | null
+  /** Org member id this task is assigned to, or null (unassigned). */
+  assigneeUserId: string | null
 }
-
-// Sentinels "all" / "general", or a projectId string (all are strings).
-type ChipKey = string
 
 // Priority picker — "No priority" + Low / Medium / High. Empty string is the
 // "No priority" sentinel; the caller maps it to null.
@@ -91,16 +106,29 @@ export function ContactTasksPane({
   contactId,
   tasks,
   eventOptions,
+  members,
 }: {
   contactId: string
   tasks: ContactTaskItem[]
-  /** All events in the org for the picker; the chips derive from `tasks`. */
+  /** All events in the org for the Add/Edit pickers. */
   eventOptions: EventOption[]
+  /** Org members for the "Assigned to" filter (name + avatar). */
+  members: TaskMemberOption[]
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const today = useToday()
   const [, startTransition] = useTransition()
-  const [chip, setChip] = useState<ChipKey>("all")
   const [adding, setAdding] = useState(false)
+
+  const filters = parseTaskFilters(searchParams)
+  const anyActive = hasActiveFilters(filters)
+
+  // Filters panel opens automatically when a shared URL already carries filters.
+  const [filtersOpen, setFiltersOpen] = useState(() => anyActive)
+  // Completed is collapsed by default (decision #10); Open starts expanded.
+  const [openExpanded, setOpenExpanded] = useState(true)
+  const [completedExpanded, setCompletedExpanded] = useState(false)
 
   function refresh() {
     startTransition(() => {
@@ -108,8 +136,8 @@ export function ContactTasksPane({
     })
   }
 
-  // Event chips: one per distinct event present on this contact's tasks.
-  const eventChips = useMemo(() => {
+  // The Event filter lists only the events THIS contact's tasks touch.
+  const eventFilterOptions = useMemo(() => {
     const seen = new Map<string, string>()
     for (const t of tasks) {
       if (t.projectId && t.eventName && !seen.has(t.projectId)) {
@@ -119,56 +147,75 @@ export function ContactTasksPane({
     return Array.from(seen, ([id, name]) => ({ id, name }))
   }, [tasks])
 
-  const filtered = useMemo(() => {
-    if (chip === "all") return tasks
-    if (chip === "general") return tasks.filter((t) => !t.projectId)
-    return tasks.filter((t) => t.projectId === chip)
-  }, [tasks, chip])
+  // Client-side filtering — all tasks are already loaded as props.
+  const matched = useMemo(
+    () => applyTaskFilters(tasks, filters, today ?? ""),
+    [tasks, filters, today],
+  )
+  const openTasks = useMemo(
+    () =>
+      sortOpenTasks(
+        matched.filter((t) => t.status !== "done"),
+        filters.sortByPriority,
+      ),
+    [matched, filters.sortByPriority],
+  )
+  const completedTasks = useMemo(
+    () =>
+      sortCompletedTasks(
+        matched.filter((t) => t.status === "done"),
+        filters.sortByPriority,
+      ),
+    [matched, filters.sortByPriority],
+  )
+  // Flat list (any filter active): sort by priority when the toggle is on,
+  // else due date — the toggle works consistently in both views (Mike, option
+  // B, 2026-06-20).
+  const flatList = useMemo(
+    () => sortOpenTasks(matched, filters.sortByPriority),
+    [matched, filters.sortByPriority],
+  )
 
-  const open = filtered.filter((t) => t.status !== "done")
-  const completed = filtered.filter((t) => t.status === "done")
+  const createButton = (
+    <Button
+      type="button"
+      size="sm"
+      onClick={() => {
+        setAdding((v) => !v)
+      }}
+      data-testid="contact-tasks-add"
+    >
+      {adding ? "Close" : "Create a task"}
+    </Button>
+  )
+  // "Collapse all" only applies to the sectioned (unfiltered) view.
+  const collapseAll = anyActive ? undefined : (
+    <button
+      type="button"
+      onClick={() => {
+        setOpenExpanded(false)
+        setCompletedExpanded(false)
+      }}
+      className="shrink-0 text-xs text-[var(--color-muted-foreground)] hover:underline"
+      data-testid="contact-tasks-collapse-all"
+    >
+      Collapse all
+    </button>
+  )
 
   return (
     <div className="space-y-4" data-testid="contact-tasks-pane">
-      {/* Event filter chips */}
-      <div className="flex flex-wrap items-center gap-1 text-xs">
-        <FilterChip
-          label="All"
-          active={chip === "all"}
-          onClick={() => {
-            setChip("all")
-          }}
-        />
-        <FilterChip
-          label="General"
-          active={chip === "general"}
-          onClick={() => {
-            setChip("general")
-          }}
-        />
-        {eventChips.map((ev) => (
-          <FilterChip
-            key={ev.id}
-            label={ev.name}
-            active={chip === ev.id}
-            onClick={() => {
-              setChip(ev.id)
-            }}
-          />
-        ))}
-        <div className="ml-auto">
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
-              setAdding((v) => !v)
-            }}
-            data-testid="contact-tasks-add"
-          >
-            {adding ? "Close" : "Add task"}
-          </Button>
-        </div>
-      </div>
+      <TaskFilterStrip
+        eventOptions={eventFilterOptions}
+        memberOptions={members}
+        today={today}
+        createSlot={createButton}
+        collapseAllSlot={collapseAll}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => {
+          setFiltersOpen((v) => !v)
+        }}
+      />
 
       {adding && (
         <AddTaskForm
@@ -184,66 +231,105 @@ export function ContactTasksPane({
         />
       )}
 
-      {/* Open */}
-      <section className="space-y-2" data-testid="contact-tasks-open">
-        <h3 className="text-xs font-medium text-[var(--color-muted-foreground)]">
-          Open ({open.length})
-        </h3>
-        {open.length === 0 ? (
-          <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
-            No open tasks. Use “Add task” to create one.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {open.map((t) => (
-              <TaskRow key={t.id} task={t} eventOptions={eventOptions} onChanged={refresh} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Completed — separated below Open */}
-      {completed.length > 0 && (
-        <section
-          className="space-y-2 border-t border-[var(--color-border)] pt-4"
-          data-testid="contact-tasks-completed"
-        >
-          <h3 className="text-xs font-medium text-[var(--color-muted-foreground)]">
-            Completed ({completed.length})
-          </h3>
-          <ul className="space-y-1">
-            {completed.map((t) => (
-              <TaskRow key={t.id} task={t} eventOptions={eventOptions} onChanged={refresh} />
-            ))}
-          </ul>
+      {anyActive ? (
+        <section className="space-y-2" data-testid="contact-tasks-flat">
+          {flatList.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
+              No tasks match these filters.
+            </p>
+          ) : (
+            <TaskList tasks={flatList} eventOptions={eventOptions} onChanged={refresh} />
+          )}
         </section>
+      ) : (
+        <>
+          <CollapsibleSection
+            title="Open"
+            count={openTasks.length}
+            expanded={openExpanded}
+            onToggle={() => {
+              setOpenExpanded((v) => !v)
+            }}
+            testId="contact-tasks-open"
+          >
+            {openTasks.length === 0 ? (
+              <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
+                No open tasks. Use “Create a task” to add one.
+              </p>
+            ) : (
+              <TaskList tasks={openTasks} eventOptions={eventOptions} onChanged={refresh} />
+            )}
+          </CollapsibleSection>
+
+          {completedTasks.length > 0 && (
+            <CollapsibleSection
+              title="Completed"
+              count={completedTasks.length}
+              expanded={completedExpanded}
+              onToggle={() => {
+                setCompletedExpanded((v) => !v)
+              }}
+              testId="contact-tasks-completed"
+              className="border-t border-[var(--color-border)] pt-4"
+            >
+              <TaskList tasks={completedTasks} eventOptions={eventOptions} onChanged={refresh} />
+            </CollapsibleSection>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-function FilterChip({
-  label,
-  active,
-  onClick,
+function CollapsibleSection({
+  title,
+  count,
+  expanded,
+  onToggle,
+  testId,
+  className,
+  children,
 }: {
-  label: string
-  active: boolean
-  onClick: () => void
+  title: string
+  count: number
+  expanded: boolean
+  onToggle: () => void
+  testId: string
+  className?: string
+  children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-2 py-0.5 text-[11px]",
-        active
-          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
-          : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",
-      )}
-    >
-      {label}
-    </button>
+    <section className={cn("space-y-2", className)} data-testid={testId}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex items-center gap-1 text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+        data-testid={`${testId}-toggle`}
+      >
+        <ChevronRight className={cn("size-3 transition-transform", expanded && "rotate-90")} />
+        {title} ({count})
+      </button>
+      {expanded && children}
+    </section>
+  )
+}
+
+function TaskList({
+  tasks,
+  eventOptions,
+  onChanged,
+}: {
+  tasks: ContactTaskItem[]
+  eventOptions: EventOption[]
+  onChanged: () => void
+}) {
+  return (
+    <ul className="space-y-1">
+      {tasks.map((t) => (
+        <TaskRow key={t.id} task={t} eventOptions={eventOptions} onChanged={onChanged} />
+      ))}
+    </ul>
   )
 }
 

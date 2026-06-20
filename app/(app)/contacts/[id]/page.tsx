@@ -359,6 +359,7 @@ export default async function ContactDetailPage({
             tasks={contactTasks}
             eventOptions={eventOptions}
             members={taskMemberOptions}
+            currentUserId={session.user.id}
           />
         )
         return (

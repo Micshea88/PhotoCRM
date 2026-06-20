@@ -14,6 +14,7 @@ import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
 import { HighPriorityFlag } from "@/modules/tasks/ui/high-priority-flag"
 import { useToday } from "@/modules/tasks/ui/use-today"
 import { TaskFilterStrip, type TaskMemberOption } from "@/modules/tasks/ui/task-filter-strip"
+import { AssigneePicker } from "@/modules/tasks/ui/assignee-picker"
 import {
   parseTaskFilters,
   applyTaskFilters,
@@ -107,13 +108,16 @@ export function ContactTasksPane({
   tasks,
   eventOptions,
   members,
+  currentUserId,
 }: {
   contactId: string
   tasks: ContactTaskItem[]
   /** All events in the org for the Add/Edit pickers. */
   eventOptions: EventOption[]
-  /** Org members for the "Assigned to" filter (name + avatar). */
+  /** Org members for the "Assigned to" filter + assignee pickers (name + avatar). */
   members: TaskMemberOption[]
+  /** The viewing user — new tasks auto-assign to them (decision #1). */
+  currentUserId: string
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -221,6 +225,8 @@ export function ContactTasksPane({
         <AddTaskForm
           contactId={contactId}
           eventOptions={eventOptions}
+          members={members}
+          currentUserId={currentUserId}
           onSaved={() => {
             setAdding(false)
             refresh()
@@ -238,7 +244,12 @@ export function ContactTasksPane({
               No tasks match these filters.
             </p>
           ) : (
-            <TaskList tasks={flatList} eventOptions={eventOptions} onChanged={refresh} />
+            <TaskList
+              tasks={flatList}
+              eventOptions={eventOptions}
+              members={members}
+              onChanged={refresh}
+            />
           )}
         </section>
       ) : (
@@ -257,7 +268,12 @@ export function ContactTasksPane({
                 No open tasks. Use “Create a task” to add one.
               </p>
             ) : (
-              <TaskList tasks={openTasks} eventOptions={eventOptions} onChanged={refresh} />
+              <TaskList
+                tasks={openTasks}
+                eventOptions={eventOptions}
+                members={members}
+                onChanged={refresh}
+              />
             )}
           </CollapsibleSection>
 
@@ -272,7 +288,12 @@ export function ContactTasksPane({
               testId="contact-tasks-completed"
               className="border-t border-[var(--color-border)] pt-4"
             >
-              <TaskList tasks={completedTasks} eventOptions={eventOptions} onChanged={refresh} />
+              <TaskList
+                tasks={completedTasks}
+                eventOptions={eventOptions}
+                members={members}
+                onChanged={refresh}
+              />
             </CollapsibleSection>
           )}
         </>
@@ -318,16 +339,24 @@ function CollapsibleSection({
 function TaskList({
   tasks,
   eventOptions,
+  members,
   onChanged,
 }: {
   tasks: ContactTaskItem[]
   eventOptions: EventOption[]
+  members: TaskMemberOption[]
   onChanged: () => void
 }) {
   return (
     <ul className="space-y-1">
       {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} eventOptions={eventOptions} onChanged={onChanged} />
+        <TaskRow
+          key={t.id}
+          task={t}
+          eventOptions={eventOptions}
+          members={members}
+          onChanged={onChanged}
+        />
       ))}
     </ul>
   )
@@ -336,11 +365,15 @@ function TaskList({
 function AddTaskForm({
   contactId,
   eventOptions,
+  members,
+  currentUserId,
   onSaved,
   onCancel,
 }: {
   contactId: string
   eventOptions: EventOption[]
+  members: TaskMemberOption[]
+  currentUserId: string
   onSaved: () => void
   onCancel: () => void
 }) {
@@ -348,6 +381,8 @@ function AddTaskForm({
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
   const [projectId, setProjectId] = useState<string | null>(null)
+  // New tasks auto-assign to the creator (decision #1); overridable below.
+  const [assigneeUserId, setAssigneeUserId] = useState<string | null>(currentUserId)
   const [options, setOptions] = useState<EventOption[]>(eventOptions)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -365,6 +400,7 @@ function AddTaskForm({
       title: title.trim(),
       dueDate: dueDate || undefined,
       priority: toPriorityInput(priority),
+      assigneeUserId,
     })
     setSaving(false)
     if (result.serverError) {
@@ -402,6 +438,15 @@ function AddTaskForm({
           />
         </label>
         <PriorityPicker value={priority} onChange={setPriority} />
+        <div className="flex items-center gap-1 text-xs text-[var(--color-muted-foreground)]">
+          <span>Assigned to</span>
+          <AssigneePicker
+            members={members}
+            value={assigneeUserId}
+            onChange={setAssigneeUserId}
+            variant="full"
+          />
+        </div>
         <div className="min-w-[220px] flex-1">
           <EventPicker
             options={options}
@@ -429,10 +474,12 @@ function AddTaskForm({
 function TaskRow({
   task,
   eventOptions,
+  members,
   onChanged,
 }: {
   task: ContactTaskItem
   eventOptions: EventOption[]
+  members: TaskMemberOption[]
   onChanged: () => void
 }) {
   const done = task.status === "done"
@@ -446,6 +493,15 @@ function TaskRow({
     setBusy(true)
     if (done) await markTaskNotDone({ id: task.id })
     else await markTaskDone({ id: task.id })
+    setBusy(false)
+    onChanged()
+  }
+
+  // Quick-reassign from the row avatar — no edit mode (decision #4). Allowed on
+  // any row, including completed (decision #3 / Mike 2026-06-20).
+  async function reassign(userId: string | null) {
+    setBusy(true)
+    await updateTask({ id: task.id, assigneeUserId: userId })
     setBusy(false)
     onChanged()
   }
@@ -464,6 +520,7 @@ function TaskRow({
         <EditTaskRow
           task={task}
           eventOptions={eventOptions}
+          members={members}
           onDone={() => {
             setEditing(false)
             onChanged()
@@ -502,6 +559,12 @@ function TaskRow({
           {task.eventName}
         </span>
       )}
+      <AssigneePicker
+        members={members}
+        value={task.assigneeUserId}
+        onChange={(userId) => void reassign(userId)}
+        variant="avatar"
+      />
       {done && task.completedAt ? (
         <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
           Completed {formatDate(task.completedAt)}
@@ -555,11 +618,13 @@ function TaskRow({
 function EditTaskRow({
   task,
   eventOptions,
+  members,
   onDone,
   onCancel,
 }: {
   task: ContactTaskItem
   eventOptions: EventOption[]
+  members: TaskMemberOption[]
   onDone: () => void
   onCancel: () => void
 }) {
@@ -567,6 +632,7 @@ function EditTaskRow({
   const [dueDate, setDueDate] = useState(task.dueDate ?? "")
   const [priority, setPriority] = useState(task.priority ?? "")
   const [projectId, setProjectId] = useState<string | null>(task.projectId)
+  const [assigneeUserId, setAssigneeUserId] = useState<string | null>(task.assigneeUserId)
   const [options, setOptions] = useState<EventOption[]>(eventOptions)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -578,12 +644,13 @@ function EditTaskRow({
     }
     setSaving(true)
     setError(null)
-    // Title / due date / priority.
+    // Title / due date / priority / assignee.
     const upd = await updateTask({
       id: task.id,
       title: title.trim(),
       dueDate: dueDate || "",
       priority: toPriorityInput(priority),
+      assigneeUserId,
     })
     if (upd.serverError) {
       setSaving(false)
@@ -628,6 +695,15 @@ function EditTaskRow({
           />
         </label>
         <PriorityPicker value={priority} onChange={setPriority} />
+        <div className="flex items-center gap-1 text-xs text-[var(--color-muted-foreground)]">
+          <span>Assigned to</span>
+          <AssigneePicker
+            members={members}
+            value={assigneeUserId}
+            onChange={setAssigneeUserId}
+            variant="full"
+          />
+        </div>
         <div className="min-w-[220px] flex-1">
           <EventPicker
             options={options}

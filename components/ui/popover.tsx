@@ -33,7 +33,11 @@ export function Popover({
   /** Function invoked with the current open state + a toggle callback.
    * Use to render any kind of trigger element (chip, button, icon). */
   trigger: (state: { open: boolean; toggle: () => void }) => ReactNode
-  children: ReactNode
+  /** Panel content. Either a static node, or a render-prop receiving a
+   *  `close` callback so the content can dismiss itself (e.g. a single-select
+   *  menu closing after a pick). Backward-compatible: existing callers pass a
+   *  plain node. */
+  children: ReactNode | ((state: { close: () => void }) => ReactNode)
   align?: "start" | "end"
   className?: string
 }) {
@@ -64,6 +68,9 @@ export function Popover({
   const toggle = () => {
     setOpen((v) => !v)
   }
+  const close = () => {
+    setOpen(false)
+  }
 
   return (
     <div ref={wrapperRef} className="relative inline-block">
@@ -77,7 +84,7 @@ export function Popover({
             className,
           )}
         >
-          {children}
+          {typeof children === "function" ? children({ close }) : children}
         </div>
       )}
     </div>

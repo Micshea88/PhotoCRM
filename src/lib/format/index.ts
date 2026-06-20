@@ -87,29 +87,33 @@ function utcDateToISO(utcMs: number): string {
 }
 
 /**
- * Resolve the most-recent-Sunday-through-following-Saturday window for
- * a given calendar date. Per LOC1 (US conventions, Sunday-Saturday
- * week). Pure UTC arithmetic; no timezone library; no DST handling.
- * Per-studio timezone is a deferred decision — the dashboard treats
- * the input as a UTC calendar date.
+ * Resolve the most-recent-Monday-through-following-Sunday window for
+ * a given calendar date — the ISO 8601 week (Mike, 2026-06-20). Users
+ * intuitively read Sunday as the END of the current week (the weekend
+ * just ending), not day 1 of the next one, so "this week" runs Mon→Sun.
+ * Pure UTC arithmetic; no timezone library; no DST handling. Per-studio
+ * timezone is a deferred decision — the dashboard treats the input as a
+ * UTC calendar date.
  *
- *   resolveSundaySaturdayWeek("2026-05-20") -> Wednesday
- *     -> { startISO: "2026-05-17", endISO: "2026-05-23" }
- *   resolveSundaySaturdayWeek("2026-05-17") -> Sunday (returns itself)
- *     -> { startISO: "2026-05-17", endISO: "2026-05-23" }
- *   resolveSundaySaturdayWeek("2026-05-23") -> Saturday
- *     -> { startISO: "2026-05-17", endISO: "2026-05-23" }
+ *   resolveMondaySundayWeek("2026-05-20") -> Wednesday
+ *     -> { startISO: "2026-05-18", endISO: "2026-05-24" }
+ *   resolveMondaySundayWeek("2026-05-18") -> Monday (returns itself)
+ *     -> { startISO: "2026-05-18", endISO: "2026-05-24" }
+ *   resolveMondaySundayWeek("2026-05-24") -> Sunday (end of the week)
+ *     -> { startISO: "2026-05-18", endISO: "2026-05-24" }
  */
-export function resolveSundaySaturdayWeek(todayISO: string): {
+export function resolveMondaySundayWeek(todayISO: string): {
   startISO: string
   endISO: string
 } {
   const { y, m, d } = parseYMD(todayISO)
   const todayUtc = Date.UTC(y, m - 1, d)
-  // getUTCDay returns 0=Sunday..6=Saturday. Used only as a calendar
-  // lookup; the actual arithmetic below is integer math on ms values.
+  // getUTCDay returns 0=Sunday..6=Saturday. Shift so Monday is the start:
+  // Sun→6, Mon→0, Tue→1, … Sat→5 days back to the week's Monday. Used only
+  // as a calendar lookup; the arithmetic below is integer math on ms values.
   const dayOfWeek = new Date(todayUtc).getUTCDay()
-  const startUtc = todayUtc - dayOfWeek * MS_PER_DAY
+  const offsetToMonday = (dayOfWeek + 6) % 7
+  const startUtc = todayUtc - offsetToMonday * MS_PER_DAY
   const endUtc = startUtc + 6 * MS_PER_DAY
   return { startISO: utcDateToISO(startUtc), endISO: utcDateToISO(endUtc) }
 }

@@ -136,7 +136,10 @@ The seeded Team This Week row is special-shaped:
 Date-window filters use the placeholder strings `<startOfWeek>` /
 `<endOfWeek>`. The list-view renderer (Phase 4) resolves them at render
 time against the caller's timezone — storing concrete dates at seed
-time would freeze the window to org-create day.
+time would freeze the window to org-create day. When that resolver is
+built it **must** use the ISO 8601 Monday–Sunday week (Mike,
+2026-06-20), matching `resolveMondaySundayWeek` in `src/lib/format` —
+do not reintroduce a Sunday-start week.
 
 ### Idempotency
 

@@ -3,7 +3,7 @@ import { countProjectsInDateRange } from "@/modules/projects/queries"
 import { listTasksByDueDateRange } from "@/modules/tasks/queries"
 import { getDefaultSavedView } from "@/modules/saved-views/queries"
 import { getUserOrganizations } from "@/modules/org/queries"
-import { resolveCurrentMonthRange, resolveSundaySaturdayWeek, todayISO } from "@/lib/format"
+import { resolveCurrentMonthRange, resolveMondaySundayWeek, todayISO } from "@/lib/format"
 import { withPageOrgContext } from "@/lib/page-org-context"
 import { WelcomeHeader } from "@/modules/dashboard/ui/welcome-header"
 import { CountCard } from "@/modules/dashboard/ui/count-card"
@@ -17,14 +17,16 @@ import { TasksDueList } from "@/modules/dashboard/ui/tasks-due-list"
  * propagate to child page renders in production RSC; see
  * `src/lib/page-org-context.ts`).
  *
- * Per LOC1 (US-only, Sunday-Saturday week), the Team This Week +
- * tasks-due widgets resolve their window in UTC.
+ * "This week" is the ISO 8601 Monday–Sunday week (Mike, 2026-06-20 —
+ * Sunday reads as the end of the current week, not the start of the
+ * next). The Team This Week + tasks-due widgets resolve their window
+ * in UTC off the same `weekRange`.
  */
 export default async function DashboardPage() {
   return withPageOrgContext(async (_ctx, session) => {
     const today = todayISO()
     const monthRange = resolveCurrentMonthRange(today)
-    const weekRange = resolveSundaySaturdayWeek(today)
+    const weekRange = resolveMondaySundayWeek(today)
 
     const [openOpps, projectsThisMonth, weekTasks, defaultTeamView, organizations] =
       await Promise.all([

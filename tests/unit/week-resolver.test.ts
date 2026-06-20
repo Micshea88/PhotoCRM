@@ -1,64 +1,65 @@
 /**
- * Unit tests for the Sunday-Saturday week resolver + current-month-
- * range helper. Per LOC1, US conventions; pure UTC arithmetic; no
- * timezone library; no DST math. Per Module 14b discipline, the
- * functions take and return YYYY-MM-DD strings — never Date objects.
+ * Unit tests for the Monday-Sunday (ISO 8601) week resolver + current-
+ * month-range helper. Mike-locked 2026-06-20: Sunday is the END of the
+ * current week, not day 1 of the next. Pure UTC arithmetic; no timezone
+ * library; no DST math. Per Module 14b discipline, the functions take and
+ * return YYYY-MM-DD strings — never Date objects.
  */
 import { describe, it, expect } from "vitest"
-import { resolveSundaySaturdayWeek, resolveCurrentMonthRange } from "@/lib/format"
+import { resolveMondaySundayWeek, resolveCurrentMonthRange } from "@/lib/format"
 
-describe("resolveSundaySaturdayWeek", () => {
-  it("a Wednesday returns previous Sunday + following Saturday", () => {
-    // 2026-05-20 is a Wednesday (verified: dayofweek lookup).
-    expect(resolveSundaySaturdayWeek("2026-05-20")).toEqual({
-      startISO: "2026-05-17",
-      endISO: "2026-05-23",
+describe("resolveMondaySundayWeek", () => {
+  it("a Wednesday returns the previous Monday + following Sunday", () => {
+    // 2026-05-20 is a Wednesday — week is May 18 (Mon) through May 24 (Sun).
+    expect(resolveMondaySundayWeek("2026-05-20")).toEqual({
+      startISO: "2026-05-18",
+      endISO: "2026-05-24",
     })
   })
 
-  it("a Sunday returns itself as start and the following Saturday as end", () => {
-    // 2026-05-17 is a Sunday.
-    expect(resolveSundaySaturdayWeek("2026-05-17")).toEqual({
-      startISO: "2026-05-17",
-      endISO: "2026-05-23",
+  it("a Monday returns itself as start and the following Sunday as end", () => {
+    // 2026-05-18 is a Monday.
+    expect(resolveMondaySundayWeek("2026-05-18")).toEqual({
+      startISO: "2026-05-18",
+      endISO: "2026-05-24",
     })
   })
 
-  it("a Saturday returns the previous Sunday as start and itself as end", () => {
-    // 2026-05-23 is a Saturday.
-    expect(resolveSundaySaturdayWeek("2026-05-23")).toEqual({
-      startISO: "2026-05-17",
-      endISO: "2026-05-23",
+  it("a Sunday returns the previous Monday as start and itself as end", () => {
+    // 2026-05-24 is a Sunday — the END of the Mon–Sun week.
+    expect(resolveMondaySundayWeek("2026-05-24")).toEqual({
+      startISO: "2026-05-18",
+      endISO: "2026-05-24",
     })
   })
 
   it("works across month boundaries", () => {
-    // 2026-06-01 is a Monday — week is May 31 (Sun) through June 6 (Sat).
-    expect(resolveSundaySaturdayWeek("2026-06-01")).toEqual({
-      startISO: "2026-05-31",
-      endISO: "2026-06-06",
+    // 2026-06-01 is a Monday — week is June 1 (Mon) through June 7 (Sun).
+    expect(resolveMondaySundayWeek("2026-06-01")).toEqual({
+      startISO: "2026-06-01",
+      endISO: "2026-06-07",
     })
   })
 
   it("works across year boundaries", () => {
-    // 2027-01-01 is a Friday — week is Dec 27 2026 (Sun) through Jan 2 2027 (Sat).
-    expect(resolveSundaySaturdayWeek("2027-01-01")).toEqual({
-      startISO: "2026-12-27",
-      endISO: "2027-01-02",
+    // 2027-01-01 is a Friday — week is Dec 28 2026 (Mon) through Jan 3 2027 (Sun).
+    expect(resolveMondaySundayWeek("2027-01-01")).toEqual({
+      startISO: "2026-12-28",
+      endISO: "2027-01-03",
     })
   })
 
   it("works on a leap-year edge case (Feb 29, 2024 was a Thursday)", () => {
-    // Week is Feb 25 (Sun) through Mar 2 (Sat).
-    expect(resolveSundaySaturdayWeek("2024-02-29")).toEqual({
-      startISO: "2024-02-25",
-      endISO: "2024-03-02",
+    // Week is Feb 26 (Mon) through Mar 3 (Sun).
+    expect(resolveMondaySundayWeek("2024-02-29")).toEqual({
+      startISO: "2024-02-26",
+      endISO: "2024-03-03",
     })
   })
 
   it("throws on a malformed input", () => {
-    expect(() => resolveSundaySaturdayWeek("05/20/2026")).toThrow()
-    expect(() => resolveSundaySaturdayWeek("not a date")).toThrow()
+    expect(() => resolveMondaySundayWeek("05/20/2026")).toThrow()
+    expect(() => resolveMondaySundayWeek("not a date")).toThrow()
   })
 })
 

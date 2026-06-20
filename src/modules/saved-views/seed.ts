@@ -29,6 +29,11 @@ type DbHandle = NodePgDatabase<typeof schema>
  * timezone. Storing concrete dates at seed time would freeze the
  * window to org-create day.
  *
+ * PHASE 4 (future) — when that placeholder resolver is built, it MUST use
+ * the ISO 8601 Monday–Sunday week (Mike, 2026-06-20), matching the
+ * dashboard's `resolveMondaySundayWeek` in src/lib/format. Do NOT
+ * reintroduce a Sunday-start week here.
+ *
  * ─── IDEMPOTENCY ──────────────────────────────────────────────────────
  *
  * Partial unique index does NOT prevent duplicate inserts with

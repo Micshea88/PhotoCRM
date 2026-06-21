@@ -1,6 +1,8 @@
 import { pgTable, text, timestamp, index } from "drizzle-orm/pg-core"
 import { organization, user } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
+import { projects } from "@/modules/projects/schema"
+import { opportunities } from "@/modules/opportunities/schema"
 
 /**
  * Push 3 (C6a) — sms_messages placeholder.
@@ -26,6 +28,14 @@ export const smsMessages = pgTable(
     contactId: text("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
+    /** Optional event (project) / opportunity association for event-scoped
+     *  comms + the Activity feed Event filter. Nullable, ON DELETE SET NULL —
+     *  plain FK columns (no triggers/derivatives) so a future bulk owner/
+     *  contact reassignment can mass-UPDATE them (memory #13). */
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+    opportunityId: text("opportunity_id").references(() => opportunities.id, {
+      onDelete: "set null",
+    }),
     /** "inbound" | "outbound" — text + Zod-validated at write time. */
     direction: text("direction").notNull(),
     /** Body text. SMS is typically <= 160 chars but providers may
@@ -44,6 +54,7 @@ export const smsMessages = pgTable(
   },
   (t) => [
     index("sms_messages_org_contact_sent_idx").on(t.organizationId, t.contactId, t.sentAt.desc()),
+    index("sms_messages_org_project_idx").on(t.organizationId, t.projectId),
   ],
 )
 

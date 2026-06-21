@@ -1,6 +1,8 @@
 import { pgTable, text, timestamp, index } from "drizzle-orm/pg-core"
 import { organization, user } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
+import { projects } from "@/modules/projects/schema"
+import { opportunities } from "@/modules/opportunities/schema"
 
 /**
  * Push 3 (C6a) — meetings placeholder table.
@@ -23,8 +25,18 @@ export const meetings = pgTable(
     contactId: text("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
+    /** Optional event (project) / opportunity association — see sms_messages
+     *  for the rationale (event filter + bulk-reassignable plain FK columns). */
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+    opportunityId: text("opportunity_id").references(() => opportunities.id, {
+      onDelete: "set null",
+    }),
     /** Free-form subject — e.g. "Initial consult", "Mood board review". */
     subject: text("subject"),
+    /** Meeting outcome — null until set. Zod-validated app-side:
+     *  Scheduled / Completed / Canceled / No show / Rescheduled
+     *  (HubSpot-grounded; Mike-locked 2026-06-21). */
+    outcome: text("outcome"),
     /** Notes captured during/after the meeting. */
     notes: text("notes"),
     /** Scheduled / actual start. */
@@ -44,6 +56,7 @@ export const meetings = pgTable(
   (t) => [
     index("meetings_org_contact_starts_idx").on(t.organizationId, t.contactId, t.startsAt.desc()),
     index("meetings_org_starts_idx").on(t.organizationId, t.deletedAt, t.startsAt.desc()),
+    index("meetings_org_project_idx").on(t.organizationId, t.projectId),
   ],
 )
 

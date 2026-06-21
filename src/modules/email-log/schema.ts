@@ -2,6 +2,8 @@ import { pgPolicy, pgTable, text, jsonb, timestamp, index, uniqueIndex } from "d
 import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
+import { projects } from "@/modules/projects/schema"
+import { opportunities } from "@/modules/opportunities/schema"
 
 /**
  * Backlog Item 2 — email_log is the first-class home for logged
@@ -40,6 +42,12 @@ export const emailLog = pgTable(
     contactId: text("contact_id").references(() => contacts.id, {
       onDelete: "set null",
     }),
+    /** Optional event (project) / opportunity association — see sms_messages
+     *  for the rationale (event filter + bulk-reassignable plain FK columns). */
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+    opportunityId: text("opportunity_id").references(() => opportunities.id, {
+      onDelete: "set null",
+    }),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** "outbound" | "inbound" — matches the call_log convention. */
     direction: text("direction").notNull(),
@@ -53,11 +61,17 @@ export const emailLog = pgTable(
     /** Provider source — "manual" today; future "gmail" / "outlook"
      *  / "resend" etc. */
     source: text("source").notNull(),
-    /** Provider message id (e.g., Gmail's Message-ID). Used by the
-     *  partial unique index below to dedup webhook re-deliveries.
-     *  NULL for manual rows. */
+    /** Provider message id — the email's RFC-5322 Message-ID (outbound: the
+     *  Resend send id; inbound: the received Message-ID). Also dedups webhook
+     *  re-deliveries via the partial unique index below. NULL for manual rows. */
     externalId: text("external_id"),
-    /** Provider raw payload + threading metadata. Free-form jsonb. */
+    /** Thread grouping key (Commit 3 email-threading). All messages in one
+     *  conversation share a thread_id, derived from In-Reply-To / References
+     *  at capture time; a root message's thread_id = its own Message-ID.
+     *  NULL until the threading pipeline lands. */
+    threadId: text("thread_id"),
+    /** Provider raw payload + threading metadata (In-Reply-To, References).
+     *  Free-form jsonb. */
     externalMetadata: jsonb("external_metadata").$type<Record<string, unknown>>(),
     /** Optional attachments. Array of { fileId, name, size }. */
     attachments: jsonb("attachments").$type<{ fileId: string; name: string; size: number }[]>(),
@@ -78,6 +92,10 @@ export const emailLog = pgTable(
     ),
     // Org-wide list, most recent first.
     index("email_log_org_sent_idx").on(t.organizationId, t.deletedAt, t.sentAt.desc()),
+    // Event-scoped comms lookup.
+    index("email_log_org_project_idx").on(t.organizationId, t.projectId),
+    // Thread grouping (Commit 3 "Thread replies").
+    index("email_log_org_thread_idx").on(t.organizationId, t.threadId),
     // Provider dedup. Partial unique — manual rows have NULL external_id
     // and bypass the constraint.
     uniqueIndex("email_log_org_source_external_uidx")

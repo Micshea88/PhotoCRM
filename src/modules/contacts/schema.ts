@@ -11,6 +11,10 @@ import {
 import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 import { companies } from "@/modules/companies/schema"
+// projects/opportunities import this module (contacts); contactNotes references
+// them via lazy AnyPgColumn callbacks, so the import cycle is eval-safe.
+import { projects } from "@/modules/projects/schema"
+import { opportunities } from "@/modules/opportunities/schema"
 
 /**
  * Central record of the three-record model (Contact / Project / Opportunity)
@@ -234,6 +238,16 @@ export const contactNotes = pgTable(
     contactId: text("contact_id")
       .notNull()
       .references((): AnyPgColumn => contacts.id, { onDelete: "cascade" }),
+    /** Optional event (project) / opportunity association — see sms_messages
+     *  for the rationale. Lazy AnyPgColumn refs because projects/opportunities
+     *  import contacts (this module) — the deferred callback keeps the import
+     *  cycle safe. */
+    projectId: text("project_id").references((): AnyPgColumn => projects.id, {
+      onDelete: "set null",
+    }),
+    opportunityId: text("opportunity_id").references((): AnyPgColumn => opportunities.id, {
+      onDelete: "set null",
+    }),
     body: text("body").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

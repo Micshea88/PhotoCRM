@@ -351,6 +351,13 @@
       "when": 1781896915847,
       "tag": "0049_chubby_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1782062759941,
+      "tag": "0050_black_dazzler",
+      "breakpoints": true
     }
   ]
 }

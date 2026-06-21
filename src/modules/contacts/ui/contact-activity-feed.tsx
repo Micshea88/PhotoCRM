@@ -102,6 +102,21 @@ export interface ActivityEntry {
    *  narrows to `RecordedCallDisposition` at render time and
    *  short-circuits on unknown values. */
   callDisposition?: string | null
+  /** Direction for call / email / sms entries ("incoming"/"outgoing"/"missed"
+   *  for calls; "inbound"/"outbound" for email + sms). Null for note/meeting.
+   *  Discrete field for the Direction filter — the title still shows it inline
+   *  for calls/sms. (Activity-feed filter strip, 2026-06-21.) */
+  direction?: string | null
+  /** Unified outcome for the Outcome filter: the call `disposition` for calls,
+   *  the `outcome` column for meetings. Null otherwise. */
+  outcome?: string | null
+  /** Event (project) / opportunity association for the Event filter + per-row
+   *  event tag. Name is resolved in the UI from the loaded event options. */
+  projectId?: string | null
+  opportunityId?: string | null
+  /** Email thread grouping key (kind === "email"); null until the threading
+   *  pipeline (Commit 3) populates it. */
+  threadId?: string | null
 }
 
 /**

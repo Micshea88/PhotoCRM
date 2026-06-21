@@ -2,6 +2,8 @@ import { pgTable, text, integer, jsonb, timestamp, index, uniqueIndex } from "dr
 import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
+import { projects } from "@/modules/projects/schema"
+import { opportunities } from "@/modules/opportunities/schema"
 import { files } from "@/modules/files/schema"
 
 /**
@@ -48,6 +50,13 @@ export const callLog = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "restrict" }),
     contactId: text("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    /** Optional event (project) / opportunity association — see sms_messages
+     *  for the rationale (event filter + bulk-reassignable plain FK columns).
+     *  (Call OUTCOME reuses the existing `disposition` column — no new col.) */
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+    opportunityId: text("opportunity_id").references(() => opportunities.id, {
       onDelete: "set null",
     }),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
@@ -129,6 +138,8 @@ export const callLog = pgTable(
     ),
     // Org-wide call list, most recent first.
     index("call_log_org_started_idx").on(t.organizationId, t.deletedAt, t.startedAt.desc()),
+    // Event-scoped comms lookup.
+    index("call_log_org_project_idx").on(t.organizationId, t.projectId),
     // RingCentral dedup. Partial unique — only enforced for externally-
     // synced rows (manual rows have external_id NULL and don't need
     // dedup).

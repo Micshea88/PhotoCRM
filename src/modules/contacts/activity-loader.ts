@@ -53,6 +53,9 @@ export async function loadContactActivityWithDb(
         id: contactNotes.id,
         createdAt: contactNotes.createdAt,
         body: contactNotes.body,
+        actorUserId: contactNotes.createdBy,
+        projectId: contactNotes.projectId,
+        opportunityId: contactNotes.opportunityId,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -75,6 +78,9 @@ export async function loadContactActivityWithDb(
         disposition: callLog.disposition,
         durationSeconds: callLog.durationSeconds,
         notes: callLog.notes,
+        actorUserId: callLog.userId,
+        projectId: callLog.projectId,
+        opportunityId: callLog.opportunityId,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -95,6 +101,10 @@ export async function loadContactActivityWithDb(
         startsAt: meetings.startsAt,
         subject: meetings.subject,
         notes: meetings.notes,
+        outcome: meetings.outcome,
+        actorUserId: meetings.createdBy,
+        projectId: meetings.projectId,
+        opportunityId: meetings.opportunityId,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -115,6 +125,9 @@ export async function loadContactActivityWithDb(
         sentAt: smsMessages.sentAt,
         direction: smsMessages.direction,
         body: smsMessages.body,
+        actorUserId: smsMessages.sentByUserId,
+        projectId: smsMessages.projectId,
+        opportunityId: smsMessages.opportunityId,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -137,6 +150,10 @@ export async function loadContactActivityWithDb(
         direction: emailLog.direction,
         subject: emailLog.subject,
         body: emailLog.body,
+        threadId: emailLog.threadId,
+        actorUserId: emailLog.userId,
+        projectId: emailLog.projectId,
+        opportunityId: emailLog.opportunityId,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -165,6 +182,9 @@ export async function loadContactActivityWithDb(
         title: "Note added",
         body: n.body,
         actor: actor(n.actorName, n.actorEmail),
+        actorUserId: n.actorUserId,
+        projectId: n.projectId,
+        opportunityId: n.opportunityId,
       })
     }
 
@@ -187,6 +207,11 @@ export async function loadContactActivityWithDb(
         title: `Call (${c.direction})${dur}`,
         body: c.notes,
         actor: actor(c.actorName, c.actorEmail),
+        actorUserId: c.actorUserId,
+        direction: c.direction,
+        outcome: c.disposition,
+        projectId: c.projectId,
+        opportunityId: c.opportunityId,
         callDisposition: c.disposition,
       })
     }
@@ -200,6 +225,10 @@ export async function loadContactActivityWithDb(
         title: m.subject ? `Meeting — ${m.subject}` : "Meeting",
         body: m.notes,
         actor: actor(m.actorName, m.actorEmail),
+        actorUserId: m.actorUserId,
+        outcome: m.outcome,
+        projectId: m.projectId,
+        opportunityId: m.opportunityId,
       })
     }
 
@@ -212,6 +241,10 @@ export async function loadContactActivityWithDb(
         title: `SMS (${s.direction})`,
         body: s.body,
         actor: actor(s.actorName, s.actorEmail),
+        actorUserId: s.actorUserId,
+        direction: s.direction,
+        projectId: s.projectId,
+        opportunityId: s.opportunityId,
       })
     }
 
@@ -225,6 +258,11 @@ export async function loadContactActivityWithDb(
         subject: m.subject,
         body: m.body,
         actor: actor(m.actorName, m.actorEmail),
+        actorUserId: m.actorUserId,
+        direction: m.direction,
+        projectId: m.projectId,
+        opportunityId: m.opportunityId,
+        threadId: m.threadId,
       })
     }
 

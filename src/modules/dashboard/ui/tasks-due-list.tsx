@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/format"
 import { Avatar } from "@/components/ui/avatar"
+import { Tooltip } from "@/components/ui/tooltip"
 import { taskDueState } from "@/modules/tasks/task-due-state"
 import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
 import { HighPriorityFlag } from "@/modules/tasks/ui/high-priority-flag"
@@ -62,9 +63,9 @@ export function TasksDueList({ topTasks, totalCount, members }: TasksDueListProp
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   {assignee.kind === "member" && (
-                    <span title={assignee.name}>
+                    <Tooltip label={assignee.name}>
                       <Avatar name={assignee.name} image={assignee.image} size={18} />
-                    </span>
+                    </Tooltip>
                   )}
                   <span
                     className={cn(

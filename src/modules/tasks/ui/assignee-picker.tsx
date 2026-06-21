@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
+import { Tooltip } from "@/components/ui/tooltip"
 import { SingleSelectMenu, type SingleSelectOption } from "@/components/ui/single-select-menu"
 import { cn } from "@/lib/utils"
 
@@ -99,16 +100,17 @@ export function AssigneePicker({
             </span>
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={toggle}
-            title={selected ? `Assigned to ${selected.name}` : "Unassigned"}
-            aria-label={selected ? `Assigned to ${selected.name}` : "Assign task"}
-            className="shrink-0 rounded-full"
-            data-testid="task-assignee-trigger"
-          >
-            <AssigneeAvatar member={selected} size={avatarSize} />
-          </button>
+          <Tooltip label={selected ? `Assigned to ${selected.name}` : "Unassigned"}>
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={selected ? `Assigned to ${selected.name}` : "Assign task"}
+              className="shrink-0 rounded-full"
+              data-testid="task-assignee-trigger"
+            >
+              <AssigneeAvatar member={selected} size={avatarSize} />
+            </button>
+          </Tooltip>
         )
       }
     />

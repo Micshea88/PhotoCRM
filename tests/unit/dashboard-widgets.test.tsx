@@ -215,9 +215,9 @@ describe("TasksDueList", () => {
         ]}
       />,
     )
-    // Avatar initials for Mike Shea, name in the title attribute (no id leak).
+    // Avatar initials for Mike Shea, name in the hover tooltip (no id leak).
     expect(screen.getByText("MS")).toBeInTheDocument()
-    expect(screen.getByTitle("Mike Shea")).toBeInTheDocument()
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Mike Shea")
     expect(screen.queryByText(/user_a/)).toBeNull()
   })
 

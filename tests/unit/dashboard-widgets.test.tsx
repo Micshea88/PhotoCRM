@@ -48,20 +48,26 @@ describe("CountCard", () => {
 })
 
 describe("TeamThisWeek", () => {
+  const MEMBERS = [
+    { id: "user_a", name: "Mike Shea", image: null },
+    { id: "user_b", name: "Kelly Stone", image: null },
+  ]
+
   it("renders the no-seed-view explanation for an unseeded studio", () => {
-    render(<TeamThisWeek tasks={[]} hasSeedView={false} />)
+    render(<TeamThisWeek tasks={[]} hasSeedView={false} members={MEMBERS} />)
     expect(screen.getByText(/isn.t set up for this studio yet/)).toBeInTheDocument()
   })
 
   it("renders the empty-week message when seeded but no tasks", () => {
-    render(<TeamThisWeek tasks={[]} hasSeedView={true} />)
+    render(<TeamThisWeek tasks={[]} hasSeedView={true} members={MEMBERS} />)
     expect(screen.getByText(/No tasks scheduled this week/)).toBeInTheDocument()
   })
 
-  it("groups tasks by assignee and shows due dates", () => {
+  it("groups tasks by assignee and shows member names (not raw ids) + due dates", () => {
     render(
       <TeamThisWeek
         hasSeedView={true}
+        members={MEMBERS}
         tasks={[
           {
             id: "t1",
@@ -93,7 +99,10 @@ describe("TeamThisWeek", () => {
     expect(screen.getByText("Edit RAW")).toBeInTheDocument()
     expect(screen.getByText("Send invoice")).toBeInTheDocument()
     expect(screen.getByText("Confirm venue")).toBeInTheDocument()
-    expect(screen.getAllByText(/Assigned to/)).toHaveLength(2)
+    // Names resolved from members — raw ids must NOT leak.
+    expect(screen.getByText("Mike Shea")).toBeInTheDocument()
+    expect(screen.getByText("Kelly Stone")).toBeInTheDocument()
+    expect(screen.queryByText(/user_a|user_b/)).toBeNull()
     expect(screen.getByText("05/19/2026")).toBeInTheDocument()
   })
 
@@ -101,6 +110,7 @@ describe("TeamThisWeek", () => {
     render(
       <TeamThisWeek
         hasSeedView={true}
+        members={MEMBERS}
         tasks={[
           {
             id: "t1",
@@ -116,11 +126,34 @@ describe("TeamThisWeek", () => {
     expect(screen.getByText("Unassigned")).toBeInTheDocument()
     expect(screen.getByText("no due date")).toBeInTheDocument()
   })
+
+  it("labels a removed assignee as 'Former team member' (no id leak)", () => {
+    render(
+      <TeamThisWeek
+        hasSeedView={true}
+        members={MEMBERS}
+        tasks={[
+          {
+            id: "t1",
+            title: "Ghost task",
+            dueDate: "2026-05-19",
+            assigneeUserId: "ghost_user",
+            status: "ready",
+            priority: null,
+          },
+        ]}
+      />,
+    )
+    expect(screen.getByText("Former team member")).toBeInTheDocument()
+    expect(screen.queryByText(/ghost_user/)).toBeNull()
+  })
 })
 
 describe("TasksDueList", () => {
+  const MEMBERS = [{ id: "user_a", name: "Mike Shea", image: null }]
+
   it("renders count=0 with a do-next hint", () => {
-    render(<TasksDueList totalCount={0} topTasks={[]} />)
+    render(<TasksDueList totalCount={0} topTasks={[]} members={MEMBERS} />)
     expect(screen.getByText("0")).toBeInTheDocument()
     expect(screen.getByText(/Add a task to get started/)).toBeInTheDocument()
   })
@@ -129,10 +162,32 @@ describe("TasksDueList", () => {
     render(
       <TasksDueList
         totalCount={5}
+        members={MEMBERS}
         topTasks={[
-          { id: "t1", title: "Task A", dueDate: "2026-05-17", status: "ready", priority: null },
-          { id: "t2", title: "Task B", dueDate: "2026-05-18", status: "ready", priority: "high" },
-          { id: "t3", title: "Task C", dueDate: "2026-05-20", status: "ready", priority: null },
+          {
+            id: "t1",
+            title: "Task A",
+            dueDate: "2026-05-17",
+            status: "ready",
+            priority: null,
+            assigneeUserId: null,
+          },
+          {
+            id: "t2",
+            title: "Task B",
+            dueDate: "2026-05-18",
+            status: "ready",
+            priority: "high",
+            assigneeUserId: null,
+          },
+          {
+            id: "t3",
+            title: "Task C",
+            dueDate: "2026-05-20",
+            status: "ready",
+            priority: null,
+            assigneeUserId: null,
+          },
         ]}
       />,
     )
@@ -143,11 +198,44 @@ describe("TasksDueList", () => {
     expect(screen.getByText("05/17/2026")).toBeInTheDocument()
   })
 
+  it("shows the assignee avatar (initials) for an assigned task", () => {
+    render(
+      <TasksDueList
+        totalCount={1}
+        members={MEMBERS}
+        topTasks={[
+          {
+            id: "t1",
+            title: "Assigned task",
+            dueDate: "2026-05-17",
+            status: "ready",
+            priority: null,
+            assigneeUserId: "user_a",
+          },
+        ]}
+      />,
+    )
+    // Avatar initials for Mike Shea, name in the title attribute (no id leak).
+    expect(screen.getByText("MS")).toBeInTheDocument()
+    expect(screen.getByTitle("Mike Shea")).toBeInTheDocument()
+    expect(screen.queryByText(/user_a/)).toBeNull()
+  })
+
   it("handles a task with no due date gracefully", () => {
     render(
       <TasksDueList
         totalCount={1}
-        topTasks={[{ id: "t1", title: "Floater", dueDate: null, status: "ready", priority: null }]}
+        members={MEMBERS}
+        topTasks={[
+          {
+            id: "t1",
+            title: "Floater",
+            dueDate: null,
+            status: "ready",
+            priority: null,
+            assigneeUserId: null,
+          },
+        ]}
       />,
     )
     expect(screen.getByText("Floater")).toBeInTheDocument()
@@ -158,9 +246,24 @@ describe("TasksDueList", () => {
     render(
       <TasksDueList
         totalCount={2}
+        members={MEMBERS}
         topTasks={[
-          { id: "t1", title: "Plain", dueDate: "2026-05-17", status: "ready", priority: null },
-          { id: "t2", title: "Urgent", dueDate: "2026-05-18", status: "ready", priority: "high" },
+          {
+            id: "t1",
+            title: "Plain",
+            dueDate: "2026-05-17",
+            status: "ready",
+            priority: null,
+            assigneeUserId: null,
+          },
+          {
+            id: "t2",
+            title: "Urgent",
+            dueDate: "2026-05-18",
+            status: "ready",
+            priority: "high",
+            assigneeUserId: null,
+          },
         ]}
       />,
     )

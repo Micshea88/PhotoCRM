@@ -2,7 +2,7 @@ import { countOpenOpportunities } from "@/modules/opportunities/queries"
 import { countProjectsInDateRange } from "@/modules/projects/queries"
 import { listTasksByDueDateRange } from "@/modules/tasks/queries"
 import { getDefaultSavedView } from "@/modules/saved-views/queries"
-import { getUserOrganizations } from "@/modules/org/queries"
+import { getUserOrganizations, getOrganizationMembers } from "@/modules/org/queries"
 import { resolveCurrentMonthRange, resolveMondaySundayWeek, todayISO } from "@/lib/format"
 import { withPageOrgContext } from "@/lib/page-org-context"
 import { WelcomeHeader } from "@/modules/dashboard/ui/welcome-header"
@@ -23,19 +23,28 @@ import { TasksDueList } from "@/modules/dashboard/ui/tasks-due-list"
  * in UTC off the same `weekRange`.
  */
 export default async function DashboardPage() {
-  return withPageOrgContext(async (_ctx, session) => {
+  return withPageOrgContext(async (ctx, session) => {
     const today = todayISO()
     const monthRange = resolveCurrentMonthRange(today)
     const weekRange = resolveMondaySundayWeek(today)
 
-    const [openOpps, projectsThisMonth, weekTasks, defaultTeamView, organizations] =
+    const [openOpps, projectsThisMonth, weekTasks, defaultTeamView, organizations, orgMembers] =
       await Promise.all([
         countOpenOpportunities(),
         countProjectsInDateRange(monthRange.startISO, monthRange.endISO),
         listTasksByDueDateRange(weekRange.startISO, weekRange.endISO, { limit: 100 }),
         getDefaultSavedView("task"),
         getUserOrganizations(session.user.id),
+        getOrganizationMembers(ctx.orgId),
       ])
+
+    // Org members → name + avatar lookup for the task assignee display
+    // (reused by both widgets; resolver lives in assignee-display.ts).
+    const members = orgMembers.map((m) => ({
+      id: m.user.id,
+      name: m.user.name || m.user.email,
+      image: m.user.image ?? null,
+    }))
 
     const activeOrgId = session.session.activeOrganizationId
     const activeOrg = organizations.find((o) => o.id === activeOrgId)
@@ -76,6 +85,7 @@ export default async function DashboardPage() {
             priority: t.priority,
           }))}
           hasSeedView={defaultTeamView !== null}
+          members={members}
         />
 
         <TasksDueList
@@ -86,7 +96,9 @@ export default async function DashboardPage() {
             dueDate: t.dueDate,
             status: t.status,
             priority: t.priority,
+            assigneeUserId: t.assigneeUserId,
           }))}
+          members={members}
         />
       </div>
     )

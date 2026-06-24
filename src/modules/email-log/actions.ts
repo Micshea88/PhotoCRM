@@ -7,6 +7,7 @@ import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
 import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
+import { assertEventRefsInOrg } from "@/modules/projects/event-refs"
 import { emailLog } from "./schema"
 import { deleteEmailInput, logEmailInput, updateEmailInput } from "./types"
 
@@ -38,6 +39,10 @@ export const logEmail = orgAction
     if (!contact) {
       throw new ActionError("VALIDATION", "Contact not found in this organization.")
     }
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: parsedInput.projectId,
+      opportunityId: parsedInput.opportunityId,
+    })
 
     const id = createId()
     await ctx.db.insert(emailLog).values({
@@ -50,6 +55,8 @@ export const logEmail = orgAction
       subject: parsedInput.subject ?? null,
       body: parsedInput.body ?? null,
       attachments: parsedInput.attachments ?? null,
+      projectId: parsedInput.projectId ?? null,
+      opportunityId: parsedInput.opportunityId ?? null,
       source: "manual",
       externalId: null,
       externalMetadata: null,
@@ -87,6 +94,10 @@ export const updateEmail = orgAction
   .inputSchema(updateEmailInput)
   .action(async ({ parsedInput, ctx }) => {
     const { id, ...rest } = parsedInput
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: rest.projectId,
+      opportunityId: rest.opportunityId,
+    })
     const patch: Record<string, unknown> = {
       updatedAt: new Date(),
       updatedBy: ctx.session.user.id,
@@ -96,6 +107,8 @@ export const updateEmail = orgAction
     if (rest.subject !== undefined) patch.subject = rest.subject
     if (rest.body !== undefined) patch.body = rest.body
     if (rest.attachments !== undefined) patch.attachments = rest.attachments
+    if (rest.projectId !== undefined) patch.projectId = rest.projectId
+    if (rest.opportunityId !== undefined) patch.opportunityId = rest.opportunityId
 
     const result = await ctx.db
       .update(emailLog)

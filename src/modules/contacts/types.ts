@@ -228,10 +228,16 @@ export const bulkRemoveTagInput = z.object({
 export const createContactNoteInput = z.object({
   contactId: z.string().min(1),
   body: z.string().min(1).max(10000),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
 })
 export const updateContactNoteInput = z.object({
   id: z.string().min(1),
-  body: z.string().min(1).max(10000),
+  // Optional so a pure event-association edit (projectId only) doesn't require
+  // re-sending the body. The inline note editor still always sends it.
+  body: z.string().min(1).max(10000).optional(),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
 })
 export const deleteContactNoteInput = z.object({ id: z.string().min(1) })
 

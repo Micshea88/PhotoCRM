@@ -6,6 +6,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
+import { assertEventRefsInOrg } from "@/modules/projects/event-refs"
 import type * as schema from "@/db/schema"
 import { companies } from "@/modules/companies/schema"
 import {
@@ -484,12 +485,18 @@ export const createContactNote = orgAction
   .inputSchema(createContactNoteInput)
   .action(async ({ parsedInput, ctx }) => {
     await assertContactInOrg(ctx.db, parsedInput.contactId, ctx.activeOrg.id)
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: parsedInput.projectId,
+      opportunityId: parsedInput.opportunityId,
+    })
     const id = createId()
     await ctx.db.insert(contactNotes).values({
       id,
       organizationId: ctx.activeOrg.id,
       contactId: parsedInput.contactId,
       body: parsedInput.body,
+      projectId: parsedInput.projectId ?? null,
+      opportunityId: parsedInput.opportunityId ?? null,
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
@@ -520,9 +527,20 @@ export const updateContactNote = orgAction
   .metadata({ actionName: "contact_notes.update" })
   .inputSchema(updateContactNoteInput)
   .action(async ({ parsedInput, ctx }) => {
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: parsedInput.projectId,
+      opportunityId: parsedInput.opportunityId,
+    })
+    const patch: Record<string, unknown> = {
+      updatedAt: new Date(),
+      updatedBy: ctx.session.user.id,
+    }
+    if (parsedInput.body !== undefined) patch.body = parsedInput.body
+    if (parsedInput.projectId !== undefined) patch.projectId = parsedInput.projectId
+    if (parsedInput.opportunityId !== undefined) patch.opportunityId = parsedInput.opportunityId
     const result = await ctx.db
       .update(contactNotes)
-      .set({ body: parsedInput.body, updatedAt: new Date(), updatedBy: ctx.session.user.id })
+      .set(patch)
       .where(
         and(
           eq(contactNotes.id, parsedInput.id),

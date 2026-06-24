@@ -349,6 +349,7 @@ export default async function ContactDetailPage({
               id: o.id,
               label: o.name,
             }))}
+            eventOptions={eventOptions}
             hasConnectedPhoneProvider={hasConnectedPhoneProvider}
             primaryPhone={contact.primaryPhone}
           />

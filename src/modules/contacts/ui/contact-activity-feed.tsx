@@ -26,6 +26,10 @@ import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { cn } from "@/lib/utils"
 import { useDialer } from "@/modules/telephony/ui/dialer-context"
+import {
+  ActivityRowControls,
+  type ActivityEventOption,
+} from "@/modules/contacts/ui/activity-row-controls"
 import { updateContactNote, deleteContactNote } from "@/modules/contacts/actions"
 import { updateCall, deleteCall } from "@/modules/calls/actions"
 import { dispositionDisplayLabel, type RecordedCallDisposition } from "@/modules/calls/types"
@@ -308,6 +312,7 @@ export function ContactActivityFeed({
   contactId,
   entries,
   assigneeOptions = [],
+  eventOptions = [],
   className,
   hasConnectedPhoneProvider = false,
   primaryPhone = null,
@@ -315,6 +320,8 @@ export function ContactActivityFeed({
   contactId: string
   entries: ActivityEntry[]
   assigneeOptions?: AssigneeOption[]
+  /** Org events (projects) for the per-row event picker (Phase D2). */
+  eventOptions?: ActivityEventOption[]
   className?: string
   /** Server-side boolean from the contact page. Drives the "Make a
    *  call" button's branch between picker (no provider) and the
@@ -612,6 +619,7 @@ export function ContactActivityFeed({
       {composer === "note" && (
         <NoteComposer
           contactId={contactId}
+          eventOptions={eventOptions}
           onSaved={() => {
             setComposer(null)
           }}
@@ -623,6 +631,7 @@ export function ContactActivityFeed({
       {composer === "call" && (
         <CallLogComposer
           contactId={contactId}
+          eventOptions={eventOptions}
           onSaved={() => {
             setComposer(null)
           }}
@@ -634,6 +643,7 @@ export function ContactActivityFeed({
       {composer === "email" && (
         <EmailLogComposer
           contactId={contactId}
+          eventOptions={eventOptions}
           onSaved={() => {
             setComposer(null)
           }}
@@ -645,6 +655,7 @@ export function ContactActivityFeed({
       {composer === "meeting" && (
         <MeetingLogComposer
           contactId={contactId}
+          eventOptions={eventOptions}
           onSaved={() => {
             setComposer(null)
           }}
@@ -656,6 +667,7 @@ export function ContactActivityFeed({
       {composer === "sms" && (
         <SmsLogComposer
           contactId={contactId}
+          eventOptions={eventOptions}
           onSaved={() => {
             setComposer(null)
           }}
@@ -676,7 +688,7 @@ export function ContactActivityFeed({
         <ul className="space-y-3">
           {visible.map((e) => (
             <li key={e.id}>
-              <ActivityCard entry={e} collapsedAll={collapseAll} />
+              <ActivityCard entry={e} collapsedAll={collapseAll} eventOptions={eventOptions} />
             </li>
           ))}
         </ul>
@@ -853,7 +865,15 @@ function FiltersPanel({
  *      menu. The delete action prompts via the shared ConfirmModal
  *      (Item 1b — replaces window.confirm).
  */
-function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsedAll: boolean }) {
+function ActivityCard({
+  entry,
+  collapsedAll,
+  eventOptions,
+}: {
+  entry: ActivityEntry
+  collapsedAll: boolean
+  eventOptions: ActivityEventOption[]
+}) {
   const [open, setOpen] = useState(true)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(entry.body ?? "")
@@ -1033,6 +1053,7 @@ function ActivityCard({ entry, collapsedAll }: { entry: ActivityEntry; collapsed
           )}
         </div>
       )}
+      {isOpen && !editing && <ActivityRowControls entry={entry} eventOptions={eventOptions} />}
       {editing && (
         <div className="space-y-1 pl-7">
           <textarea

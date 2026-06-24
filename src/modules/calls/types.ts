@@ -80,6 +80,9 @@ export const logCallInput = z.object({
    * NULL on the row; activity feed renders no badge).
    */
   disposition: recordedCallDispositionSchema.nullable().optional(),
+  // Optional event (project) / opportunity association.
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
 })
 
 export const updateCallInput = z.object({
@@ -90,6 +93,8 @@ export const updateCallInput = z.object({
   notes: z.string().max(10_000).nullable().optional(),
   recordingFileId: z.string().nullable().optional(),
   disposition: recordedCallDispositionSchema.nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
 })
 
 export const deleteCallInput = z.object({ id: z.string().min(1) })

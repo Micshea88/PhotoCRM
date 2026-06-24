@@ -36,6 +36,8 @@ export const logEmailInput = z.object({
   subject: z.string().max(998).nullable().optional(),
   body: z.string().max(50_000).nullable().optional(),
   attachments: z.array(attachmentSchema).max(20).nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
 })
 
 export const updateEmailInput = z.object({
@@ -45,6 +47,8 @@ export const updateEmailInput = z.object({
   subject: z.string().max(998).nullable().optional(),
   body: z.string().max(50_000).nullable().optional(),
   attachments: z.array(attachmentSchema).max(20).nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
 })
 
 export const deleteEmailInput = z.object({ id: z.string().min(1) })

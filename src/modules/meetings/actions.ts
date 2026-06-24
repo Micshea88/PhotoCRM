@@ -8,6 +8,8 @@ import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
 import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
+import { assertEventRefsInOrg } from "@/modules/projects/event-refs"
+import { meetingOutcomeSchema } from "./types"
 import { meetings } from "./schema"
 
 /**
@@ -34,6 +36,9 @@ const logMeetingInput = z.object({
   notes: z.string().max(10_000).optional().nullable(),
   endsAt: z.string().optional().nullable(),
   location: z.string().max(500).optional().nullable(),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
+  outcome: meetingOutcomeSchema.nullable().optional(),
 })
 
 const updateMeetingInput = z.object({
@@ -43,6 +48,9 @@ const updateMeetingInput = z.object({
   notes: z.string().max(10_000).optional().nullable(),
   endsAt: z.string().optional().nullable(),
   location: z.string().max(500).optional().nullable(),
+  projectId: z.string().nullable().optional(),
+  opportunityId: z.string().nullable().optional(),
+  outcome: meetingOutcomeSchema.nullable().optional(),
 })
 
 const deleteMeetingInput = z.object({ id: z.string().min(1) })
@@ -65,6 +73,10 @@ export const logMeeting = orgAction
     if (!contact) {
       throw new ActionError("VALIDATION", "Contact not found in this organization.")
     }
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: parsedInput.projectId,
+      opportunityId: parsedInput.opportunityId,
+    })
     const id = createId()
     await ctx.db.insert(meetings).values({
       id,
@@ -75,6 +87,9 @@ export const logMeeting = orgAction
       startsAt: new Date(parsedInput.startsAt),
       endsAt: parsedInput.endsAt ? new Date(parsedInput.endsAt) : null,
       location: parsedInput.location ?? null,
+      projectId: parsedInput.projectId ?? null,
+      opportunityId: parsedInput.opportunityId ?? null,
+      outcome: parsedInput.outcome ?? null,
       createdBy: ctx.session.user.id,
       updatedBy: ctx.session.user.id,
     })
@@ -103,6 +118,10 @@ export const updateMeeting = orgAction
   .inputSchema(updateMeetingInput)
   .action(async ({ parsedInput, ctx }) => {
     const { id, ...rest } = parsedInput
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: rest.projectId,
+      opportunityId: rest.opportunityId,
+    })
     const patch: Record<string, unknown> = {
       updatedAt: new Date(),
       updatedBy: ctx.session.user.id,
@@ -112,6 +131,9 @@ export const updateMeeting = orgAction
     if (rest.notes !== undefined) patch.notes = rest.notes
     if (rest.endsAt !== undefined) patch.endsAt = rest.endsAt ? new Date(rest.endsAt) : null
     if (rest.location !== undefined) patch.location = rest.location
+    if (rest.projectId !== undefined) patch.projectId = rest.projectId
+    if (rest.opportunityId !== undefined) patch.opportunityId = rest.opportunityId
+    if (rest.outcome !== undefined) patch.outcome = rest.outcome
     const result = await ctx.db
       .update(meetings)
       .set(patch)

@@ -17,6 +17,8 @@ import {
   type CallDirection,
   type RecordedCallDisposition,
 } from "@/modules/calls/types"
+import { MEETING_OUTCOMES, type MeetingOutcome } from "@/modules/meetings/types"
+import { type ActivityEventOption } from "./activity-row-controls"
 
 /**
  * P-activities — inline composers that ship in the new Activities
@@ -48,6 +50,8 @@ interface ComposerBaseProps {
   contactId: string
   onSaved: () => void
   onCancel: () => void
+  /** Org events (projects) for the optional event association at creation. */
+  eventOptions: ActivityEventOption[]
 }
 
 function nowIso(): string {
@@ -119,11 +123,46 @@ function refresh(router: ReturnType<typeof useRouter>, transition: (cb: () => vo
   })
 }
 
+/** Optional event-association select for the composers ("No event" default). */
+function EventSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  value: string | null
+  onChange: (v: string | null) => void
+  options: ActivityEventOption[]
+  disabled?: boolean
+}) {
+  return (
+    <Field label="Event">
+      <select
+        value={value ?? ""}
+        onChange={(e) => {
+          onChange(e.target.value || null)
+        }}
+        disabled={disabled}
+        data-testid="composer-event"
+        className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm disabled:opacity-50"
+      >
+        <option value="">No event</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
 // ─── Note composer ────────────────────────────────────────────────────
 
-export function NoteComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
+export function NoteComposer({ contactId, onSaved, onCancel, eventOptions }: ComposerBaseProps) {
   const router = useRouter()
   const [body, setBody] = useState("")
+  const [projectId, setProjectId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, transition] = useTransition()
@@ -138,7 +177,7 @@ export function NoteComposer({ contactId, onSaved, onCancel }: ComposerBaseProps
       onSave={async () => {
         setSaving(true)
         setError(null)
-        const result = await createContactNote({ contactId, body: body.trim() })
+        const result = await createContactNote({ contactId, body: body.trim(), projectId })
         setSaving(false)
         if (result.serverError) {
           setError(result.serverError)
@@ -161,6 +200,12 @@ export function NoteComposer({ contactId, onSaved, onCancel }: ComposerBaseProps
         aria-label="Note body"
         data-testid="note-composer-body"
         className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+      />
+      <EventSelect
+        value={projectId}
+        onChange={setProjectId}
+        options={eventOptions}
+        disabled={saving}
       />
       <div
         className="flex items-center gap-1 text-[var(--color-muted-foreground)]"
@@ -215,13 +260,14 @@ const CALL_DIRECTIONS: { value: CallDirection; label: string }[] = [
   { value: "incoming", label: "Inbound" },
 ]
 
-export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
+export function CallLogComposer({ contactId, onSaved, onCancel, eventOptions }: ComposerBaseProps) {
   const router = useRouter()
   const [startedAt, setStartedAt] = useState(nowIso())
   const [outcome, setOutcome] = useState<RecordedCallDisposition | null>("completed")
   const [direction, setDirection] = useState<CallDirection | null>("outgoing")
   const [durationMin, setDurationMin] = useState("")
   const [notes, setNotes] = useState("")
+  const [projectId, setProjectId] = useState<string | null>(null)
   const [createFollowUp, setCreateFollowUp] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -257,6 +303,7 @@ export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBasePr
           durationSeconds,
           notes: notes.trim() || null,
           disposition: outcome,
+          projectId,
         })
         setSaving(false)
         if (result.serverError) {
@@ -335,6 +382,12 @@ export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBasePr
           className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
         />
       </Field>
+      <EventSelect
+        value={projectId}
+        onChange={setProjectId}
+        options={eventOptions}
+        disabled={saving}
+      />
       {/* Tasks are project-scoped today (NOT NULL projectId);
           contact-scoped follow-up tasks ship with Push 7. Toggle
           renders disabled with the ship-target tooltip — the design
@@ -359,7 +412,12 @@ export function CallLogComposer({ contactId, onSaved, onCancel }: ComposerBasePr
 
 // ─── Email log composer ──────────────────────────────────────────────
 
-export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
+export function EmailLogComposer({
+  contactId,
+  onSaved,
+  onCancel,
+  eventOptions,
+}: ComposerBaseProps) {
   // P-email-log — the manual Log-an-email path. Writes directly to the
   // first-class email_log table via logEmail. Source is "manual";
   // direction defaults to "outbound" (the V1 surface only logs sent
@@ -370,6 +428,7 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
   const [when, setWhen] = useState(nowIso())
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
+  const [projectId, setProjectId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, transition] = useTransition()
@@ -392,6 +451,7 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
           direction: "outbound",
           subject: trimmedSubject.length > 0 ? trimmedSubject : null,
           body: trimmedBody.length > 0 ? trimmedBody : null,
+          projectId,
         })
         setSaving(false)
         if (result.serverError) {
@@ -441,17 +501,30 @@ export function EmailLogComposer({ contactId, onSaved, onCancel }: ComposerBaseP
           className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
         />
       </Field>
+      <EventSelect
+        value={projectId}
+        onChange={setProjectId}
+        options={eventOptions}
+        disabled={saving}
+      />
     </ComposerShell>
   )
 }
 
 // ─── Meeting log composer ────────────────────────────────────────────
 
-export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBaseProps) {
+export function MeetingLogComposer({
+  contactId,
+  onSaved,
+  onCancel,
+  eventOptions,
+}: ComposerBaseProps) {
   const router = useRouter()
   const [startsAt, setStartsAt] = useState(nowIso())
   const [attendees, setAttendees] = useState("")
   const [notes, setNotes] = useState("")
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<MeetingOutcome | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, transition] = useTransition()
@@ -478,6 +551,8 @@ export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBas
           startsAt: new Date(startsAt).toISOString(),
           subject: null,
           notes: combinedNotes || null,
+          projectId,
+          outcome,
         })
         setSaving(false)
         if (result.serverError) {
@@ -525,6 +600,30 @@ export function MeetingLogComposer({ contactId, onSaved, onCancel }: ComposerBas
           className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
         />
       </Field>
+      <Field label="Outcome">
+        <select
+          value={outcome ?? ""}
+          onChange={(e) => {
+            setOutcome((e.target.value || null) as MeetingOutcome | null)
+          }}
+          disabled={saving}
+          data-testid="meeting-composer-outcome"
+          className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm disabled:opacity-50"
+        >
+          <option value="">Set later</option>
+          {MEETING_OUTCOMES.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <EventSelect
+        value={projectId}
+        onChange={setProjectId}
+        options={eventOptions}
+        disabled={saving}
+      />
     </ComposerShell>
   )
 }

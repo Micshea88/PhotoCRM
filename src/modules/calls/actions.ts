@@ -7,6 +7,7 @@ import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { contacts } from "@/modules/contacts/schema"
 import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
+import { assertEventRefsInOrg } from "@/modules/projects/event-refs"
 import { callLog } from "./schema"
 import {
   deleteCallInput,
@@ -44,6 +45,10 @@ export const logCall = orgAction
     if (!contact) {
       throw new ActionError("VALIDATION", "Contact not found in this organization.")
     }
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: parsedInput.projectId,
+      opportunityId: parsedInput.opportunityId,
+    })
 
     const id = createId()
     await ctx.db.insert(callLog).values({
@@ -57,6 +62,8 @@ export const logCall = orgAction
       durationSeconds: parsedInput.durationSeconds ?? null,
       notes: parsedInput.notes ?? null,
       recordingFileId: parsedInput.recordingFileId ?? null,
+      projectId: parsedInput.projectId ?? null,
+      opportunityId: parsedInput.opportunityId ?? null,
       source: "manual",
       externalId: null,
       externalMetadata: null,
@@ -97,6 +104,10 @@ export const updateCall = orgAction
   .inputSchema(updateCallInput)
   .action(async ({ parsedInput, ctx }) => {
     const { id, ...rest } = parsedInput
+    await assertEventRefsInOrg(ctx.db, ctx.activeOrg.id, {
+      projectId: rest.projectId,
+      opportunityId: rest.opportunityId,
+    })
     const patch: Record<string, unknown> = {
       updatedAt: new Date(),
       updatedBy: ctx.session.user.id,
@@ -107,6 +118,8 @@ export const updateCall = orgAction
     if (rest.notes !== undefined) patch.notes = rest.notes
     if (rest.recordingFileId !== undefined) patch.recordingFileId = rest.recordingFileId
     if (rest.disposition !== undefined) patch.disposition = rest.disposition
+    if (rest.projectId !== undefined) patch.projectId = rest.projectId
+    if (rest.opportunityId !== undefined) patch.opportunityId = rest.opportunityId
 
     const result = await ctx.db
       .update(callLog)

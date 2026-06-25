@@ -42,6 +42,9 @@ vi.mock("@/modules/email-log/actions", () => ({
   deleteEmail: vi.fn(),
   logEmail: vi.fn(),
 }))
+vi.mock("@/modules/email-log/ui/create-email-composer", () => ({
+  CreateEmailComposer: () => null,
+}))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }))

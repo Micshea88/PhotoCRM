@@ -18,6 +18,7 @@ type SidebarLeafId =
   | "settings_account"
   | "settings_custom_fields"
   | "settings_integrations"
+  | "settings_preferences"
 
 /**
  * Icon-key map. Strings only — actual Lucide components are imported
@@ -33,6 +34,7 @@ const ICON_KEYS: Record<SidebarLeafId, SidebarIconKey> = {
   settings_account: "settings",
   settings_custom_fields: "customFields",
   settings_integrations: "plug",
+  settings_preferences: "settings",
 }
 
 /**
@@ -61,6 +63,9 @@ const NAV_ROLE_VISIBILITY: Record<SidebarLeafId, ReadonlySet<ExtendedRole>> = {
   // admin action; per-user "use phone as yourself" is a per-member
   // capability granted separately (deferred to a later push).
   settings_integrations: new Set(["owner", "admin"]),
+  // Org-wide preferences (default share-link expiration, etc.) — admin surface,
+  // same gate as custom fields / integrations.
+  settings_preferences: new Set(["owner", "admin"]),
 }
 
 /**
@@ -107,6 +112,7 @@ const SIDEBAR_TREE: readonly SidebarTreeEntry[] = [
       { kind: "leaf", id: "settings_account" },
       { kind: "leaf", id: "settings_custom_fields" },
       { kind: "leaf", id: "settings_integrations" },
+      { kind: "leaf", id: "settings_preferences" },
     ],
   },
 ] as const

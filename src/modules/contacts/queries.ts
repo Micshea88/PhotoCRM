@@ -1,8 +1,44 @@
 import "server-only"
 import { and, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { withOrgContext } from "@/lib/org-context"
+import type * as schema from "@/db/schema"
 import { contacts, contactCompanyAssociations, contactNotes } from "./schema"
 import { companies } from "@/modules/companies/schema"
+
+type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Find the contact matching an email (case-insensitive, primary OR secondary
+ * email), org-scoped by RLS. Returns the single most-recently-updated match —
+ * emails are unique by design, but if an anomaly duplicates them, decision 1
+ * (2026-06-24) picks the most-recent. Null when there's no match (inbound
+ * caller then DROPS the email — decision 2). The tx-accepting form lets the
+ * inbound webhook (manual server-to-server tx) reuse the exact lookup.
+ */
+export async function findContactByEmail(tx: DbHandle, email: string) {
+  const lowered = email.trim().toLowerCase()
+  if (!lowered) return null
+  const [row] = await tx
+    .select()
+    .from(contacts)
+    .where(
+      and(
+        isNull(contacts.deletedAt),
+        or(
+          eq(sql`lower(${contacts.primaryEmail})`, lowered),
+          eq(sql`lower(${contacts.secondaryEmail})`, lowered),
+        ),
+      ),
+    )
+    .orderBy(sql`${contacts.updatedAt} desc`)
+    .limit(1)
+  return row ?? null
+}
+
+export async function getContactByEmail(email: string) {
+  return withOrgContext((tx) => findContactByEmail(tx, email))
+}
 
 interface ListOptions {
   withDeleted?: boolean

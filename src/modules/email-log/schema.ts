@@ -1,4 +1,13 @@
-import { pgPolicy, pgTable, text, jsonb, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core"
+import {
+  pgPolicy,
+  pgTable,
+  text,
+  integer,
+  jsonb,
+  timestamp,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
@@ -73,8 +82,18 @@ export const emailLog = pgTable(
     /** Provider raw payload + threading metadata (In-Reply-To, References).
      *  Free-form jsonb. */
     externalMetadata: jsonb("external_metadata").$type<Record<string, unknown>>(),
-    /** Optional attachments. Array of { fileId, name, size }. */
-    attachments: jsonb("attachments").$type<{ fileId: string; name: string; size: number }[]>(),
+    /** Optional attachments. Array of { fileId, name, size, deliveryMethod }
+     *  where deliveryMethod is "direct" (≤25 MB inline) or "link" (send-as-link). */
+    attachments:
+      jsonb("attachments").$type<
+        { fileId: string; name: string; size: number; deliveryMethod?: "direct" | "link" }[]
+      >(),
+    /** Open-tracking pixel id (Commit 3). Unique per outbound email; null for
+     *  inbound + un-tracked rows. */
+    trackingPixelId: text("tracking_pixel_id").unique(),
+    openCount: integer("open_count").notNull().default(0),
+    firstOpenedAt: timestamp("first_opened_at", { withTimezone: true }),
+    lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),

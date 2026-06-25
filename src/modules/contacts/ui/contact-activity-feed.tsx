@@ -39,13 +39,13 @@ import { updateEmail, deleteEmail } from "@/modules/email-log/actions"
 import { NoPhoneProviderPicker } from "@/modules/integrations/ui/no-phone-provider-picker"
 import {
   CallLogComposer,
-  CreateEmailPopout,
   EmailLogComposer,
   MeetingLogComposer,
   NoteComposer,
   ScheduleMeetingPopout,
   SmsLogComposer,
 } from "./activity-composers"
+import { CreateEmailComposer } from "@/modules/email-log/ui/create-email-composer"
 
 /**
  * P-activities — contact Activities tab.
@@ -316,6 +316,9 @@ export function ContactActivityFeed({
   className,
   hasConnectedPhoneProvider = false,
   primaryPhone = null,
+  contactEmail = null,
+  knownContactEmails = [],
+  defaultShareExpiration,
 }: {
   contactId: string
   entries: ActivityEntry[]
@@ -330,6 +333,11 @@ export function ContactActivityFeed({
   /** Threaded through to NoPhoneProviderPicker so picking tel: from
    *  the picker fires tel:${primaryPhone} immediately. */
   primaryPhone?: string | null
+  /** Create-an-email composer (Commit 3): primary recipient default + To/Cc/Bcc
+   *  autocomplete source + the org's default share-link expiration. */
+  contactEmail?: string | null
+  knownContactEmails?: string[]
+  defaultShareExpiration?: string
 }) {
   const dialer = useDialer()
   const [activeTab, setActiveTab] = useState<FilterKey>("all")
@@ -694,11 +702,15 @@ export function ContactActivityFeed({
         </ul>
       )}
 
-      <CreateEmailPopout
+      <CreateEmailComposer
         open={popout === "email"}
         onClose={() => {
           setPopout(null)
         }}
+        contactId={contactId}
+        contactEmail={contactEmail}
+        knownContactEmails={knownContactEmails}
+        defaultExpiration={defaultShareExpiration}
       />
       <ScheduleMeetingPopout
         open={popout === "meeting"}

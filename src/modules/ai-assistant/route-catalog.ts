@@ -129,6 +129,13 @@ export const ROUTE_CATALOG: readonly CatalogRoute[] = [
     description: "Connect phone, calendar, email, and payment providers.",
     requiresPermission: "manage_settings",
   },
+  {
+    id: "settings_preferences",
+    path: "/settings/preferences",
+    title: "Preferences",
+    description: "Org-wide defaults — including the default file share-link expiration.",
+    requiresPermission: "manage_settings",
+  },
 ] as const
 
 const ROUTE_BY_ID = new Map(ROUTE_CATALOG.map((r) => [r.id, r]))

@@ -31,6 +31,11 @@ vi.mock("@/modules/sms-messages/actions", () => ({
   deleteSms: vi.fn(),
   logSms: vi.fn(),
 }))
+// The Create-an-email composer (client) imports files/email server actions
+// that transitively reach @/lib/db; stub it (these tests don't exercise it).
+vi.mock("@/modules/email-log/ui/create-email-composer", () => ({
+  CreateEmailComposer: () => null,
+}))
 vi.mock("@/modules/email-log/actions", () => ({
   updateEmail: vi.fn(),
   deleteEmail: vi.fn(),

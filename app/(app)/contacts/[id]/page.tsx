@@ -15,6 +15,7 @@ import { contactLabel } from "@/modules/contacts/display"
 import { loadContactActivity } from "@/modules/contacts/activity-loader"
 import { listCompaniesForOrg } from "@/modules/companies/queries"
 import { listProjectsForOrg } from "@/modules/projects/queries"
+import { getDefaultShareExpiration } from "@/modules/org-preferences/queries"
 import { listTasksForContact } from "@/modules/tasks/queries"
 import { ContactTasksPane, type ContactTaskItem } from "@/modules/tasks/ui/contact-tasks-pane"
 import { listDistinctContactLeadSources } from "@/modules/contacts/filter-spec"
@@ -192,6 +193,16 @@ export default async function ContactDetailPage({
   const orgMembers = await getOrganizationMembers(orgId)
   const owner = orgMembers.find((m) => m.user.id === contact.ownerUserId)?.user
   const ownerView = owner ? { name: owner.name, email: owner.email } : null
+  // Create-an-email composer (Commit 3): org default share-link expiration +
+  // known-contact email autocomplete (this contact + all org contacts).
+  const defaultShareExpiration = await getDefaultShareExpiration(orgId)
+  const knownContactEmails = Array.from(
+    new Set(
+      [contact.primaryEmail, ...referralOptions.map((c) => c.primaryEmail)].filter(
+        (e): e is string => !!e,
+      ),
+    ),
+  )
   // P3 (C6c polish) — UserRefPicker requires `name: string`. Fall
   // back to the email when the user row has a null display name.
   const ownerOptions = orgMembers.map((m) => ({
@@ -352,6 +363,9 @@ export default async function ContactDetailPage({
             eventOptions={eventOptions}
             hasConnectedPhoneProvider={hasConnectedPhoneProvider}
             primaryPhone={contact.primaryPhone}
+            contactEmail={contact.primaryEmail}
+            knownContactEmails={knownContactEmails}
+            defaultShareExpiration={defaultShareExpiration}
           />
         )
         const tasksBlock = (

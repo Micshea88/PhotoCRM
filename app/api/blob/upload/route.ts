@@ -6,22 +6,19 @@ import { db } from "@/lib/db"
 import { env } from "@/lib/env"
 import { audit } from "@/modules/audit/audit"
 import { files } from "@/modules/files/schema"
+import { checkFileType } from "@/modules/files/file-types"
+import { scanAndResolveFile } from "@/modules/files/scan"
 
-// Allow-list of MIME types accepted on upload. `text/*` and other open globs
-// are intentionally NOT included — `text/html` would let a signed-in user
-// host phishing pages on `*.public.blob.vercel-storage.com`.
-const ALLOWED_CONTENT_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "image/svg+xml",
-  "application/pdf",
-  "text/plain",
-  "text/csv",
-] as const
+// File types are gated by EXTENSION via checkFileType (decisions 22–23) — RAW /
+// design / Office formats have inconsistent MIME types, so the extension is the
+// reliable signal. Blob's MIME allow-list is therefore omitted; uploads are
+// private (served only through /api/files/[id] with an auth check), and every
+// upload is malware-scanned before it can be used (decision 15).
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+// Pathway Files per-file ceiling — 1 GB (decision 17, matches Cloudmersive
+// Basic's scan max). The 25 MB direct-email-attach cap is a separate
+// composer-level check (decision 18).
+const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
 
 /**
  * Pathname must be a clean basename (no slashes, no `..`, sane chars).
@@ -52,8 +49,12 @@ export async function POST(request: Request) {
         if (!isCleanBasename(pathname)) {
           throw new Error("INVALID_PATHNAME")
         }
+        // Extension whitelist/blacklist (decisions 22–23) — fail fast, before
+        // the file is even uploaded.
+        if (!checkFileType(pathname).ok) {
+          throw new Error("INVALID_FILE_TYPE")
+        }
         return {
-          allowedContentTypes: [...ALLOWED_CONTENT_TYPES],
           maximumSizeInBytes: MAX_UPLOAD_BYTES,
           tokenPayload: JSON.stringify({
             organizationId: activeOrgId,
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
           contentType: uploaded.contentType,
           sizeBytes: uploaded.size,
           uploadedBy: payload.userId ?? null,
+          // scanStatus defaults to "pending" — resolved by the scan below.
         })
         await audit(
           {
@@ -92,6 +94,10 @@ export async function POST(request: Request) {
           "files.uploaded",
           { resourceType: "file", resourceId: id, metadata: { url: uploaded.url } },
         )
+        // Malware scan (decision 15) — every upload, before the file is usable.
+        // Runs here in the async upload-completed callback; the client polls
+        // scanStatus. scanAndResolveFile never throws.
+        await scanAndResolveFile(db, id, uploaded.url, uploaded.pathname)
       },
     })
     return Response.json(result)

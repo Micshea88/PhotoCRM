@@ -126,6 +126,18 @@ export const env = createEnv({
           "RC rejects verification tokens above ~40 chars — generate with openssl rand -hex 16 for a safe 32-char value",
       })
       .optional(),
+    // Resend inbound webhook signing secret (Svix). Optional so non-configured
+    // deploys still boot; the inbound route rejects events when unset/invalid.
+    RESEND_WEBHOOK_SECRET: z.string().min(1).optional(),
+    // Cloudmersive Virus Scan API key (Basic plan). Optional so non-configured
+    // deploys still boot; uploads stay `pending` (un-attachable) when unset.
+    CLOUDMERSIVE_API_KEY: z.string().min(1).optional(),
+    // HMAC secret(s) for share-link "passcode verified" download cookies. Its
+    // own security domain (not BETTER_AUTH_SECRET). Optional — falls back to
+    // BETTER_AUTH_SECRET during rollout. Comma-separated for rotation: sign with
+    // the first, verify against any (see share-link-crypto.ts). Rotating it only
+    // forces recipients to re-enter the passcode; the link/passcode are unaffected.
+    SHARE_LINK_HMAC_SECRET: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -162,6 +174,9 @@ export const env = createEnv({
     RINGCENTRAL_CLIENT_SECRET: process.env.RINGCENTRAL_CLIENT_SECRET,
     RINGCENTRAL_SERVER_URL: process.env.RINGCENTRAL_SERVER_URL,
     RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN: process.env.RINGCENTRAL_WEBHOOK_VERIFICATION_TOKEN,
+    RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
+    CLOUDMERSIVE_API_KEY: process.env.CLOUDMERSIVE_API_KEY,
+    SHARE_LINK_HMAC_SECRET: process.env.SHARE_LINK_HMAC_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

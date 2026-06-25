@@ -41,3 +41,76 @@ export const deleteFile = orgAction
     revalidatePath("/files")
     return { id: file.id }
   })
+
+/** Composer "Choose existing" — clean, attachable files for the active org.
+ *  Queries inlined via ctx.db (rather than importing files/queries) so this
+ *  action module — pulled into the client composer's import graph — does not
+ *  eagerly import @/lib/db (whose top-level pool init accesses server env). */
+export const listAttachableFiles = orgAction
+  .metadata({ actionName: "files.list_attachable" })
+  .inputSchema(z.object({}))
+  .action(async ({ ctx }) => {
+    const rows = await ctx.db
+      .select({
+        id: files.id,
+        pathname: files.pathname,
+        contentType: files.contentType,
+        sizeBytes: files.sizeBytes,
+        createdAt: files.createdAt,
+      })
+      .from(files)
+      .where(
+        and(
+          eq(files.organizationId, ctx.activeOrg.id),
+          eq(files.scanStatus, "clean"),
+          isNull(files.deletedAt),
+        ),
+      )
+      .orderBy(files.createdAt)
+    return { files: rows }
+  })
+
+/** Composer "Upload new" — poll a file's scan state until clean/infected. */
+export const pollFileScanState = orgAction
+  .metadata({ actionName: "files.poll_scan_state" })
+  .inputSchema(z.object({ id: z.string().min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const [row] = await ctx.db
+      .select({ id: files.id, scanStatus: files.scanStatus, sizeBytes: files.sizeBytes })
+      .from(files)
+      .where(
+        and(
+          eq(files.organizationId, ctx.activeOrg.id),
+          eq(files.id, parsedInput.id),
+          isNull(files.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!row) throw new ActionError("NOT_FOUND", "File not found")
+    return row
+  })
+
+/** Composer "Upload new" — resolve the async-created file row by blob url
+ *  (returns null until onUploadCompleted has inserted it). */
+export const resolveUploadedFile = orgAction
+  .metadata({ actionName: "files.resolve_uploaded" })
+  .inputSchema(z.object({ url: z.string().min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const [file] = await ctx.db
+      .select({
+        id: files.id,
+        pathname: files.pathname,
+        sizeBytes: files.sizeBytes,
+        scanStatus: files.scanStatus,
+      })
+      .from(files)
+      .where(
+        and(
+          eq(files.organizationId, ctx.activeOrg.id),
+          eq(files.url, parsedInput.url),
+          isNull(files.deletedAt),
+        ),
+      )
+      .limit(1)
+    return { file: file ?? null }
+  })

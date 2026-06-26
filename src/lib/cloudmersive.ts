@@ -28,7 +28,11 @@ interface CloudmersiveAdvancedResult {
   CleanResult?: boolean
 }
 
-export async function scanFile(bytes: ArrayBuffer, filename: string): Promise<ScanVerdict> {
+export async function scanFile(
+  bytes: ArrayBuffer,
+  filename: string,
+  orgId?: string,
+): Promise<ScanVerdict> {
   if (!env.CLOUDMERSIVE_API_KEY) {
     log.warn("cloudmersive: CLOUDMERSIVE_API_KEY not set — scan skipped, file stays pending")
     return "error"
@@ -38,9 +42,11 @@ export async function scanFile(bytes: ArrayBuffer, filename: string): Promise<Sc
   // Captures per-attempt API round-trip duration + the raw response payload so
   // we can tell whether the latency is the Cloudmersive API itself vs. our
   // pipeline (blob download / polling). Grep Vercel logs for "[SCAN-DIAG]".
+  // orgId is threaded purely so the diagnostics rows are org-scoped (the admin
+  // viewer must not pool rows across tenants) — it does not affect scanning.
   const sizeBytes = bytes.byteLength
   const scanStart = Date.now()
-  await logScanStep("cloudmersive_call_started", { filename, fileSizeBytes: sizeBytes })
+  await logScanStep("cloudmersive_call_started", { filename, fileSizeBytes: sizeBytes, orgId })
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const attemptStart = Date.now()
@@ -84,6 +90,7 @@ export async function scanFile(bytes: ArrayBuffer, filename: string): Promise<Sc
         status: String(res.status),
         durationMs: apiMs,
         responsePayload: payloadForDiag,
+        orgId,
       })
 
       // 5xx / 429 are transient — retry. Other non-OK is a hard failure.
@@ -137,6 +144,7 @@ export async function scanFile(bytes: ArrayBuffer, filename: string): Promise<Sc
         fileSizeBytes: sizeBytes,
         errorMessage: err instanceof Error ? err.message : String(err),
         durationMs: Date.now() - attemptStart,
+        orgId,
       })
       if (attempt === MAX_ATTEMPTS) {
         log.error(

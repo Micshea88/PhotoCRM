@@ -1,5 +1,5 @@
 import "server-only"
-import { and, desc, eq, isNull, or } from "drizzle-orm"
+import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { files } from "./schema"
 import { fileScanDiagnostics } from "./scan-diagnostics-schema"
@@ -10,14 +10,21 @@ interface ListOptions {
 
 /**
  * TEMPORARY scan-pipeline diagnostics for the admin viewer (2026-06-26). Last
- * 50 rows for this org PLUS null-org rows (early pipeline steps don't know the
- * org). Not RLS — read directly, filtered by org param. Newest first.
+ * 50 rows for THIS org only. Not RLS, so the org filter is enforced here.
+ *
+ * Security (review 2026-06-26): we deliberately do NOT include null-org rows.
+ * Null-org rows can be produced by any tenant, so pooling them would leak other
+ * orgs' filenames / sizes / scan payloads to this org's admins. Every meaningful
+ * pipeline step now threads its org id (see scanFile / scanAndResolveFile / the
+ * upload callback), so the org-scoped filter still shows the full timeline. The
+ * only untagged step is the pre-auth route entry (upload_token_requested), which
+ * is intentionally excluded.
  */
 export async function getScanDiagnostics(orgId: string) {
   return db
     .select()
     .from(fileScanDiagnostics)
-    .where(or(eq(fileScanDiagnostics.orgId, orgId), isNull(fileScanDiagnostics.orgId)))
+    .where(eq(fileScanDiagnostics.orgId, orgId))
     .orderBy(desc(fileScanDiagnostics.createdAt))
     .limit(50)
 }

@@ -77,16 +77,20 @@ export async function POST(request: Request) {
         }
       },
       onUploadCompleted: async ({ blob: uploaded, tokenPayload }) => {
+        // Parse the org FIRST so the diagnostics row is org-tagged — the admin
+        // viewer is org-scoped and must not pool rows across tenants (security
+        // review 2026-06-26). This is the earliest point org is known.
+        const payload = tokenPayload
+          ? (JSON.parse(tokenPayload) as { organizationId?: string; userId?: string })
+          : {}
         await logScanStep("upload_completed_callback_fired", {
           requestId,
+          orgId: payload.organizationId,
           filename: uploaded.pathname,
           fileSizeBytes:
             "size" in uploaded && typeof uploaded.size === "number" ? uploaded.size : undefined,
           metadata: { blobUrl: uploaded.url },
         })
-        const payload = tokenPayload
-          ? (JSON.parse(tokenPayload) as { organizationId?: string; userId?: string })
-          : {}
         if (!payload.organizationId) return
         // size MUST be present — Vercel always includes it. If it isn't, fail
         // loudly rather than silently writing a 0-byte row that breaks quotas
@@ -117,7 +121,7 @@ export async function POST(request: Request) {
         // Malware scan (decision 15) — every upload, before the file is usable.
         // Runs here in the async upload-completed callback; the client polls
         // scanStatus. scanAndResolveFile never throws.
-        await scanAndResolveFile(db, id, uploaded.url, uploaded.pathname)
+        await scanAndResolveFile(db, id, uploaded.url, uploaded.pathname, payload.organizationId)
       },
     })
     return Response.json(result)

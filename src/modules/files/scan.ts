@@ -26,6 +26,7 @@ export async function scanAndResolveFile(
   fileId: string,
   url: string,
   filename: string,
+  orgId?: string,
 ): Promise<ScanVerdict> {
   // [SCAN-DIAG] (2026-06-26) breaks the resolve time into blob-download vs.
   // scan-API so we can attribute slowness. Grep Vercel logs for "[SCAN-DIAG]".
@@ -44,7 +45,7 @@ export async function scanAndResolveFile(
       { fileId, filename, sizeBytes: bytes.byteLength, downloadMs },
       "[SCAN-DIAG] files.scan blob download complete",
     )
-    verdict = await scanFile(bytes, filename)
+    verdict = await scanFile(bytes, filename, orgId)
   } catch (err) {
     log.error({ err, fileId }, "files.scan: unexpected error, leaving pending")
     return "error"
@@ -72,7 +73,7 @@ export async function scanAndResolveFile(
       .where(eq(files.id, fileId))
   }
   if (verdict !== "error") {
-    await logScanStep("scan_status_updated", { fileId, filename, status: verdict })
+    await logScanStep("scan_status_updated", { fileId, filename, status: verdict, orgId })
   }
   return verdict
 }

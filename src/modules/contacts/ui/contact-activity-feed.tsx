@@ -6,11 +6,13 @@ import {
   Calendar,
   ChevronDown,
   ChevronRight,
+  Download,
   FileText,
   Filter as FilterIcon,
   Mail,
   MessageSquare,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Phone,
   Plus,
@@ -121,6 +123,12 @@ export interface ActivityEntry {
   /** Email thread grouping key (kind === "email"); null until the threading
    *  pipeline (Commit 3) populates it. */
   threadId?: string | null
+  /** Attachments sent with an email (kind === "email"). `deliveryMethod`
+   *  distinguishes inline ("direct") from "send as link" delivery. Null for
+   *  emails sent without attachments + all non-email kinds. */
+  attachments?:
+    | { fileId: string; name: string; size: number; deliveryMethod?: "direct" | "link" }[]
+    | null
 }
 
 /**
@@ -861,6 +869,66 @@ function FiltersPanel({
   )
 }
 
+function formatAttachmentSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${String(Math.max(1, Math.round(bytes / 1024)))} KB`
+}
+
+/**
+ * Attachments rendered inline on an email activity entry (HubSpot/HoneyBook
+ * pattern — attachments live on the email card, not a separate place). Each
+ * links to the authed file proxy (`/api/files/<id>`) so the sender can view /
+ * download exactly what was sent, regardless of whether the recipient received
+ * it inline ("direct") or as a tokenized share link ("link"). The "Sent as
+ * link" tag records the delivery method without sending Mike through the
+ * recipient's passcode-gated share page.
+ */
+function EmailAttachments({
+  attachments,
+}: {
+  attachments: NonNullable<ActivityEntry["attachments"]>
+}) {
+  return (
+    <div className="mt-1 space-y-1" data-testid="activity-email-attachments">
+      <p className="flex items-center gap-1 text-xs text-[var(--color-muted-foreground)]">
+        <Paperclip className="size-3" aria-hidden="true" />
+        {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
+      </p>
+      <ul className="space-y-1">
+        {attachments.map((a) => (
+          <li key={a.fileId}>
+            <a
+              href={`/api/files/${a.fileId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:bg-[var(--color-muted)]"
+              data-testid="activity-email-attachment"
+            >
+              <FileText
+                className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]"
+                aria-hidden="true"
+              />
+              <span className="font-medium">{a.name}</span>
+              <span className="text-[var(--color-muted-foreground)]">
+                ({formatAttachmentSize(a.size)})
+              </span>
+              {a.deliveryMethod === "link" && (
+                <span className="text-[10px] text-[var(--color-muted-foreground)]">
+                  · Sent as link
+                </span>
+              )}
+              <Download
+                className="size-3 shrink-0 text-[var(--color-muted-foreground)]"
+                aria-hidden="true"
+              />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /**
  * Backlog Item 1a/1b — activity-entry card with §1 pencil-only edit.
  *
@@ -898,6 +966,8 @@ function ActivityCard({
   const [, transition] = useTransition()
   const isOpen = collapsedAll ? false : open
   const hasBody = !!entry.body && entry.body.length > 0
+  const emailAttachments = entry.kind === "email" && entry.attachments ? entry.attachments : []
+  const hasAttachments = emailAttachments.length > 0
   const canEdit = entry.kind !== "audit" && !!entry.rawId
 
   async function autosave() {
@@ -1046,25 +1116,34 @@ function ActivityCard({
           </>
         )}
       </header>
-      {isOpen && !editing && (entry.kind === "email" ? !!entry.subject || hasBody : hasBody) && (
-        <div className="space-y-1 pl-7">
-          {/* P-email-log — Email cards render the subject as a bold
-              primary line above the body. Other kinds stay body-only. */}
-          {entry.kind === "email" && entry.subject && (
-            <p
-              className="text-sm font-medium text-[var(--color-foreground)]"
-              data-testid={`activity-entry-${entry.kind}-subject`}
-            >
-              {entry.subject}
-            </p>
-          )}
-          {hasBody && (
-            <p className="text-sm whitespace-pre-wrap text-[var(--color-muted-foreground)]">
-              {entry.body}
-            </p>
-          )}
-        </div>
-      )}
+      {isOpen &&
+        !editing &&
+        (entry.kind === "email" ? !!entry.subject || hasBody || hasAttachments : hasBody) && (
+          <div className="space-y-1 pl-7">
+            {/* P-email-log — Email cards render the subject as a bold
+                primary line above the body. Other kinds stay body-only. */}
+            {entry.kind === "email" && entry.subject && (
+              <p
+                className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-foreground)]"
+                data-testid={`activity-entry-${entry.kind}-subject`}
+              >
+                {hasAttachments && (
+                  <Paperclip
+                    className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]"
+                    aria-hidden="true"
+                  />
+                )}
+                {entry.subject}
+              </p>
+            )}
+            {hasBody && (
+              <p className="text-sm whitespace-pre-wrap text-[var(--color-muted-foreground)]">
+                {entry.body}
+              </p>
+            )}
+            {hasAttachments && <EmailAttachments attachments={emailAttachments} />}
+          </div>
+        )}
       {isOpen && !editing && <ActivityRowControls entry={entry} eventOptions={eventOptions} />}
       {editing && (
         <div className="space-y-1 pl-7">

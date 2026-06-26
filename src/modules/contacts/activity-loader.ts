@@ -154,6 +154,7 @@ export async function loadContactActivityWithDb(
         actorUserId: emailLog.userId,
         projectId: emailLog.projectId,
         opportunityId: emailLog.opportunityId,
+        attachments: emailLog.attachments,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -263,6 +264,7 @@ export async function loadContactActivityWithDb(
         projectId: m.projectId,
         opportunityId: m.opportunityId,
         threadId: m.threadId,
+        attachments: m.attachments,
       })
     }
 

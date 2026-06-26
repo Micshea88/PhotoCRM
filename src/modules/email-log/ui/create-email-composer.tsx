@@ -106,6 +106,31 @@ export function CreateEmailComposer({
     setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, ...next } : a)))
   }
 
+  // V1 has NO draft persistence — Cancel / close / successful Send all DISCARD
+  // the in-memory draft (Gmail "Discard", not "Save as draft"). Reset every
+  // field to its initial value (To re-prefills with the contact's primary
+  // email) so the next open starts clean. Per-attachment password toggles +
+  // expiration live inside `attachments`, so clearing the array resets them too.
+  function resetState() {
+    setTo(contactEmail ? [contactEmail] : [])
+    setCc([])
+    setBcc([])
+    setSubject("")
+    setBody("")
+    setAttachments([])
+    setAttachOpen(false)
+    setSending(false)
+    setError(null)
+    setDragActive(false)
+  }
+
+  // Reset BEFORE notifying the parent, so when it re-opens the composer the
+  // fields are already blank.
+  function handleClose() {
+    resetState()
+    onClose()
+  }
+
   async function pollScan(key: string, url: string) {
     // Wait for the async onUploadCompleted to insert the file row, then for the
     // malware scan to resolve.
@@ -222,12 +247,13 @@ export function CreateEmailComposer({
       setError(res.serverError)
       return
     }
-    onClose()
+    // Success also discards the draft so a later open doesn't show stale data.
+    handleClose()
     router.refresh()
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Create an email" className="max-w-2xl">
+    <Modal open={open} onClose={handleClose} title="Create an email" className="max-w-2xl">
       <div
         className={cn(
           "space-y-3 rounded-md text-sm",
@@ -375,7 +401,14 @@ export function CreateEmailComposer({
         {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={sending}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleClose}
+            disabled={sending}
+            data-testid="email-composer-cancel"
+          >
             Cancel
           </Button>
           <Button

@@ -5,6 +5,7 @@ import type * as schema from "@/db/schema"
 import { blob } from "@/lib/blob"
 import { scanFile, type ScanVerdict } from "@/lib/cloudmersive"
 import { log } from "@/lib/log"
+import { logScanStep } from "./scan-diagnostics"
 import { files } from "./schema"
 
 type DbHandle = NodePgDatabase<typeof schema>
@@ -69,6 +70,9 @@ export async function scanAndResolveFile(
       .update(files)
       .set({ scanStatus: "infected", scannedAt: new Date() })
       .where(eq(files.id, fileId))
+  }
+  if (verdict !== "error") {
+    await logScanStep("scan_status_updated", { fileId, filename, status: verdict })
   }
   return verdict
 }

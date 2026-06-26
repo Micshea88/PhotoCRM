@@ -6,6 +6,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { log } from "@/lib/log"
+import { logScanStep } from "./scan-diagnostics"
 import { files } from "./schema"
 
 export const deleteFile = orgAction
@@ -76,6 +77,7 @@ export const pollFileScanState = orgAction
   .metadata({ actionName: "files.poll_scan_state" })
   .inputSchema(z.object({ id: z.string().min(1) }))
   .action(async ({ parsedInput, ctx }) => {
+    await logScanStep("poll_received", { fileId: parsedInput.id, orgId: ctx.activeOrg.id })
     const [row] = await ctx.db
       .select({ id: files.id, scanStatus: files.scanStatus, sizeBytes: files.sizeBytes })
       .from(files)
@@ -95,6 +97,11 @@ export const pollFileScanState = orgAction
       { fileId: row.id, scanStatus: row.scanStatus, ts: Date.now() },
       "[SCAN-DIAG] pollFileScanState check",
     )
+    await logScanStep("poll_returned_status", {
+      fileId: row.id,
+      status: row.scanStatus,
+      orgId: ctx.activeOrg.id,
+    })
     return row
   })
 

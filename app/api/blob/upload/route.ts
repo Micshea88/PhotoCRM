@@ -9,6 +9,7 @@ import { files } from "@/modules/files/schema"
 import { checkFileType } from "@/modules/files/file-types"
 import { MAX_FILE_BYTES } from "@/modules/email-log/attachment-routing"
 import { scanAndResolveFile } from "@/modules/files/scan"
+import { logScanStep } from "@/modules/files/scan-diagnostics"
 
 // File types are gated by EXTENSION via checkFileType (decisions 22–23) — RAW /
 // design / Office formats have inconsistent MIME types, so the extension is the
@@ -36,6 +37,12 @@ function isCleanBasename(pathname: string): boolean {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as HandleUploadBody
+  // [SCAN-DIAG] request id correlates the route-entry / token / completed steps.
+  const requestId = crypto.randomUUID()
+  await logScanStep("upload_token_requested", {
+    requestId,
+    metadata: { url: request.url, body },
+  })
 
   try {
     const result = await handleUpload({
@@ -55,6 +62,11 @@ export async function POST(request: Request) {
         if (!checkFileType(pathname).ok) {
           throw new Error("INVALID_FILE_TYPE")
         }
+        await logScanStep("upload_token_issued", {
+          requestId,
+          filename: pathname,
+          orgId: activeOrgId,
+        })
         return {
           maximumSizeInBytes: MAX_UPLOAD_BYTES,
           tokenPayload: JSON.stringify({
@@ -65,6 +77,13 @@ export async function POST(request: Request) {
         }
       },
       onUploadCompleted: async ({ blob: uploaded, tokenPayload }) => {
+        await logScanStep("upload_completed_callback_fired", {
+          requestId,
+          filename: uploaded.pathname,
+          fileSizeBytes:
+            "size" in uploaded && typeof uploaded.size === "number" ? uploaded.size : undefined,
+          metadata: { blobUrl: uploaded.url },
+        })
         const payload = tokenPayload
           ? (JSON.parse(tokenPayload) as { organizationId?: string; userId?: string })
           : {}

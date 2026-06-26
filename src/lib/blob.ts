@@ -1,5 +1,5 @@
 import "server-only"
-import { put, del, get, list, type PutBlobResult } from "@vercel/blob"
+import { put, del, get, list, head, type PutBlobResult } from "@vercel/blob"
 import { env } from "@/lib/env"
 
 /**
@@ -25,5 +25,8 @@ export const blob = {
   del: (urlOrUrls: string | string[]) => del(urlOrUrls, { token: env.BLOB_READ_WRITE_TOKEN }),
   /** Fetch a private blob for server-side proxying. Returns null on 404. */
   get: (url: string) => get(url, { access: "private", token: env.BLOB_READ_WRITE_TOKEN }),
+  /** Blob metadata (size, contentType, …) — the onUploadCompleted callback
+   *  payload omits `size`, so we read it from storage here instead. */
+  head: (url: string) => head(url, { token: env.BLOB_READ_WRITE_TOKEN }),
   list: (opts?: Parameters<typeof list>[0]) => list({ ...opts, token: env.BLOB_READ_WRITE_TOKEN }),
 }

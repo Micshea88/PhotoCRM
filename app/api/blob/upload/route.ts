@@ -2,8 +2,10 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client"
 import { createId } from "@paralleldrive/cuid2"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
+import { blob } from "@/lib/blob"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
+import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
 import { files } from "@/modules/files/schema"
 import { checkFileType } from "@/modules/files/file-types"
@@ -92,11 +94,22 @@ export async function POST(request: Request) {
           metadata: { blobUrl: uploaded.url },
         })
         if (!payload.organizationId) return
-        // size MUST be present — Vercel always includes it. If it isn't, fail
-        // loudly rather than silently writing a 0-byte row that breaks quotas
-        // and billing displays downstream.
-        if (!("size" in uploaded) || typeof uploaded.size !== "number") {
-          throw new Error("BLOB_SIZE_MISSING")
+        // Vercel Blob's onUploadCompleted payload does NOT include `size`, so we
+        // read it from storage via head() after the upload completes. (The old
+        // BLOB_SIZE_MISSING throw fired on every upload because it checked a
+        // field Vercel omits here — root cause of the "scan never runs" bug,
+        // 2026-06-26.) Defensive fallback to 0 so a head() hiccup records a
+        // 0-byte size rather than failing the whole upload.
+        let sizeBytes = 0
+        try {
+          const meta = await blob.head(uploaded.url)
+          if (Number.isFinite(meta.size)) {
+            sizeBytes = meta.size
+          } else {
+            log.warn({ url: uploaded.url }, "blob upload: head() returned no size — recording 0")
+          }
+        } catch (err) {
+          log.warn({ err, url: uploaded.url }, "blob upload: head() failed — recording size 0")
         }
         const id = createId()
         await db.insert(files).values({
@@ -105,7 +118,7 @@ export async function POST(request: Request) {
           pathname: uploaded.pathname,
           url: uploaded.url,
           contentType: uploaded.contentType,
-          sizeBytes: uploaded.size,
+          sizeBytes,
           uploadedBy: payload.userId ?? null,
           // scanStatus defaults to "pending" — resolved by the scan below.
         })

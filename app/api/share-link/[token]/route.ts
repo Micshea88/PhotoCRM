@@ -1,3 +1,6 @@
+import { headers } from "next/headers"
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
 import {
   getShareLinkByToken,
   linkAvailability,
@@ -8,6 +11,7 @@ import {
   lockoutMinutesRemaining,
   attemptsRemaining,
 } from "@/modules/files/share-link-core"
+import { accessCookieValue } from "@/modules/files/share-link-crypto"
 
 export const dynamic = "force-dynamic"
 
@@ -56,6 +60,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
   const { link, file } = row
   await logShareEvent(link.id, link.organizationId, "opened")
+
+  // Org-matched photographer (authenticated + same org as the file) → skip the
+  // passcode wall and view exactly what the recipient sees (HubSpot "view what
+  // was shared" pattern). Security model unchanged for everyone else:
+  //   - expiration is already enforced above (availability !== "ok" returns),
+  //   - lockout is NOT bypassed (guarded here — locked links fall through to the
+  //     lockout screen even for org users),
+  //   - untrusted recipients with no/other-org session always hit the passcode.
+  if (link.passcodeHash && !isLocked(link.lockedUntil, now)) {
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (session?.user && session.session.activeOrganizationId === link.organizationId) {
+      const base = `/api/share-link/${encodeURIComponent(token)}`
+      const res = NextResponse.redirect(new URL(`${base}/download`, request.url))
+      res.cookies.set(`sl_${token}`, accessCookieValue(token), {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: base,
+        maxAge: 60 * 60,
+      })
+      return res
+    }
+  }
 
   // No passcode → straight to download.
   if (!link.passcodeHash) {

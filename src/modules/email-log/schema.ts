@@ -82,12 +82,21 @@ export const emailLog = pgTable(
     /** Provider raw payload + threading metadata (In-Reply-To, References).
      *  Free-form jsonb. */
     externalMetadata: jsonb("external_metadata").$type<Record<string, unknown>>(),
-    /** Optional attachments. Array of { fileId, name, size, deliveryMethod }
-     *  where deliveryMethod is "direct" (≤25 MB inline) or "link" (send-as-link). */
-    attachments:
-      jsonb("attachments").$type<
-        { fileId: string; name: string; size: number; deliveryMethod?: "direct" | "link" }[]
-      >(),
+    /** Optional attachments. Array of { fileId, name, size, deliveryMethod,
+     *  shareLinkToken } where deliveryMethod is "direct" (≤25 MB inline) or
+     *  "link" (send-as-link). shareLinkToken is set ONLY for "link" delivery —
+     *  it's the recipient's tokenized share URL, surfaced as "Open share link"
+     *  on the sender's activity feed (HubSpot pattern). Permissive jsonb, so
+     *  adding the field needs no migration; pre-existing rows simply omit it. */
+    attachments: jsonb("attachments").$type<
+      {
+        fileId: string
+        name: string
+        size: number
+        deliveryMethod?: "direct" | "link"
+        shareLinkToken?: string
+      }[]
+    >(),
     /** Open-tracking pixel id (Commit 3). Unique per outbound email; null for
      *  inbound + un-tracked rows. */
     trackingPixelId: text("tracking_pixel_id").unique(),

@@ -95,6 +95,12 @@ export function isExpired(expiresAt: Date | null, now: Date): boolean {
   return expiresAt != null && expiresAt.getTime() <= now.getTime()
 }
 
+/** Relative path to a share link's public landing page. Pure (no origin) so the
+ *  client feed can build an href; the server prefixes appBase() for emails. */
+export function shareLinkPath(token: string): string {
+  return `/api/share-link/${encodeURIComponent(token)}`
+}
+
 // ─── Passcode rate limiting (PCI-style: 5 wrong / 15 min → 30 min lockout) ──
 
 export const PASSCODE_MAX_ATTEMPTS = 5

@@ -21,7 +21,11 @@ import {
   generatePasscode,
   hashPasscode,
 } from "@/modules/files/share-link-crypto"
-import { resolveExpiration, DEFAULT_SHARE_LINK_EXPIRATION } from "@/modules/files/share-link-core"
+import {
+  resolveExpiration,
+  shareLinkPath,
+  DEFAULT_SHARE_LINK_EXPIRATION,
+} from "@/modules/files/share-link-core"
 import { routeAttachments } from "./attachment-routing"
 import { emailLog } from "./schema"
 import { deleteEmailInput, logEmailInput, updateEmailInput } from "./types"
@@ -306,6 +310,7 @@ export const sendContactEmail = orgAction
       name: string
       size: number
       deliveryMethod: "direct" | "link"
+      shareLinkToken?: string
     }[] = []
 
     for (const { att, file } of attachmentFiles) {
@@ -314,6 +319,9 @@ export const sendContactEmail = orgAction
       // otherwise size routing decides.
       const deliveryMethod: "direct" | "link" =
         att.protect || route.mode === "link" ? "link" : "direct"
+      // Set only for "link" delivery — the recipient's tokenized share URL,
+      // surfaced as "Open share link" on the sender's activity feed.
+      let shareLinkToken: string | undefined
 
       if (deliveryMethod === "direct") {
         const got = await blob.get(file.url)
@@ -325,6 +333,7 @@ export const sendContactEmail = orgAction
         })
       } else {
         const token = generateShareToken()
+        shareLinkToken = token
         const passcode = att.protect ? (att.password ?? generatePasscode()) : null
         const expiresAt = resolveExpiration(
           att.expiration ?? defaultExpiration,
@@ -350,7 +359,7 @@ export const sendContactEmail = orgAction
           recipientEmail: primaryContact.primaryEmail,
           actorUserId: userId,
         })
-        linkLines.push({ name: fileName, url: `${appBase()}/api/share-link/${token}`, expiresAt })
+        linkLines.push({ name: fileName, url: `${appBase()}${shareLinkPath(token)}`, expiresAt })
         if (passcode) passcodeSends.push({ fileName, passcode })
       }
       loggedAttachments.push({
@@ -358,6 +367,7 @@ export const sendContactEmail = orgAction
         name: fileName,
         size: file.sizeBytes,
         deliveryMethod,
+        ...(shareLinkToken ? { shareLinkToken } : {}),
       })
     }
 

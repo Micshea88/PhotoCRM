@@ -38,6 +38,7 @@ import { dispositionDisplayLabel, type RecordedCallDisposition } from "@/modules
 import { updateMeeting, deleteMeeting } from "@/modules/meetings/actions"
 import { updateSms, deleteSms } from "@/modules/sms-messages/actions"
 import { updateEmail, deleteEmail } from "@/modules/email-log/actions"
+import { shareLinkPath } from "@/modules/files/share-link-core"
 import { NoPhoneProviderPicker } from "@/modules/integrations/ui/no-phone-provider-picker"
 import {
   CallLogComposer,
@@ -127,7 +128,13 @@ export interface ActivityEntry {
    *  distinguishes inline ("direct") from "send as link" delivery. Null for
    *  emails sent without attachments + all non-email kinds. */
   attachments?:
-    | { fileId: string; name: string; size: number; deliveryMethod?: "direct" | "link" }[]
+    | {
+        fileId: string
+        name: string
+        size: number
+        deliveryMethod?: "direct" | "link"
+        shareLinkToken?: string
+      }[]
     | null
 }
 
@@ -896,7 +903,8 @@ function EmailAttachments({
       </p>
       <ul className="space-y-1">
         {attachments.map((a) => (
-          <li key={a.fileId}>
+          <li key={a.fileId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {/* Primary action: fast authed view of exactly what was sent. */}
             <a
               href={`/api/files/${a.fileId}`}
               target="_blank"
@@ -912,16 +920,31 @@ function EmailAttachments({
               <span className="text-[var(--color-muted-foreground)]">
                 ({formatAttachmentSize(a.size)})
               </span>
-              {a.deliveryMethod === "link" && (
-                <span className="text-[10px] text-[var(--color-muted-foreground)]">
-                  · Sent as link
-                </span>
-              )}
               <Download
                 className="size-3 shrink-0 text-[var(--color-muted-foreground)]"
                 aria-hidden="true"
               />
             </a>
+            {a.deliveryMethod === "link" && (
+              <>
+                <span className="text-[10px] text-[var(--color-muted-foreground)]">
+                  · Sent as link
+                </span>
+                {/* Secondary action: open the exact external URL the recipient
+                    received. Org-matched session skips the passcode wall. */}
+                {a.shareLinkToken && (
+                  <a
+                    href={shareLinkPath(a.shareLinkToken)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[var(--color-muted-foreground)] underline hover:text-[var(--color-foreground)]"
+                    data-testid="activity-email-sharelink"
+                  >
+                    Open share link
+                  </a>
+                )}
+              </>
+            )}
           </li>
         ))}
       </ul>

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { and, eq, isNull } from "drizzle-orm"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
+import { log } from "@/lib/log"
 import { files } from "./schema"
 
 export const deleteFile = orgAction
@@ -87,6 +88,13 @@ export const pollFileScanState = orgAction
       )
       .limit(1)
     if (!row) throw new ActionError("NOT_FOUND", "File not found")
+    // [SCAN-DIAG] (2026-06-26) each client poll lands here — the gap between
+    // consecutive lines reveals the effective polling interval, and the count of
+    // "pending" lines × interval ≈ the user-perceived wait. Grep "[SCAN-DIAG]".
+    log.info(
+      { fileId: row.id, scanStatus: row.scanStatus, ts: Date.now() },
+      "[SCAN-DIAG] pollFileScanState check",
+    )
     return row
   })
 

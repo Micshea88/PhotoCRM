@@ -33,7 +33,15 @@ export async function scanFile(bytes: ArrayBuffer, filename: string): Promise<Sc
     return "error"
   }
 
+  // [SCAN-DIAG] Temporary instrumentation (2026-06-26) to diagnose slow scans.
+  // Captures per-attempt API round-trip duration + the raw response payload so
+  // we can tell whether the latency is the Cloudmersive API itself vs. our
+  // pipeline (blob download / polling). Grep Vercel logs for "[SCAN-DIAG]".
+  const sizeBytes = bytes.byteLength
+  const scanStart = Date.now()
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const attemptStart = Date.now()
     try {
       const form = new FormData()
       form.append("inputFile", new Blob([bytes]), filename)
@@ -54,21 +62,59 @@ export async function scanFile(bytes: ArrayBuffer, filename: string): Promise<Sc
         },
         body: form,
       })
+      const apiMs = Date.now() - attemptStart
 
       // 5xx / 429 are transient — retry. Other non-OK is a hard failure.
       if (res.status >= 500 || res.status === 429) {
+        log.warn(
+          { filename, sizeBytes, attempt, status: res.status, apiMs },
+          "[SCAN-DIAG] cloudmersive transient response — will retry",
+        )
         throw new Error(`transient ${String(res.status)}`)
       }
       if (!res.ok) {
-        log.error({ status: res.status }, "cloudmersive: non-retryable error response")
+        const errBody = await res.text().catch(() => "<unreadable>")
+        log.error(
+          { filename, sizeBytes, attempt, status: res.status, apiMs, errBody },
+          "[SCAN-DIAG] cloudmersive: non-retryable error response",
+        )
         return "error"
       }
 
-      const data = (await res.json()) as CloudmersiveAdvancedResult
-      return data.CleanResult === true ? "clean" : "infected"
+      // Read raw text first so we can log the FULL payload (CleanResult plus any
+      // FoundViruses / WeaponType / Contains*-flags Cloudmersive returns).
+      const rawBody = await res.text()
+      let data: CloudmersiveAdvancedResult = {}
+      try {
+        data = JSON.parse(rawBody) as CloudmersiveAdvancedResult
+      } catch {
+        log.error(
+          { filename, sizeBytes, attempt, apiMs, rawBody: rawBody.slice(0, 500) },
+          "[SCAN-DIAG] cloudmersive: response was not JSON",
+        )
+        return "error"
+      }
+      const verdict: ScanVerdict = data.CleanResult === true ? "clean" : "infected"
+      log.info(
+        {
+          filename,
+          sizeBytes,
+          attempt,
+          status: res.status,
+          apiMs,
+          totalMs: Date.now() - scanStart,
+          verdict,
+          payload: data,
+        },
+        "[SCAN-DIAG] cloudmersive scan complete",
+      )
+      return verdict
     } catch (err) {
       if (attempt === MAX_ATTEMPTS) {
-        log.error({ err }, "cloudmersive: scan failed after retries")
+        log.error(
+          { err, filename, sizeBytes, attempt, totalMs: Date.now() - scanStart },
+          "[SCAN-DIAG] cloudmersive: scan failed after retries",
+        )
         return "error"
       }
       // Linear backoff between transient retries.

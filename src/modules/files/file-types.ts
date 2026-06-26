@@ -84,13 +84,26 @@ export interface FileTypeCheck {
   heicNotice?: boolean
 }
 
+/** Plain-English summary of accepted categories, reused in error messages. */
+export const SUPPORTED_TYPES_SUMMARY = "documents, images, RAW photos, video, audio, and ZIP files"
+
 export function checkFileType(filename: string): FileTypeCheck {
   const ext = fileExtension(filename)
-  if (!ext) return { ok: false, reason: "This file type isn't supported." }
-  if (BLOCKED_EXTENSIONS.has(ext)) {
-    return { ok: false, reason: "This file type isn't allowed for security reasons." }
+  if (!ext) {
+    return {
+      ok: false,
+      reason: `This file has no extension, so we can't tell its type. You can attach ${SUPPORTED_TYPES_SUMMARY}.`,
+    }
   }
-  if (!ALLOWED_EXTENSIONS.has(ext)) return { ok: false, reason: "This file type isn't supported." }
+  if (BLOCKED_EXTENSIONS.has(ext)) {
+    return { ok: false, reason: `“.${ext}” files can't be attached for security reasons.` }
+  }
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return {
+      ok: false,
+      reason: `“.${ext}” isn't a supported file type. You can attach ${SUPPORTED_TYPES_SUMMARY}.`,
+    }
+  }
   if (ext === "heic") return { ok: true, heicNotice: true }
   return { ok: true }
 }

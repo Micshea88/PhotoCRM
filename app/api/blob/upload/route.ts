@@ -7,6 +7,7 @@ import { env } from "@/lib/env"
 import { audit } from "@/modules/audit/audit"
 import { files } from "@/modules/files/schema"
 import { checkFileType } from "@/modules/files/file-types"
+import { MAX_FILE_BYTES } from "@/modules/email-log/attachment-routing"
 import { scanAndResolveFile } from "@/modules/files/scan"
 
 // File types are gated by EXTENSION via checkFileType (decisions 22–23) — RAW /
@@ -16,9 +17,9 @@ import { scanAndResolveFile } from "@/modules/files/scan"
 // upload is malware-scanned before it can be used (decision 15).
 
 // Pathway Files per-file ceiling — 1 GB (decision 17, matches Cloudmersive
-// Basic's scan max). The 25 MB direct-email-attach cap is a separate
-// composer-level check (decision 18).
-const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
+// Basic's scan max), shared with the composer's pre-upload size check. The
+// 25 MB direct-email-attach cap is a separate composer-level routing rule.
+const MAX_UPLOAD_BYTES = MAX_FILE_BYTES
 
 /**
  * Pathname must be a clean basename (no slashes, no `..`, sane chars).

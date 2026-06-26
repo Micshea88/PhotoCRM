@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, type DragEvent } from "react"
 import { useRouter } from "next/navigation"
 import { upload } from "@vercel/blob/client"
 import { X, Paperclip, Lock } from "lucide-react"
@@ -12,6 +12,7 @@ import { checkFileType } from "@/modules/files/file-types"
 import {
   routeAttachments,
   sendAsLinkNotice,
+  checkFileSize,
   MAX_FILES_PER_EMAIL,
 } from "@/modules/email-log/attachment-routing"
 import {
@@ -86,6 +87,7 @@ export function CreateEmailComposer({
   const [attachOpen, setAttachOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const totalBytes = attachments.reduce((s, a) => s + a.sizeBytes, 0)
@@ -142,6 +144,11 @@ export function CreateEmailComposer({
         setError(`${file.name}: ${check.reason ?? "unsupported file"}`)
         continue
       }
+      const sizeCheck = checkFileSize(file.size)
+      if (!sizeCheck.ok) {
+        setError(`${file.name}: ${sizeCheck.reason ?? "file too large"}`)
+        continue
+      }
       const key = crypto.randomUUID()
       setAttachments((prev) => [
         ...prev,
@@ -168,6 +175,20 @@ export function CreateEmailComposer({
         setError(err instanceof Error ? err.message : "Upload failed")
       }
     }
+  }
+
+  function onDragOver(e: DragEvent) {
+    e.preventDefault()
+    if (!dragActive) setDragActive(true)
+  }
+  function onDragLeave(e: DragEvent) {
+    // Only clear when leaving the dropzone itself, not its children.
+    if (e.currentTarget === e.target) setDragActive(false)
+  }
+  function onDrop(e: DragEvent) {
+    e.preventDefault()
+    setDragActive(false)
+    if (e.dataTransfer.files.length > 0) void onUploadFiles(e.dataTransfer.files)
   }
 
   async function chooseExisting() {
@@ -207,7 +228,21 @@ export function CreateEmailComposer({
 
   return (
     <Modal open={open} onClose={onClose} title="Create an email" className="max-w-2xl">
-      <div className="space-y-3 text-sm">
+      <div
+        className={cn(
+          "space-y-3 rounded-md text-sm",
+          dragActive && "ring-2 ring-[var(--color-ring)] ring-offset-2",
+        )}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        data-testid="email-composer-dropzone"
+      >
+        {dragActive && (
+          <p className="rounded-md border border-dashed border-[var(--color-ring)] bg-[var(--color-muted)] px-3 py-2 text-center text-xs text-[var(--color-muted-foreground)]">
+            Drop files to attach
+          </p>
+        )}
         <EmailChips label="To" emails={to} setEmails={setTo} datalistId="known-emails" />
         <EmailChips label="Cc" emails={cc} setEmails={setCc} datalistId="known-emails" />
         <EmailChips label="Bcc" emails={bcc} setEmails={setBcc} datalistId="known-emails" />
@@ -224,6 +259,7 @@ export function CreateEmailComposer({
           }}
           placeholder="Subject"
           className="h-9"
+          spellCheck
           data-testid="email-composer-subject"
         />
         <textarea
@@ -233,6 +269,7 @@ export function CreateEmailComposer({
           }}
           rows={8}
           placeholder="Write your message…"
+          spellCheck
           data-testid="email-composer-body"
           className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none"
         />

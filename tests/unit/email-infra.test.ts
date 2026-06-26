@@ -8,8 +8,10 @@ import { checkFileType, fileExtension } from "@/modules/files/file-types"
 import {
   routeAttachments,
   checkFileCount,
+  checkFileSize,
   sendAsLinkNotice,
   DIRECT_ATTACH_LIMIT_BYTES,
+  MAX_FILE_BYTES,
   MAX_FILES_PER_EMAIL,
 } from "@/modules/email-log/attachment-routing"
 import {
@@ -38,6 +40,10 @@ describe("file-type validation", () => {
     expect(checkFileType("weird.xyz").ok).toBe(false)
     expect(checkFileType("noext").ok).toBe(false)
   })
+  it("error messages name the offending extension (clearer matrix)", () => {
+    expect(checkFileType("malware.exe").reason).toContain(".exe")
+    expect(checkFileType("weird.xyz").reason).toContain(".xyz")
+  })
   it("fileExtension lowercases + handles dotfiles", () => {
     expect(fileExtension("Report.PDF")).toBe("pdf")
     expect(fileExtension("archive.tar.gz")).toBe("gz")
@@ -64,6 +70,13 @@ describe("attachment routing", () => {
   it("enforces the 10-file ceiling", () => {
     expect(checkFileCount(MAX_FILES_PER_EMAIL).ok).toBe(true)
     expect(checkFileCount(MAX_FILES_PER_EMAIL + 1).ok).toBe(false)
+  })
+  it("checkFileSize: allows ≤ 1 GB, rejects over with a sized message", () => {
+    expect(checkFileSize(500 * 1024).ok).toBe(true)
+    expect(checkFileSize(MAX_FILE_BYTES).ok).toBe(true)
+    const over = checkFileSize(MAX_FILE_BYTES + 1)
+    expect(over.ok).toBe(false)
+    expect(over.reason).toMatch(/1 GB/)
   })
   it("notice copy is plain-English with the rounded MB", () => {
     expect(sendAsLinkNotice(26 * MB)).toBe(

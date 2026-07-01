@@ -54,27 +54,31 @@ const VERSION = "v1"
 const IV_BYTES = 12 // GCM standard nonce size
 const TAG_BYTES = 16
 
-function getKey(): Buffer {
-  // env.ts has already validated the regex (64 hex chars); Buffer.from
-  // tolerates invalid hex silently (returns shorter buffer), so we
-  // re-check the length here as a defense-in-depth invariant.
-  const key = Buffer.from(env.TELEPHONY_ENCRYPTION_KEY, "hex")
+function getKey(keyHex?: string): Buffer {
+  // env.ts has already validated the regex (64 hex chars) for the built-in
+  // keys; Buffer.from tolerates invalid hex silently (returns shorter buffer),
+  // so we re-check the length here as a defense-in-depth invariant.
+  //
+  // `keyHex` lets a second security domain (e.g. NYLAS_ENCRYPTION_KEY) use the
+  // same cipher without coupling to the telephony key. Defaults to the
+  // telephony key so existing callers are unchanged.
+  const key = Buffer.from(keyHex ?? env.TELEPHONY_ENCRYPTION_KEY, "hex")
   if (key.length !== 32) {
-    throw new Error("TELEPHONY_ENCRYPTION_KEY must decode to exactly 32 bytes")
+    throw new Error("encryption key must decode to exactly 32 bytes")
   }
   return key
 }
 
-export function encrypt(plaintext: string): string {
+export function encrypt(plaintext: string, keyHex?: string): string {
   const iv = randomBytes(IV_BYTES)
-  const cipher = createCipheriv("aes-256-gcm", getKey(), iv)
+  const cipher = createCipheriv("aes-256-gcm", getKey(keyHex), iv)
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()])
   const authTag = cipher.getAuthTag()
   const payload = Buffer.concat([iv, authTag, ciphertext])
   return `${VERSION}:${payload.toString("base64")}`
 }
 
-export function decrypt(blob: string): string {
+export function decrypt(blob: string, keyHex?: string): string {
   const colonIdx = blob.indexOf(":")
   if (colonIdx === -1) {
     throw new Error("ciphertext missing version prefix")
@@ -90,7 +94,7 @@ export function decrypt(blob: string): string {
   const iv = payload.subarray(0, IV_BYTES)
   const authTag = payload.subarray(IV_BYTES, IV_BYTES + TAG_BYTES)
   const ciphertext = payload.subarray(IV_BYTES + TAG_BYTES)
-  const decipher = createDecipheriv("aes-256-gcm", getKey(), iv)
+  const decipher = createDecipheriv("aes-256-gcm", getKey(keyHex), iv)
   decipher.setAuthTag(authTag)
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
   return plaintext.toString("utf8")

@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation"
-import { runWithOrgContext } from "@/lib/org-context"
+import { runWithOrgContext, withOrgContext } from "@/lib/org-context"
 import { getSession } from "@/modules/auth/session"
 import { getCurrentMember } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
@@ -8,6 +8,7 @@ import { getCategoryById, getProviderById } from "@/modules/integrations/registr
 import type { IntegrationProvider } from "@/modules/integrations/types"
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
 import { listConnectedProvidersForUser, orgRcCallSyncEnabled } from "@/modules/telephony/queries"
+import { getLiveConnectionForUser } from "@/modules/email-connections/queries"
 
 /**
  * /settings/integrations/[categoryId]/[providerId] — provider wizard.
@@ -67,11 +68,28 @@ export default async function IntegrationsProviderPage({
   if (staticProvider.categoryId !== category.id) notFound()
 
   // Per-user scope: matches disconnectTelephony's where-clause.
-  const rows = await runWithOrgContext(
-    { orgId, role: extendedRole, userId: session.user.id },
-    async () => listConnectedProvidersForUser(session.user.id),
-  )
-  const hasLiveRow = rows.some((r) => r.provider === staticProvider.id)
+  let hasLiveRow: boolean
+  if (category.id === "email") {
+    // Email connection is per-user; the connected card is the one whose Nylas
+    // provider maps to this card id (gmail↔google, microsoft↔microsoft,
+    // other↔imap).
+    const NYLAS_FOR_CARD: Record<string, string> = {
+      gmail: "google",
+      microsoft: "microsoft",
+      other: "imap",
+    }
+    const conn = await runWithOrgContext(
+      { orgId, role: extendedRole, userId: session.user.id },
+      async () => withOrgContext((tx) => getLiveConnectionForUser(tx, orgId, session.user.id)),
+    )
+    hasLiveRow = !!conn && conn.provider === NYLAS_FOR_CARD[staticProvider.id]
+  } else {
+    const rows = await runWithOrgContext(
+      { orgId, role: extendedRole, userId: session.user.id },
+      async () => listConnectedProvidersForUser(session.user.id),
+    )
+    hasLiveRow = rows.some((r) => r.provider === staticProvider.id)
+  }
   // tel: has connectKind "none" and is never written to
   // telephony_connections (upsert.ts only writes "ringcentral"), so
   // hasLiveRow can never be true for tel:. No defensive guard needed.

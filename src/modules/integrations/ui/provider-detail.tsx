@@ -184,9 +184,15 @@ export function ProviderDetail({
           isConnected ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
-                <ProviderDisconnectButton providerId={provider.id} providerName={provider.name} />
+                <ProviderDisconnectButton
+                  providerId={provider.id}
+                  providerName={provider.name}
+                  categoryId={category.id}
+                />
                 <span className="text-xs text-[var(--color-muted-foreground)]">
-                  Disconnecting stops {provider.name} from being available for calls and SMS.
+                  {category.id === "email"
+                    ? `Disconnecting stops ${provider.name} from sending your client email and logging replies.`
+                    : `Disconnecting stops ${provider.name} from being available for calls and SMS.`}
                 </span>
               </div>
               {provider.id === "ringcentral" ? (
@@ -204,6 +210,7 @@ export function ProviderDetail({
                 <ProviderConnectButton
                   providerId={provider.id}
                   providerName={provider.name}
+                  categoryId={category.id}
                   connectKind={provider.connectKind}
                   ctaLabel={ctaLabel}
                   disabled={ctaDisabled}

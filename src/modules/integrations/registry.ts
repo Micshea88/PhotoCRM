@@ -84,6 +84,16 @@ const telCaps: CapabilityFlags = {
   dialerHandoff: true,
 }
 
+// Email providers (Commit 4) — a connected mailbox auto-logs replies to the
+// contact (autoLogActivity) via an inbound webhook. No phone capabilities.
+const emailCaps: CapabilityFlags = {
+  calling: false,
+  sms: false,
+  autoLogActivity: true,
+  webhookInbound: true,
+  dialerHandoff: false,
+}
+
 const PROVIDERS: readonly IntegrationProvider[] = [
   {
     id: "ringcentral",
@@ -138,6 +148,63 @@ const PROVIDERS: readonly IntegrationProvider[] = [
     ],
     trustLine:
       "No account or token is involved. Pathway only generates a tel: link for your device to handle.",
+  },
+  {
+    id: "gmail",
+    categoryId: "email",
+    name: "Gmail",
+    iconKey: "mail",
+    description:
+      "Send client email from your own Gmail and have replies log to the matching contact automatically.",
+    capabilityFlags: emailCaps,
+    connectKind: "oauth",
+    connectState: "not_connected",
+    howToConnectSteps: [
+      "Click Connect — Google's sign-in opens in a new tab.",
+      "Sign in with your Google account and approve email access.",
+      "You'll be returned here with your mailbox connected.",
+      "New client emails now send from your Gmail; replies log automatically.",
+    ],
+    trustLine:
+      "Pathway connects through Nylas and stores only an encrypted connection token. We never see or store your Google password.",
+  },
+  {
+    id: "microsoft",
+    categoryId: "email",
+    name: "Microsoft / Outlook",
+    iconKey: "mail",
+    description:
+      "Send client email from your own Outlook / Microsoft 365 and have replies log to the matching contact.",
+    capabilityFlags: emailCaps,
+    connectKind: "oauth",
+    connectState: "not_connected",
+    howToConnectSteps: [
+      "Click Connect — Microsoft's sign-in opens in a new tab.",
+      "Sign in with your Microsoft 365 / Outlook account and approve email access.",
+      "You'll be returned here with your mailbox connected.",
+      "New client emails now send from your Outlook; replies log automatically.",
+    ],
+    trustLine:
+      "Pathway connects through Nylas and stores only an encrypted connection token. We never see or store your Microsoft password.",
+  },
+  {
+    id: "other",
+    categoryId: "email",
+    name: "Other email (IMAP)",
+    iconKey: "mail",
+    description:
+      "Connect any other email provider (iCloud, Yahoo, a custom domain, etc.) through a secure IMAP connection.",
+    capabilityFlags: emailCaps,
+    connectKind: "oauth",
+    connectState: "not_connected",
+    howToConnectSteps: [
+      "Click Connect — a secure Nylas screen opens in a new tab.",
+      "Enter your email address and app password (Nylas collects these — Pathway never sees them).",
+      "You'll be returned here with your mailbox connected.",
+      "New client emails now send from your address; replies log automatically.",
+    ],
+    trustLine:
+      "Your credentials are entered on Nylas's secure screen, never in Pathway. We store only an encrypted connection token.",
   },
 ] as const
 

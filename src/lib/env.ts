@@ -138,6 +138,29 @@ export const env = createEnv({
     // the first, verify against any (see share-link-crypto.ts). Rotating it only
     // forces recipients to re-enter the passcode; the link/passcode are unaffected.
     SHARE_LINK_HMAC_SECRET: z.string().min(1).optional(),
+    // Nylas v3 email connector (Commit 4). Per-photographer Gmail/Outlook/IMAP
+    // connection is brokered by Nylas hosted auth; the grant_id is stored
+    // encrypted in email_connections.
+    //
+    // NYLAS_ENCRYPTION_KEY — REQUIRED, its own security domain (NOT the
+    // telephony key). 32 bytes hex-encoded (64 chars); generate with
+    // `openssl rand -hex 32`. Encrypts the stored Nylas grant_id + webhook
+    // secret at rest via src/lib/crypto.ts. Losing/changing it renders every
+    // stored grant permanently undecryptable — photographers simply reconnect.
+    NYLAS_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/i, "NYLAS_ENCRYPTION_KEY must be 64 hex chars (32 bytes)"),
+    // Nylas application credentials. Optional so a fresh clone without Nylas
+    // access still boots; the connect flow reads them at request time and
+    // errors clearly if missing. Nylas issues these — not productionGradeSecret.
+    NYLAS_API_KEY: z.string().min(1).optional(),
+    NYLAS_CLIENT_ID: z.string().min(1).optional(),
+    // Regional API base, e.g. https://api.us.nylas.com or https://api.eu.nylas.com
+    NYLAS_API_URI: z.url().optional(),
+    // Nylas webhook signing secret (shown once when the subscription is created
+    // in the Nylas dashboard). Optional so non-configured deploys still boot;
+    // the inbound route rejects deliveries when unset/invalid.
+    NYLAS_WEBHOOK_SECRET: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -177,6 +200,11 @@ export const env = createEnv({
     RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
     CLOUDMERSIVE_API_KEY: process.env.CLOUDMERSIVE_API_KEY,
     SHARE_LINK_HMAC_SECRET: process.env.SHARE_LINK_HMAC_SECRET,
+    NYLAS_ENCRYPTION_KEY: process.env.NYLAS_ENCRYPTION_KEY,
+    NYLAS_API_KEY: process.env.NYLAS_API_KEY,
+    NYLAS_CLIENT_ID: process.env.NYLAS_CLIENT_ID,
+    NYLAS_API_URI: process.env.NYLAS_API_URI,
+    NYLAS_WEBHOOK_SECRET: process.env.NYLAS_WEBHOOK_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

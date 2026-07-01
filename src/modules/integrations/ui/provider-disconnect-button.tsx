@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
+import type { CategoryId } from "@/modules/integrations/types"
 import { disconnectTelephony } from "@/modules/telephony/actions"
+import { disconnectEmail } from "@/modules/email-connections/actions"
 
 /**
  * Disconnect affordance — Owner/admin only.
@@ -20,9 +22,11 @@ import { disconnectTelephony } from "@/modules/telephony/actions"
 export function ProviderDisconnectButton({
   providerId,
   providerName,
+  categoryId,
 }: {
   providerId: string
   providerName: string
+  categoryId: CategoryId
 }) {
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
@@ -31,7 +35,12 @@ export function ProviderDisconnectButton({
   function handleConfirm() {
     setError(null)
     startTransition(async () => {
-      const result = await disconnectTelephony({ provider: providerId })
+      // Email disconnect soft-deletes the per-user mailbox connection; every
+      // other provider is a telephony grant keyed by provider id.
+      const result =
+        categoryId === "email"
+          ? await disconnectEmail({})
+          : await disconnectTelephony({ provider: providerId })
       if (result.data?.ok === true) {
         setOpen(false)
         return
@@ -42,6 +51,11 @@ export function ProviderDisconnectButton({
       setError(message)
     })
   }
+
+  const disconnectBody =
+    categoryId === "email"
+      ? `${providerName} will stop sending your client email and logging replies. You can reconnect at any time.`
+      : `${providerName} will stop being available for calls and SMS. You can reconnect at any time.`
 
   return (
     <>
@@ -71,7 +85,7 @@ export function ProviderDisconnectButton({
         }}
         onConfirm={handleConfirm}
         title={`Disconnect ${providerName}?`}
-        body={`${providerName} will stop being available for calls and SMS. You can reconnect at any time.`}
+        body={disconnectBody}
         confirmLabel="Disconnect"
         destructive
         submitting={pending}

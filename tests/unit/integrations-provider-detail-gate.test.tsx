@@ -18,6 +18,14 @@ vi.mock("@/modules/rc-sync/actions", () => ({
   bootstrapRcWebhook: vi.fn(() => Promise.resolve({ data: { ok: true, action: "created" } })),
 }))
 
+// The connect/disconnect buttons also import the email-connections server
+// actions (Commit 4 — Nylas connect for the email category), same server-env
+// chain. Stub them for the client render.
+vi.mock("@/modules/email-connections/actions", () => ({
+  beginEmailConnect: vi.fn(() => Promise.resolve({ data: { authorizeUrl: "stub" } })),
+  disconnectEmail: vi.fn(() => Promise.resolve({ data: { ok: true } })),
+}))
+
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
 import { getCategoryById, getProviderById } from "@/modules/integrations/registry"
 

@@ -95,6 +95,6 @@ describe("integrations registry — lookup helpers", () => {
     const ids = getAllProviders()
       .map((p) => p.id)
       .sort()
-    expect(ids).toEqual(["google_voice", "ringcentral", "tel"])
+    expect(ids).toEqual(["gmail", "google_voice", "microsoft", "other", "ringcentral", "tel"])
   })
 })

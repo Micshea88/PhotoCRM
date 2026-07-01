@@ -9,6 +9,7 @@ import { audit } from "@/modules/audit/audit"
 import { env } from "@/lib/env"
 import { blob } from "@/lib/blob"
 import { sendEmail } from "@/lib/email"
+import { resolveSenderForUser, guessContentType } from "@/lib/email/provider"
 import { organization } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
 import { touchContactActivity } from "@/modules/contacts/ai/cache-invalidation"
@@ -302,7 +303,7 @@ export const sendContactEmail = orgAction
     const defaultExpiration = pref?.exp ?? DEFAULT_SHARE_LINK_EXPIRATION
     const now = new Date()
 
-    const directAttachments: { filename: string; content: string }[] = []
+    const directAttachments: { filename: string; content: string; contentType: string }[] = []
     const linkLines: { name: string; url: string; expiresAt: Date | null }[] = []
     const passcodeSends: { fileName: string; passcode: string }[] = []
     const loggedAttachments: {
@@ -330,6 +331,7 @@ export const sendContactEmail = orgAction
         directAttachments.push({
           filename: fileName,
           content: Buffer.from(bytes).toString("base64"),
+          contentType: guessContentType(fileName),
         })
       } else {
         const token = generateShareToken()
@@ -389,22 +391,34 @@ export const sendContactEmail = orgAction
     const pixel = `<img src="${appBase()}/api/email/track/${pixelId}.png" width="1" height="1" alt="" style="display:none" />`
     const html = `<div>${escapeHtml(parsedInput.body).replace(/\n/g, "<br />")}</div>${linkSection}${pixel}`
 
-    // Custom Message-ID for threading (decision 8); domain from the From address.
-    const fromDomain = env.RESEND_FROM_EMAIL.split("@")[1] ?? "mail.invalid"
-    const messageId = `<${createId()}@${fromDomain}>`
-
-    await sendEmail({
+    // Send AS the photographer through their connected mailbox (Nylas) when
+    // live; otherwise the dressed Resend fallback ("Name — Business" <system>),
+    // never a bare system address (Commit 4, answers #2/#3). Tracking pixel +
+    // share links live in `html` and go out either way (answer #7).
+    const [orgRow] = await ctx.db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, orgId))
+      .limit(1)
+    const { provider: emailProvider } = await resolveSenderForUser(ctx.db, {
+      orgId,
+      userId,
+      photographerName: ctx.session.user.name,
+      businessName: orgRow?.name ?? "your studio",
+    })
+    const sent = await emailProvider.send({
       to: parsedInput.to,
-      cc: parsedInput.cc.length > 0 ? parsedInput.cc : undefined,
-      bcc: parsedInput.bcc.length > 0 ? parsedInput.bcc : undefined,
+      cc: parsedInput.cc,
+      bcc: parsedInput.bcc,
       subject: parsedInput.subject,
       html,
-      headers: { "Message-ID": messageId },
       attachments: directAttachments,
     })
 
     // Log: primary To contact (carries the threading Message-ID) + each KNOWN
     // CC contact (external_id null to respect the unique dedup index; never BCC).
+    // `source` reflects the sending mailbox (gmail/outlook/imap or resend); the
+    // Pathway threadId stays the key with any Nylas ids in externalMetadata.
     const attachmentsJson = loggedAttachments.length > 0 ? loggedAttachments : null
     await ctx.db.insert(emailLog).values({
       id: createId(),
@@ -415,9 +429,10 @@ export const sendContactEmail = orgAction
       subject: parsedInput.subject,
       body: parsedInput.body,
       sentAt: now,
-      source: "resend",
-      externalId: messageId,
-      threadId: messageId,
+      source: sent.source,
+      externalId: sent.externalId,
+      threadId: sent.threadId,
+      externalMetadata: sent.externalMetadata,
       trackingPixelId: pixelId,
       attachments: attachmentsJson,
       projectId: parsedInput.projectId ?? null,
@@ -456,9 +471,9 @@ export const sendContactEmail = orgAction
         subject: parsedInput.subject,
         body: parsedInput.body,
         sentAt: now,
-        source: "resend",
+        source: sent.source,
         externalId: null,
-        threadId: messageId,
+        threadId: sent.threadId,
         attachments: attachmentsJson,
         projectId: parsedInput.projectId ?? null,
         opportunityId: parsedInput.opportunityId ?? null,
@@ -501,7 +516,11 @@ export const sendContactEmail = orgAction
         userAgent: ctx.userAgent,
       },
       "email_log.sent_contact",
-      { resourceType: "email_log", resourceId: primaryContact.id, metadata: { messageId } },
+      {
+        resourceType: "email_log",
+        resourceId: primaryContact.id,
+        metadata: { messageId: sent.externalId },
+      },
     )
     revalidatePath(`/contacts/${primaryContact.id}`)
     return { ok: true }

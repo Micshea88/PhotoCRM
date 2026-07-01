@@ -35,16 +35,17 @@ describe("integrations browser — filterProviders", () => {
   it("matches against an enabled capability name", () => {
     // "webhook" is a clean capability discriminator — it appears only
     // in RingCentral's `webhookInbound` flag, NOT in any provider's
-    // name, description, or the category name ("Phone & SMS"). So a
-    // search for "webhook" must pull RingCentral and only RingCentral
-    // — the "absent never broken" rule for capability filtering.
+    // name, description, or the category name ("Phone & SMS"). A search
+    // for "webhook" pulls every provider with the webhookInbound
+    // capability — RingCentral plus the email providers (which auto-log
+    // replies via an inbound webhook). Order follows the registry.
     //
     // (We avoid using "sms" here even though only RC has SMS enabled:
     // the category name contains "SMS" so every phone provider would
     // legitimately match. That's the filter doing its job — we just
     // pick a token that proves the capability-only path.)
     const hits = filterProviders("webhook")
-    expect(hits.map((p) => p.id)).toEqual(["ringcentral"])
+    expect(hits.map((p) => p.id)).toEqual(["ringcentral", "gmail", "microsoft", "other"])
   })
 
   it("requires every whitespace-split token to match (AND)", () => {

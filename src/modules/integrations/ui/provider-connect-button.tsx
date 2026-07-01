@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import type { ConnectKind } from "@/modules/integrations/types"
+import type { CategoryId, ConnectKind } from "@/modules/integrations/types"
 import { beginRingCentralConnect } from "@/modules/telephony/actions"
+import { beginEmailConnect } from "@/modules/email-connections/actions"
+import type { EmailProviderChoiceInput } from "@/modules/email-connections/types"
 
 /**
  * Connect / Use-as-dialer / Always-available button.
@@ -27,12 +29,14 @@ import { beginRingCentralConnect } from "@/modules/telephony/actions"
 export function ProviderConnectButton({
   providerId,
   providerName,
+  categoryId,
   connectKind,
   ctaLabel,
   disabled = false,
 }: {
   providerId: string
   providerName: string
+  categoryId: CategoryId
   connectKind: ConnectKind
   ctaLabel: string
   disabled?: boolean
@@ -45,7 +49,13 @@ export function ProviderConnectButton({
     setError(null)
     if (connectKind === "oauth") {
       startTransition(async () => {
-        const result = await beginRingCentralConnect({})
+        // Email providers (gmail/microsoft/other) connect a per-photographer
+        // mailbox via Nylas hosted auth; every other oauth provider is
+        // RingCentral. Both return an authorize URL to navigate to.
+        const result =
+          categoryId === "email"
+            ? await beginEmailConnect({ provider: providerId as EmailProviderChoiceInput })
+            : await beginRingCentralConnect({})
         const url = result.data?.authorizeUrl
         if (typeof url === "string" && url.length > 0) {
           window.location.href = url
@@ -53,7 +63,7 @@ export function ProviderConnectButton({
         }
         const message =
           (typeof result.serverError === "string" && result.serverError) ||
-          "Could not start the RingCentral connect flow. Please try again."
+          `Could not start the ${providerName} connect flow. Please try again.`
         setError(message)
       })
       return

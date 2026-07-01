@@ -182,8 +182,13 @@ async function findContactInOrg(orgId: string, email: string): Promise<ContactRo
  * Process a parsed inbound email: resolve sender → org, dedup, derive thread,
  * and insert one email_log row per known participant. Separated from fetching
  * so it's testable. Returns the count of rows written (0 = dropped/dedup).
+ *
+ * `source` is the provider taxonomy value (answer #4): "resend" for the studio-
+ * domain inbound webhook (default), or "gmail" / "outlook" / "imap" for a
+ * photographer's Nylas-connected mailbox. Both dedup and the stored row key on
+ * it, so Resend-logged and Nylas-logged mail coexist cleanly.
  */
-export async function processInboundEmail(email: InboundEmail): Promise<number> {
+export async function processInboundEmail(email: InboundEmail, source = "resend"): Promise<number> {
   const sender = await findContactAnyOrg(email.from)
   if (!sender) {
     log.info("resend-inbound: unknown sender — dropped")
@@ -198,7 +203,7 @@ export async function processInboundEmail(email: InboundEmail): Promise<number> 
     .where(
       and(
         eq(emailLog.organizationId, orgId),
-        eq(emailLog.source, "resend"),
+        eq(emailLog.source, source),
         eq(emailLog.externalId, email.messageId),
       ),
     )
@@ -247,7 +252,7 @@ export async function processInboundEmail(email: InboundEmail): Promise<number> 
         subject: email.subject,
         body: email.body,
         sentAt: email.sentAt,
-        source: "resend",
+        source,
         externalId: email.messageId,
         threadId,
       })
@@ -267,7 +272,7 @@ export async function processInboundEmail(email: InboundEmail): Promise<number> 
         subject: email.subject,
         body: email.body,
         sentAt: email.sentAt,
-        source: "resend",
+        source,
         externalId: null,
         threadId,
       })

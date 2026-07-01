@@ -252,6 +252,7 @@ New PIVOTS_LEDGER entries: RC transcript → user notes (06-14); disposition 6+7
 #15 V1 — Contacts sync via Nylas: two-way, on the same Nylas connection as email (included in $15 plan, no extra per-account cost), user-controlled on/off PLUS direction choice (out/in/both), ONLY Pathway clients/vendors (never the personal address book), field-level sync not enrichment. (§4.10)
 #16 V1 — Native scheduling feature built on Nylas Scheduler (included in the Full Platform plan, no extra per-account cost): user's choice to link Gmail/Microsoft calendar for real availability + sync OR schedule natively with sync on/off; HubSpot/HoneyBook style; covers consult booking, meeting form, lead-capture widget. (§4.11)
 #17 Calendly integration = V2/V3, NOT V1. Separate build from Nylas (Calendly OAuth + v2 API + webhooks). Bookings flow into Pathway matched by email. Webhooks require the photographer on a PAID Calendly plan. Coexists with the native scheduler. (§1.6)
+#18 V1 scope item (research-first) — Onboarding tutorial / guided product tour: in-app guided onboarding that walks a new photographer through setup and teaches them to use each page effectively. Serves north star #1 (usable without help docs). Distinct from the setup wizard (Screen 18). MUST be scoped + researched before building; do not design/build until the scoped plan is approved. (See §17.)
 
 ---
 
@@ -263,6 +264,15 @@ New PIVOTS_LEDGER entries: RC transcript → user notes (06-14); disposition 6+7
 4. Update the conflicting docs per §13 in the same commit as the catalog write; mark superseded, do not delete.
 5. Add the new PIVOTS_LEDGER entries per §13.
 6. Do NOT invent any entry not in this file. If something is needed that this file doesn't cover, STOP and ask Mike.
+
+---
+
+## Section 17 — Onboarding Tutorial / Guided Product Tour (scope item — research + scope BEFORE build)
+
+17.1 **[LOCKED 06-28 — scope item, NOT yet designed]** Pathway needs a guided onboarding experience that walks a new photographer through setting up their system and teaches them to use it effectively — an in-app tutorial/guide with messaging that walks them through the pages and shows them how to use the system well. Directly serves the north star (memory #1): the product must be fully usable by a non-technical photographer without external help docs.
+17.2 **Status: do NOT build yet.** Mike's explicit direction: this must be scoped out AND researched against best-in-class onboarding / product-tour patterns BEFORE any build, to ensure it ships best-in-class. A scope + research session with Mike is required first. Do not design or build until Mike approves the scoped plan.
+17.3 **Relationship to existing wireframes:** distinct from the Onboarding Wizard (wireframe Screen 18, the 5-question account setup) and CSV Migration (Screen 19). Those configure the account; this tutorial teaches the photographer to USE the system, page by page.
+17.4 **To be decided at scope time (do NOT invent):** V1-vs-later slotting; which pages/flows the tour covers; trigger and timing; messaging tone; format (interactive walkthrough vs. tooltips vs. checklist vs. video); dismiss/replay behavior. Research targets: best-in-class SaaS onboarding and product tours, plus how HoneyBook / Dubsado / HubSpot onboard non-technical users.
 
 ---
 

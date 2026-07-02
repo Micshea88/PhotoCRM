@@ -16,9 +16,10 @@ import { listConnectedProvidersForOrg } from "@/modules/telephony/queries"
 /**
  * /settings/integrations — Browse + Connected Apps tabbed view.
  *
- * Owner + Admin only. Mirrors the /settings/custom-fields guard
- * pattern: session → org → member → extended role; redirect to
- * /dashboard for non-owner/admin.
+ * Reachable by ALL members (Item 2) so every photographer can connect their own
+ * email. Browse + the Connected Apps list are read-only; connect/disconnect is
+ * gated where it matters (email = per-user for everyone; RingCentral = owner/
+ * admin only) downstream in the provider wizard / email picker.
  *
  * The active tab is driven by ?view=<id>. Falls back to "browse"
  * when missing or unknown. Connected Apps renders the live list
@@ -50,10 +51,6 @@ export default async function IntegrationsSettingsPage({
     (await runWithOrgContext({ orgId, role: tentativeRole, userId: session.user.id }, async () =>
       getExtendedMemberRole(session.user.id),
     )) ?? tentativeRole
-
-  if (extendedRole !== "owner" && extendedRole !== "admin") {
-    redirect("/dashboard")
-  }
 
   const params = await searchParams
   const active = resolveActiveTab(params.view)

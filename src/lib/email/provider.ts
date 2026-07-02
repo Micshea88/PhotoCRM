@@ -88,6 +88,15 @@ export function dressedFromHeader(photographerName: string, businessName: string
   return `${display} <${env.RESEND_FROM_EMAIL}>`
 }
 
+/** Dressed studio From header for automated/workflow email — the studio name
+ *  over the system address, never a bare system address (Item 1). No owner is
+ *  resolved for automations in this round, so the display name is the business
+ *  name alone. */
+export function studioFromHeader(businessName: string): string {
+  const display = sanitizeDisplayName(businessName) || "Pathway"
+  return `${display} <${env.RESEND_FROM_EMAIL}>`
+}
+
 /** Nylas implementation — sends as the connected photographer. */
 function nylasProvider(grantId: string, sourceValue: string): EmailProvider {
   return {

@@ -6,7 +6,7 @@ import type * as schema from "@/db/schema"
 import { encrypt } from "@/lib/crypto"
 import { env } from "@/lib/env"
 import { emailConnections } from "./schema"
-import { sourceValueForNylasProvider, type NylasGrantResponse } from "./nylas-oauth"
+import type { NylasGrantResponse } from "./nylas-oauth"
 
 type DbHandle = NodePgDatabase<typeof schema>
 
@@ -30,12 +30,15 @@ export async function upsertNylasConnection(
     organizationId: string
     userId: string
     grant: NylasGrantResponse
+    /** email_log.source label from the user's SELECTED provider (catalog) —
+     *  accurate even when Nylas reports a generic "imap" grant provider. */
+    sourceValue: string
     now?: Date
   },
 ): Promise<{ id: string; reactivated: boolean }> {
   const now = args.now ?? new Date()
   const grantCipher = encrypt(args.grant.grant_id, env.NYLAS_ENCRYPTION_KEY)
-  const sourceValue = sourceValueForNylasProvider(args.grant.provider)
+  const sourceValue = args.sourceValue
   const scopes = args.grant.scope ?? ""
 
   const [existingRow] = await tx

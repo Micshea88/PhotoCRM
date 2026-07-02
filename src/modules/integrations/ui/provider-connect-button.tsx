@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import type { CategoryId, ConnectKind } from "@/modules/integrations/types"
 import { beginRingCentralConnect } from "@/modules/telephony/actions"
 import { beginEmailConnect } from "@/modules/email-connections/actions"
-import type { EmailProviderChoiceInput } from "@/modules/email-connections/types"
 
 /**
  * Connect / Use-as-dialer / Always-available button.
@@ -54,7 +53,7 @@ export function ProviderConnectButton({
         // RingCentral. Both return an authorize URL to navigate to.
         const result =
           categoryId === "email"
-            ? await beginEmailConnect({ provider: providerId as EmailProviderChoiceInput })
+            ? await beginEmailConnect({ provider: providerId })
             : await beginRingCentralConnect({})
         const url = result.data?.authorizeUrl
         if (typeof url === "string" && url.length > 0) {

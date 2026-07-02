@@ -5,7 +5,9 @@ import { createId } from "@paralleldrive/cuid2"
 import type * as schema from "@/db/schema"
 import { ActionError } from "@/lib/safe-action"
 import { sendEmail } from "@/lib/email"
+import { studioFromHeader } from "@/lib/email/provider"
 import { audit } from "@/modules/audit/audit"
+import { organization } from "@/modules/auth/schema"
 import { contacts } from "@/modules/contacts/schema"
 import { projects } from "@/modules/projects/schema"
 import { opportunities } from "@/modules/opportunities/schema"
@@ -130,7 +132,22 @@ async function handleSendEmail(
   if (!to || !subject || !body) {
     throw new ActionError("VALIDATION", "send_email requires { to, subject, body }")
   }
-  await sendEmail({ to, subject, html: body })
+  // Item 1: automated email goes from the DRESSED STUDIO address — the studio
+  // name over the system address, never a bare system address. Send-as-the-owner
+  // is deferred to the Events build (projects have no owner column yet), so no
+  // owner is resolved here. A failed send throws → the executor records the step
+  // as `failed` (not silently dropped).
+  const [orgRow] = await ctx.db
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, ctx.organizationId))
+    .limit(1)
+  await sendEmail({
+    to,
+    subject,
+    html: body,
+    from: studioFromHeader(orgRow?.name ?? "your studio"),
+  })
   await audit(
     { db: ctx.db, organizationId: ctx.organizationId, actorUserId: null },
     "workflows.action.send_email",

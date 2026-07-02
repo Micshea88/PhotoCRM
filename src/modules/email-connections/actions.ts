@@ -26,6 +26,7 @@ import { beginEmailConnectInput, disconnectEmailInput } from "./types"
 
 const COOKIE_PATH = "/api/integrations/nylas"
 const STATE_COOKIE = "nylas_oauth_state"
+const PROVIDER_COOKIE = "nylas_oauth_provider"
 const COOKIE_MAX_AGE_SECONDS = 600
 
 export const beginEmailConnect = orgAction
@@ -36,7 +37,7 @@ export const beginEmailConnect = orgAction
 
     let authorizeUrl: string
     try {
-      authorizeUrl = buildNylasAuthUrl({ state, choice: parsedInput.provider })
+      authorizeUrl = buildNylasAuthUrl({ state, providerId: parsedInput.provider })
     } catch (e) {
       if (e instanceof NylasNotConfigured) {
         throw new ActionError(
@@ -48,13 +49,18 @@ export const beginEmailConnect = orgAction
     }
 
     const cookieStore = await cookies()
-    cookieStore.set(STATE_COOKIE, state, {
+    const cookieOpts = {
       httpOnly: true,
       secure: env.NODE_ENV !== "development",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       path: COOKIE_PATH,
       maxAge: COOKIE_MAX_AGE_SECONDS,
-    })
+    }
+    cookieStore.set(STATE_COOKIE, state, cookieOpts)
+    // Carry the SELECTED provider id so the callback records the right source
+    // label (icloud/yahoo/aol/… not a blanket "imap"), since Nylas may report a
+    // generic grant provider for IMAP connections.
+    cookieStore.set(PROVIDER_COOKIE, parsedInput.provider, cookieOpts)
 
     return { authorizeUrl }
   })

@@ -1,5 +1,6 @@
 import "server-only"
 import { env } from "@/lib/env"
+import { getEmailProvider } from "./providers"
 
 /**
  * Nylas v3 hosted authentication (Commit 4).
@@ -20,23 +21,6 @@ import { env } from "@/lib/env"
  */
 
 const REDIRECT_PATH = "/api/integrations/nylas/callback"
-
-/** Pathway provider id → Nylas `provider` auth param. */
-const NYLAS_PROVIDER: Record<EmailProviderChoice, string> = {
-  gmail: "google",
-  microsoft: "microsoft",
-  other: "imap",
-}
-
-/** Nylas `provider` (from the grant) → email_log.source value. */
-export function sourceValueForNylasProvider(nylasProvider: string): "gmail" | "outlook" | "imap" {
-  if (nylasProvider === "google") return "gmail"
-  if (nylasProvider === "microsoft") return "outlook"
-  // Everything Nylas brokers as generic IMAP ("other") logs under "imap".
-  return "imap"
-}
-
-export type EmailProviderChoice = "gmail" | "microsoft" | "other"
 
 export class NylasNotConfigured extends Error {
   constructor() {
@@ -63,16 +47,26 @@ function requireConfig(): {
   }
 }
 
-/** Build the Nylas hosted-auth URL the photographer is redirected to. */
-export function buildNylasAuthUrl(args: { state: string; choice: EmailProviderChoice }): string {
+/**
+ * Build the Nylas hosted-auth URL the photographer is redirected to.
+ *
+ * The `provider` param comes from the catalog. For IMAP-based providers we add
+ * `options=smtp_required` so Nylas's hosted screen forces the user to enter SMTP
+ * (send) settings — otherwise the grant could receive but silently fail to SEND.
+ * Confirmed in Nylas v3 docs (docs/v3/auth/imap).
+ */
+export function buildNylasAuthUrl(args: { state: string; providerId: string }): string {
+  const def = getEmailProvider(args.providerId)
+  if (!def) throw new NylasNotConfigured()
   const { apiUri, clientId, redirectUri } = requireConfig()
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    provider: NYLAS_PROVIDER[args.choice],
+    provider: def.nylasProvider,
     state: args.state,
   })
+  if (def.kind === "imap") params.set("options", "smtp_required")
   return `${apiUri}/v3/connect/auth?${params.toString()}`
 }
 

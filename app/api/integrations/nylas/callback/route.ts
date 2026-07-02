@@ -15,6 +15,7 @@ import {
   NylasTokenExchangeError,
 } from "@/modules/email-connections/nylas-oauth"
 import { upsertNylasConnection } from "@/modules/email-connections/upsert"
+import { getEmailProvider } from "@/modules/email-connections/providers"
 
 /**
  * Nylas hosted-auth callback (Commit 4). PER-PHOTOGRAPHER — any member connects
@@ -33,6 +34,7 @@ import { upsertNylasConnection } from "@/modules/email-connections/upsert"
 const RETURN_PATH = "/settings/integrations/email"
 const COOKIE_PATH = "/api/integrations/nylas"
 const STATE_COOKIE = "nylas_oauth_state"
+const PROVIDER_COOKIE = "nylas_oauth_provider"
 
 function redirectWithStatus(request: NextRequest, query: Record<string, string>): NextResponse {
   const url = new URL(RETURN_PATH, request.nextUrl.origin)
@@ -43,6 +45,7 @@ function redirectWithStatus(request: NextRequest, query: Record<string, string>)
 async function clearCookie(): Promise<void> {
   const store = await cookies()
   store.delete({ name: STATE_COOKIE, path: COOKIE_PATH })
+  store.delete({ name: PROVIDER_COOKIE, path: COOKIE_PATH })
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -61,7 +64,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const code = request.nextUrl.searchParams.get("code")
   const state = request.nextUrl.searchParams.get("state")
   const providerError = request.nextUrl.searchParams.get("error")
-  const stateCookie = (await cookies()).get(STATE_COOKIE)?.value ?? ""
+  const cookieStore = await cookies()
+  const stateCookie = cookieStore.get(STATE_COOKIE)?.value ?? ""
+  // Source label from the SELECTED provider (icloud/yahoo/aol/…), not a blanket
+  // "imap". Falls back to the grant's provider mapping if the cookie is missing.
+  const selectedProviderId = cookieStore.get(PROVIDER_COOKIE)?.value ?? ""
 
   if (providerError) {
     log.info({ feature: "email.nylas", providerError, userId, orgId }, "[nylas-oauth] denied/error")
@@ -122,7 +129,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     await runWithOrgContext({ orgId, role: extendedRole, userId }, async () => {
       return withOrgContext(async (tx) => {
-        const r = await upsertNylasConnection(tx, { organizationId: orgId, userId, grant })
+        const selected = getEmailProvider(selectedProviderId)
+        const sourceValue =
+          selected?.sourceValue ??
+          (grant.provider === "google"
+            ? "gmail"
+            : grant.provider === "microsoft"
+              ? "outlook"
+              : "imap")
+        const r = await upsertNylasConnection(tx, {
+          organizationId: orgId,
+          userId,
+          grant,
+          sourceValue,
+        })
         await audit(
           {
             db: tx,

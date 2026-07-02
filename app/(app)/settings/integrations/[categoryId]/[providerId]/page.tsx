@@ -56,10 +56,6 @@ export default async function IntegrationsProviderPage({
       getExtendedMemberRole(session.user.id),
     )) ?? tentativeRole
 
-  if (extendedRole !== "owner" && extendedRole !== "admin") {
-    redirect("/dashboard")
-  }
-
   const { categoryId, providerId } = await params
   const category = getCategoryById(categoryId)
   if (!category) notFound()
@@ -97,7 +93,9 @@ export default async function IntegrationsProviderPage({
     ? { ...staticProvider, connectState: "connected" }
     : staticProvider
 
-  const canManage = true
+  // Item 2: email is per-user (anyone manages their own mailbox); every other
+  // category is shared org infrastructure → owner/admin only.
+  const canManage = category.id === "email" || extendedRole === "owner" || extendedRole === "admin"
 
   // RingCentral only: is the account telephony webhook already bootstrapped?
   // Org-level read (the webhook is one-per-account, not per-user). Only when

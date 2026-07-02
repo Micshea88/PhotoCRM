@@ -213,7 +213,11 @@ COMPOSER STATE: 6.40 Cancel = HubSpot pattern (discard draft, "Open share link" 
 ### Mike's outstanding manual to-dos (deploy-blockers):
 
 - Nylas Full Platform plan + production API key — DONE 06-28.
-- Nylas connectors (Google/Microsoft) + webhook URL — pending Commit 4 scoping (webhook points at a Pathway route CC still builds).
+- Nylas connectors + webhook URL — status updated 07-02-2026:
+  - **Google (Gmail) connector — DONE 07-02-2026.** Created and enabled in the Nylas dashboard using a self-owned Google Cloud app (project name "PATHWAY", project id `pathway-501201`, US region). Pub/Sub provisioned (topic: `projects/pathway-501201/topics/nylas-gmail-realtime`). Connector scopes: openid, userinfo.email, userinfo.profile, gmail.modify, gmail.send, calendar, calendar.events, contacts, contacts.other.readonly. Gmail connections are live.
+  - **Microsoft connector — NOT DONE, DEFERRED by Mike (07-02-2026)** to after the rest of the build. Blocker: a self-owned Microsoft/Azure app requires creating a free Azure (Entra) tenant, which Microsoft only allows via the Azure free-signup flow that puts a payment card on file; personal Gmail-based logins cannot register apps in Microsoft's default "Microsoft Services" tenant. Nylas has NO free shared-credentials option for Microsoft (unlike Google's, which was also a paid add-on). Revisit when ready to do the Azure signup.
+  - **Yahoo, iCloud, and generic IMAP catch-all connectors — NOT DONE, DEFERRED by Mike (07-02-2026)** to after the rest of the build (same "come back to the IMAP-side providers later" decision). AOL rides the generic IMAP connector.
+  - **Mike's exact instruction:** skip Microsoft and IMAP for now, come back to them, and add those connectors after the rest is built. Until each connector is created in the Nylas dashboard, its option in Pathway's provider picker will fail gracefully with the "may not be set up yet" message — expected, not a bug.
 - RESEND_WEBHOOK_SECRET in Vercel env.
 - Resend dashboard MX config (mail.kandkphotography.com — DKIM/SPF/DMARC).
 - SHARE_LINK_HMAC_SECRET in Vercel env.

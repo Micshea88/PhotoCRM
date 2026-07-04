@@ -393,6 +393,13 @@
       "when": 1783187439483,
       "tag": "0055_silky_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1783188159593,
+      "tag": "0056_fast_genesis",
+      "breakpoints": true
     }
   ]
 }

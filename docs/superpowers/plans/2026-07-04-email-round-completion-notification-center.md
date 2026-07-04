@@ -24,7 +24,10 @@ Copy these into every task's working context. Values are verbatim locked decisio
 - **LOG-ONLY types (no alert; still shown on timeline/threads with status + timestamp):** opens, clicks, ordinary sends, ordinary receives.
 - **Never notify a user about their OWN action** — extended to automation/rule-triggered email the user configured. **But** bounces/failures on automated email STILL notify (the failure is not the user's "action").
 - **No notification type is ever locked / non-disableable** (ClickUp's most-hated design choice).
-- **Critical tier (bounce / fail / disconnect / @mention) = always delivered individually + guaranteed** (never batched away). **Routine tier = digestible.**
+- **Critical tier (bounce / fail / disconnect) = always delivered individually + guaranteed** (never batched away). **Routine tier = digestible.**
+- **NO @mentions** anywhere — dropped 2026-07-04. No @mention type, filter, view, or tier member. It's a team-collaboration feature with nothing to feed it in Pathway today.
+- **Notification `type` is an OPEN-ENDED registry**, not a fixed enum. Each type maps to `{ category, tier, label, defaultChannels, needsAction }`. New modules register new types (Proposal viewed/signed, Payment completed…) WITHOUT a filter/view rewrite. `category` (e.g. `system` vs `client`/`lead`/`project`/`payment`) drives visual treatment + filter grouping; `needsAction:true` marks a type as belonging to the "Needs attention" preset.
+- **Notifications can link to a specific contact** via a first-class `contact_id` column (NULL for pure system notices) so they filter by contact.
 - **Read-state authoritative + cross-device** (server is source of truth; the "badge won't clear" bug hit Monday's CRM — do not repeat).
 - **Automated emails remain first-class:** fully logged in the activity feed, shown in inline threads, open/click + delivery tracked exactly like manual email. Only the redundant self-notification is suppressed.
 - **Opens are NEVER a notification.** Opens UI is directional and MPP-honest.
@@ -40,9 +43,9 @@ Copy these into every task's working context. Values are verbatim locked decisio
 **New module — `src/modules/notifications/` (platform-generic):**
 
 - `schema.ts` — `notifications`, `notification_preferences` tables.
-- `types.ts` — `NotificationType` enum, `NotificationChannel` enum, tier map, payload types.
-- `dispatch.ts` — the single emit entrypoint every producer calls (`emitNotification`); applies preferences, tiering, own-action suppression, quiet-hours deferral, channel fan-out.
-- `queries.ts` — org+user-scoped reads (bell list, unread count, preference fetch).
+- `types.ts` — the **`NOTIFICATION_TYPES` registry** (open-ended): a record mapping each type key → `{ category, tier, label, defaultChannels, needsAction }`. `NotificationType` is `keyof typeof NOTIFICATION_TYPES`, `NotificationChannel` = `"in_app" | "email"`, `NotificationCategory` = `"system" | "client" | "lead" | "project" | "payment" | …`. New modules add a registry entry to introduce a type — the filter/preferences/presets read the registry, so nothing else changes. Also payload types.
+- `dispatch.ts` — the single emit entrypoint every producer calls (`emitNotification`); looks the type up in the registry to stamp `category`/`tier`, applies preferences, own-action suppression, quiet-hours deferral, channel fan-out; writes `contact_id` when the caller passes one.
+- `queries.ts` — org+user-scoped reads (bell list, unread count, preference fetch, the 3 preset views, and stacking filters by type/time/contact).
 - `actions.ts` — safe-actions: mark-read, mark-all-read, archive, update preference.
 - `email.ts` — renders + sends the optional notification email via the existing system mailer (`src/lib/email.ts:sendEmail`).
 - `README.md` — how other modules emit (the plug-in contract).
@@ -118,25 +121,30 @@ Copy these into every task's working context. Values are verbatim locked decisio
 
 ### New table: `notifications`
 
-| Column                      | Type                          | Notes                                                                         |
-| --------------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
-| `id`                        | text PK (cuid2)               |                                                                               |
-| `organization_id`           | text NOT NULL FK→organization | RLS scope                                                                     |
-| `recipient_user_id`         | text NOT NULL FK→user         | who sees it                                                                   |
-| `type`                      | text NOT NULL                 | see `NotificationType` (extensible; email types today)                        |
-| `tier`                      | text NOT NULL                 | `critical` \| `routine`                                                       |
-| `title`                     | text NOT NULL                 | rendered, plain-English                                                       |
-| `body`                      | text NULL                     |                                                                               |
-| `link_path`                 | text NULL                     | deep link (e.g. the contact/thread, or integrations reconnect)                |
-| `payload`                   | jsonb NULL                    | source refs (emailLogId, connectionId, contactId, actorUserId, source module) |
-| `source_module`             | text NOT NULL                 | `"email"` today; future producers self-identify                               |
-| `read_at`                   | timestamptz NULL              | authoritative read-state                                                      |
-| `archived_at`               | timestamptz NULL              |                                                                               |
-| `scheduled_for`             | timestamptz NULL              | quiet-hours deferral; null = deliver now                                      |
-| `email_sent_at`             | timestamptz NULL              | if the email channel fired                                                    |
-| `created_at` / `updated_at` | timestamptz NOT NULL          |                                                                               |
+| Column                      | Type                          | Notes                                                                                                                                                                                         |
+| --------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | text PK (cuid2)               |                                                                                                                                                                                               |
+| `organization_id`           | text NOT NULL FK→organization | RLS scope                                                                                                                                                                                     |
+| `recipient_user_id`         | text NOT NULL FK→user         | who sees it                                                                                                                                                                                   |
+| `type`                      | text NOT NULL                 | see `NotificationType` (extensible; email types today)                                                                                                                                        |
+| `tier`                      | text NOT NULL                 | `critical` \| `routine`                                                                                                                                                                       |
+| `title`                     | text NOT NULL                 | rendered, plain-English                                                                                                                                                                       |
+| `body`                      | text NULL                     |                                                                                                                                                                                               |
+| `link_path`                 | text NULL                     | deep link (e.g. the contact/thread, or integrations reconnect)                                                                                                                                |
+| `contact_id`                | text NULL FK→contacts(id)     | **first-class related-contact link (added 2026-07-04, `onDelete: set null`)** — enables "all notifications for Sara Marx". NULL for pure system notices with no contact                       |
+| `category`                  | text NOT NULL                 | denormalized from the type registry (`system`\|`client`\|`lead`\|`project`\|`payment`…) for cheap filter-grouping + visual treatment. Written by `dispatch.ts` from the type's registry entry |
+| `payload`                   | jsonb NULL                    | remaining source refs (emailLogId, connectionId, actorUserId, source module). `contactId` is promoted to the `contact_id` COLUMN; `category` to its own column                                |
+| `source_module`             | text NOT NULL                 | `"email"` today; future producers self-identify                                                                                                                                               |
+| `read_at`                   | timestamptz NULL              | authoritative read-state                                                                                                                                                                      |
+| `archived_at`               | timestamptz NULL              |                                                                                                                                                                                               |
+| `snoozed_until`             | timestamptz NULL              | **snooze row-action (added 2026-07-04)** — while `now() < snoozed_until` the row is hidden from All/Unread/Needs-attention, then reappears as unread                                          |
+| `scheduled_for`             | timestamptz NULL              | quiet-hours deferral; null = deliver now                                                                                                                                                      |
+| `email_sent_at`             | timestamptz NULL              | if the email channel fired                                                                                                                                                                    |
+| `created_at` / `updated_at` | timestamptz NOT NULL          |                                                                                                                                                                                               |
 
 - Index `(organization_id, recipient_user_id, read_at, created_at desc)` for bell/unread.
+- Index `(organization_id, contact_id, created_at desc)` — "notifications for this contact".
+- Index `(organization_id, recipient_user_id, category, created_at desc)` — category/type filter-grouping.
 - Index `(scheduled_for)` partial where not null — the quiet-hours/digest flush cron scans this.
 - RLS: org-scoped AND recipient-scoped read; `FORCE ROW LEVEL SECURITY`.
 
@@ -192,6 +200,32 @@ Store all notification timing settings as ONE key/value row per user:
 - **Critical tier** ignores quiet-hours/digest: always immediate + individual.
 - **Routine tier** (`reply_received`) obeys quiet-hours deferral and can roll into a digest if the user set `digest_frequency`.
 - **Own-action rule** is enforced in `dispatch.ts`: if `payload.actorUserId === recipient_user_id` → suppress. Extended: automation/workflow-sent email carries the configuring user as actor, so "your automation sent X" self-notifications are suppressed — but a _bounce_ on that automated send has no user actor (or actor = system) → it still notifies.
+
+### Type registry, category & `needsAction` (open-ended)
+
+Each email type today, in the registry (`category` · `needsAction`):
+
+| Type                                       | category | tier         | needsAction                  |
+| ------------------------------------------ | -------- | ------------ | ---------------------------- |
+| `email.bounced`                            | `client` | critical     | **yes**                      |
+| `email.complained`                         | `client` | critical     | **yes**                      |
+| `email.send_failed`                        | `client` | critical     | **yes**                      |
+| `email.disconnected`                       | `system` | critical     | **yes**                      |
+| `email.reply_received`                     | `client` | routine      | **yes** (a reply awaits you) |
+| `email.opened`/`clicked`/`sent`/`received` | `client` | — (log-only) | no                           |
+
+- **`category` drives visual + filter grouping.** `system` notices (e.g. `email.disconnected`) get lower-attention styling and are separable in the filter from `client`/`lead`/`project`/`payment` business events. Future modules pick a category when they register a type.
+- **`needsAction` drives the "Needs attention" preset** (below). A future module marks its own actionable type (e.g. `proposal.unsigned`, `invoice.unpaid`) `needsAction:true` and it joins the view with **no view rewrite**.
+
+### The three built-in preset views (zero setup)
+
+Computed in `queries.ts`; no saved-view row required; snoozed rows (`now() < snoozed_until`) excluded from all three:
+
+1. **All** — every non-archived notification for the user, newest first.
+2. **Unread** — `read_at IS NULL`, non-archived.
+3. **Needs attention** — **unread AND the type's registry `needsAction === true`** — i.e. things requiring the user to ACT. Today: unread bounce / send-failure / disconnect (failures) **plus** reply-received (a reply awaiting response). Extensible purely by registering future `needsAction` types (unsigned proposal, unpaid invoice…) — the view query keys off the registry, never a hardcoded type list.
+
+Archive is a separate destination (archived rows show only under **Archive**, not the three presets).
 
 ---
 
@@ -292,9 +326,9 @@ Each task ends with an independently testable deliverable and a commit. Tests ar
 
 - [ ] **Task 8 — `grant.expired` handler writes `status="expired"` + `expired_at`/`reason`.** Integration test: handler flips status; `isSendable` now returns false → send resolves to Resend fallback.
 
-- [ ] **Task 9 — `notifications` + `notification_preferences` tables + migrations.** FORCE RLS; RLS tests (recipient-scoped read).
+- [ ] **Task 9 — `notifications` + `notification_preferences` tables + migrations.** Include `contact_id` (FK→contacts, NULL, `onDelete set null`), `category`, and `snoozed_until` per the data model, with the contact + category indexes. FORCE RLS; RLS tests (recipient-scoped read) + a test that a NULL-contact system notice and a contact-linked notice both insert and that contact-filtered reads return only the matching contact's rows.
 
-- [ ] **Task 10 — `dispatch.ts` emit engine.** `emitNotification(input)`: resolve recipients, apply preference (default when no row), own-action suppression (incl. automation actor), tiering, quiet-hours `scheduled_for`, channel fan-out (in-app row always; email via system mailer when channel on + critical or non-deferred). Unit tests: own-action suppressed; bounce-on-automated still notifies; critical bypasses quiet-hours; routine defers.
+- [ ] **Task 10 — `types.ts` registry + `dispatch.ts` emit engine.** First build the `NOTIFICATION_TYPES` registry (`{category, tier, label, defaultChannels, needsAction}` per type). `emitNotification(input)`: look up the type → stamp `tier` + `category`; accept an optional `contactId` and write it to the `contact_id` column; resolve recipients; apply preference (registry `defaultChannels` when no row); own-action suppression (incl. automation actor); quiet-hours `scheduled_for`; channel fan-out (in-app row always; email via system mailer when channel on + critical or non-deferred). Unit tests: registry stamps category/tier; `contactId` persisted; own-action suppressed; bounce-on-automated still notifies; critical bypasses quiet-hours; routine defers.
 
 - [ ] **Task 11 — Wire `recordDeliveryEvent` → `emitNotification`** for bounce/complaint/failed (critical, owner + admins) with plain-English `bounce_reason`. Integration test end-to-end from a signed webhook payload to a notification row.
 
@@ -302,11 +336,20 @@ Each task ends with an independently testable deliverable and a commit. Tests ar
 
 - [ ] **Task 13 — Open classifier (`classify-open.ts`) + pixel-route wiring.** Apple egress-IP cache, UA/IP/timing rules; pixel route increments classified counter. Unit tests per rule; MPP→unknown; scanner→bot; plain→human.
 
-- [ ] **Task 14 — Notification queries + safe-actions.** Bell list, unread count, mark-read, mark-all-read (authoritative + idempotent), archive, update-preference. Tests incl. cross-device read-state (server authoritative).
+- [ ] **Task 14 — Notification queries + safe-actions.** Queries: bell list, unread count, the **3 preset views** (All / Unread / Needs-attention = unread ∧ registry `needsAction`, all excluding `now() < snoozed_until`), and a **stacking filter query** combining `type` (OR within, from the registry) ∧ `time` (Today/This week/by-day/range, same date vocabulary as `activity-filter.ts`) ∧ `contact_id` — AND across dimensions, mirroring the activity-filter engine. Safe-actions: mark-read, **mark-unread**, mark-all-read (authoritative + idempotent), **snooze (set `snoozed_until`)**, archive, **create-task-from-notification** (creates a Task via the tasks module, linked to the notification's `contact_id`), update-preference. Tests: each preset; stacking (type∧time∧contact together) returns the intersection; cross-device read-state (server authoritative); snoozed rows hidden then reappear.
 
-- [ ] **Task 15 — Bell + inbox UI.** App-shell bell (unread badge), inbox panel (read/unread, mark-all-read, archive, ~30-day auto-clear), deep links. Component tests.
+- [ ] **Task 15 — Bell + inbox UI (approved wireframe).** Deliver:
+  - **App-shell bell** with unread badge + a **dropdown quick-peek** (recent unread, "mark all read", link to full inbox).
+  - **Full inbox** with **3 tabs — All / Unread / Needs attention — plus an Archive destination** (4th tab/section). Tabs map to the Task 14 preset queries.
+  - **Reused Contacts stacking filter strip** (`activity-filter-strip.tsx` / the `activity-filter.ts` engine + `filter-pills.tsx`) supporting **type + time + contact simultaneously** (AND across). Type options come from the registry; time uses the activity date vocabulary; contact is a searchable picker.
+  - **Notification rows** with **category-driven visual treatment** (system = lower-attention styling; client/lead/project/payment = business styling) and **hover-only row actions: mark unread · snooze · create task · archive** (wired to Task 14 actions).
+  - Deep links (row → the contact/thread or reconnect), ~30-day auto-clear of archived, authoritative cross-device read-state.
+  - **Plain-English copy** for bounce ("This email couldn't be delivered to …") — reconnect copy lives in Task 19's banner but the inbox row for `email.disconnected` uses the same plain-English phrasing.
+  - Component tests: tab→preset wiring; stacking filter intersection; hover actions; system-vs-business visual class; bell badge count.
 
-- [ ] **Task 16 — Preference matrix UI + timezone/quiet-hours/digest settings.** Per-type × per-channel toggles (never locked), timezone capture, quiet-hours, digest frequency. Component tests: no type is non-disableable.
+- [ ] **Task 16 — Preference matrix UI + timezone/quiet-hours/digest settings.** Per-type × per-channel toggles rendered **from the registry** (grouped by `category`; new registry types appear automatically), never locked; timezone capture, quiet-hours, digest frequency. No @mention row anywhere. Component tests: no type is non-disableable; a newly-registered type shows up without UI changes.
+
+- [ ] **Task 16b — (OPTIONAL, approved to build) Personal saved views for notifications.** Scope the existing universal `saved_views` engine to notifications: `object_type="notifications"`, a **filter-state adapter** mapping the inbox filter state (type/time/contact) ↔ the engine's `{field, op, value}` array, and wire the existing `saved-views-tab-strip.tsx` + `save-view-modal.tsx` into the inbox. **Fully OPTIONAL at runtime:** the 3 presets work with **zero setup**; a saved view is opt-in only and NEVER a setup step. Reuse the engine's private/shared/org visibility + RLS as-is. Component/integration tests: save a multi-filter combo, reload it, presets still work with no saved views present.
 
 - [ ] **Task 17 — Quiet-hours/digest flush cron (`app/api/jobs/cron/notifications-flush`).** Scans due `scheduled_for` + builds digests per `digest_frequency`; `CRON_SECRET`-guarded like existing cron routes. Integration test: deferred routine delivered after window; critical never deferred.
 
@@ -320,9 +363,11 @@ Each task ends with an independently testable deliverable and a commit. Tests ar
 
 ## New Pieces — flagged
 
-**New tables (3):** `email_delivery_events`, `notifications`, `notification_preferences` (+ additive columns on `email_log` and `email_connections`). **`user_preferences` is unchanged** — notification settings ride an existing KV row.
+**New tables (3):** `email_delivery_events`, `notifications` (incl. `contact_id`, `category`, `snoozed_until`), `notification_preferences` (+ additive columns on `email_log` and `email_connections`). **`user_preferences` is unchanged** — notification settings ride an existing KV row. **`saved_views` is reused as-is** (scoped via a new `object_type="notifications"` — no schema change to it).
 **New module dirs (2):** `src/modules/notifications/`, `src/modules/email-delivery/`.
 **New route (1):** `app/api/jobs/cron/notifications-flush/route.ts` (reuses `CRON_SECRET`; add to `vercel.json` cron schedule).
+**Reused existing infra (no rebuild):** the Contacts/Tasks stacking **filter engine** (`activity-filter.ts` + `filter-pills.tsx`) and the universal **`saved_views` engine** + its UI (`saved-views-tab-strip.tsx`, `save-view-modal.tsx`).
+**Dropped:** `@mention` type/filter/view — removed everywhere (2026-07-04).
 **New env vars / secrets:** **NONE.** Resend reuses `RESEND_WEBHOOK_SECRET`; Nylas uses the already-provisioned `NYLAS_WEBHOOK_SECRET`; notification email uses the existing system mailer.
 **New runtime dependencies:** **NONE.** (Apple egress-IP list is a fetched/cached CSV, not an npm package; Svix verification already ships via the Resend SDK.)
 **New manual/dashboard step (not code):** add `email.bounced`/`email.complained`/`email.delivered` to the existing Resend webhook endpoint.
@@ -358,3 +403,19 @@ All four open decisions are resolved; the plan above reflects them. No decisions
 4. **Admin org-default preferences** — ⏸️ DEFERRED (documented future add-on). Per-user × per-type × per-channel preferences remain in scope; default-resolution is designed so an org-default tier can slot in later without a rewrite.
 
 **Status:** Plan finalized. Do NOT begin building — stays a plan pending Mike's explicit go. When approved, execution starts with the Task 0 read-only audit.
+
+---
+
+## Design additions (2026-07-04, after Tasks 1–2, applied to NOT-STARTED tasks only)
+
+Mike added notification-center design requirements mid-build. Tasks 1–2 (delivery-events table, email_log columns) were already committed and are **unchanged**. These land in the not-started tasks (9/10/14/15/16 + new 16b):
+
+1. **Contact link** — `notifications.contact_id` (FK→contacts, NULL for pure system notices) + index → filter "all notifications for Sara Marx". (Task 9/10, data model.)
+2. **Stacking filter strip** — reuse the Contacts/Tasks OR-within/AND-across engine so **type + time + contact** combine in one view. (Task 14 query, Task 15 UI.)
+3. **Open-ended `NotificationType` registry** — `{category, tier, label, defaultChannels, needsAction}`; new modules register types with no filter/view/preferences rewrite. (Task 10 `types.ts`.)
+4. **Three zero-setup preset views** — All / Unread / **Needs attention**. "Needs attention" = things needing the user to ACT = **unread ∧ registry `needsAction`** — today: bounce, send-failure, disconnect **plus replies-awaiting**; future modules add their own `needsAction` types (unsigned proposal, unpaid invoice) with no view rewrite. (Task 14/15.)
+5. **Optional saved views — APPROVED to build (Task 16b)** — scope the universal `saved_views` engine (`object_type="notifications"` + filter-state adapter + existing tab-strip UI). **Fully opt-in**; the 3 presets work with zero setup; saved views are never a setup step.
+6. **@mentions dropped entirely** — no type/filter/view/tier member (Global Constraints + matrix updated).
+7. **System vs client/lead/project distinction** — `category` (denormalized column) drives lower-attention visual styling for `system` notices and a filter grouping separating them from business events. (Data model + Task 15.)
+
+**Wireframe target (Mike-approved) for Task 15:** 3-tab inbox (All / Unread / Needs attention) + Archive; reused Contacts stacking filter strip; hover-only row actions (mark unread / snooze / create task / archive); bell dropdown quick-peek; plain-English bounce + reconnect copy; the open-tracking split display (Likely human / Automated open / Unknown) + honesty popout lives on the email thread (Task 18). New model fields for row actions: `snoozed_until` (snooze), `create-task-from-notification` action (Task 14).

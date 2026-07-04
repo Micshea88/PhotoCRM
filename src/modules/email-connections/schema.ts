@@ -92,6 +92,12 @@ export const emailConnections = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: text("deleted_by").references(() => user.id, { onDelete: "set null" }),
+    /** Timestamp when the Nylas grant expired. Set by the grant.expired webhook
+     *  handler (Task 8). NULL until then. */
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    /** Plain-English cause surfaced by the reconnect banner (Task 19). NULL
+     *  until the grant.expired webhook sets it. */
+    expiredReason: text("expired_reason"),
   },
   (t) => [
     // Common read path: "is this user connected in this org?"

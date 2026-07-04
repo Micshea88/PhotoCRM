@@ -400,6 +400,13 @@
       "when": 1783188159593,
       "tag": "0056_fast_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1783193638441,
+      "tag": "0057_public_machine_man",
+      "breakpoints": true
     }
   ]
 }

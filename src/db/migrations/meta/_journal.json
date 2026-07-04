@@ -386,6 +386,13 @@
       "when": 1782884135435,
       "tag": "0054_rare_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1783187439483,
+      "tag": "0055_silky_vulture",
+      "breakpoints": true
     }
   ]
 }

@@ -407,6 +407,13 @@
       "when": 1783193638441,
       "tag": "0057_public_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1783258245445,
+      "tag": "0058_chilly_hiroim",
+      "breakpoints": true
     }
   ]
 }

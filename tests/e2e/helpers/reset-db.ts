@@ -45,6 +45,8 @@ const TABLES_TO_TRUNCATE = [
   "workflow_executions",
   "workflow_steps",
   "workflows",
+  "notification_preferences",
+  "notifications",
   "invitation",
   "member",
   "organization",

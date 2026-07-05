@@ -48,7 +48,7 @@ export interface InboundEmail {
   sentAt: Date
 }
 
-interface SvixHeaders {
+export interface SvixHeaders {
   "svix-id": string | null
   "svix-timestamp": string | null
   "svix-signature": string | null
@@ -56,9 +56,9 @@ interface SvixHeaders {
 
 /** Svix-verify the raw webhook body. Returns the parsed event, or null when the
  *  signature is invalid or the secret isn't configured. */
-export function verifyInboundWebhook(rawBody: string, headers: SvixHeaders): unknown {
+export function verifyResendWebhook(rawBody: string, headers: SvixHeaders): unknown {
   if (!env.RESEND_WEBHOOK_SECRET) {
-    log.warn("resend-inbound: RESEND_WEBHOOK_SECRET not set — rejecting")
+    log.warn("resend-webhook: RESEND_WEBHOOK_SECRET not set — rejecting")
     return null
   }
   try {
@@ -73,7 +73,7 @@ export function verifyInboundWebhook(rawBody: string, headers: SvixHeaders): unk
       secret: env.RESEND_WEBHOOK_SECRET,
     })
   } catch (err) {
-    log.warn({ err }, "resend-inbound: signature verification failed")
+    log.warn({ err }, "resend-webhook: signature verification failed")
     return null
   }
 }
@@ -285,7 +285,7 @@ export async function processInboundEmail(email: InboundEmail, source = "resend"
 /** Full ingest: verify, fetch the body, process. Always swallow errors — the
  *  route acks 200 regardless so Resend doesn't disable the webhook. */
 export async function ingestInboundEmail(rawBody: string, headers: SvixHeaders): Promise<void> {
-  const event = verifyInboundWebhook(rawBody, headers)
+  const event = verifyResendWebhook(rawBody, headers)
   if (!event || typeof event !== "object") return
   const evt = event as { type?: string; data?: { email_id?: string } }
   if (evt.type !== "email.received" || !evt.data?.email_id) return

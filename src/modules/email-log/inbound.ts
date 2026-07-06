@@ -282,10 +282,13 @@ export async function processInboundEmail(email: InboundEmail, source = "resend"
   return written
 }
 
-/** Full ingest: verify, fetch the body, process. Always swallow errors — the
- *  route acks 200 regardless so Resend doesn't disable the webhook. */
-export async function ingestInboundEmail(rawBody: string, headers: SvixHeaders): Promise<void> {
-  const event = verifyResendWebhook(rawBody, headers)
+/**
+ * Process a pre-verified Resend event as an inbound email. Handles only the
+ * `email.received` type — all other types are silently dropped (no-op). This
+ * is the inner logic extracted from `ingestInboundEmail` so the route can
+ * verify ONCE and branch by type without double-verifying.
+ */
+export async function ingestInboundFromEvent(event: unknown): Promise<void> {
   if (!event || typeof event !== "object") return
   const evt = event as { type?: string; data?: { email_id?: string } }
   if (evt.type !== "email.received" || !evt.data?.email_id) return
@@ -296,4 +299,13 @@ export async function ingestInboundEmail(rawBody: string, headers: SvixHeaders):
   } catch (err) {
     log.error({ err }, "resend-inbound: processing failed")
   }
+}
+
+/** Full ingest: verify the raw body, then delegate to `ingestInboundFromEvent`.
+ *  Kept for backward-compat; the route now calls `verifyResendWebhook` + branch
+ *  directly so it can handle delivery events on the same endpoint. */
+export async function ingestInboundEmail(rawBody: string, headers: SvixHeaders): Promise<void> {
+  const event = verifyResendWebhook(rawBody, headers)
+  if (!event) return
+  await ingestInboundFromEvent(event)
 }

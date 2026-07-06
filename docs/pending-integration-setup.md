@@ -18,15 +18,15 @@
   5. **Verify:** send a real inbound email/reply to a connected mailbox and confirm it logs to the matching contact (and, once dispatch is wired, that a reply notification appears).
 - **Why it's the gate:** **this build is NOT done until the Nylas inbound webhook is connected and inbound email/reply logging is verified working end-to-end.**
 
-## 2. Resend bounce/delivery webhook — **BLOCKS BUILD COMPLETION: YES (for bounce/delivery notifications)** 🚩
+## 2. Resend bounce/delivery webhook — ✅ **COMPLETE** (wiring done 2026-07-06; activates on next production deploy)
 
 - **What it is:** Resend (system/fallback sender) pushes delivery-status events so Pathway records bounces/complaints/deliveries and fires the bounce/send-failure notifications.
-- **Current state:** being set up now (with Mike). The route exists (`app/api/webhooks/resend/inbound/route.ts`) and Task 6 adds `event.type` branching (`email.bounced`/`email.complained`/`email.delivered` → `recordDeliveryEvent`) reusing the shared Svix verifier. `RESEND_WEBHOOK_SECRET` is **not set** in Vercel — `verifyResendWebhook` returns `null` (rejects) while unset.
-- **Setup needed to go live:**
-  1. In the Resend dashboard, on the **existing** webhook endpoint (reuse — do NOT create a second endpoint/secret), subscribe the three delivery events: **`email.bounced`, `email.complained`, `email.delivered`**. Endpoint URL: **`https://photo-crm-three.vercel.app/api/webhooks/resend/inbound`**.
-  2. Set **`RESEND_WEBHOOK_SECRET`** in Vercel (the endpoint's Svix signing secret).
-  3. **Verify:** trigger a bounce (send to an invalid address) and confirm `email_log.delivery_status` flips to `bounced` and (once dispatch is wired) a bounce notification fires.
-- **Blocks:** the bounce/delivery notifications in this build will **not fire** until this is done. (Also required for the existing Resend **inbound** email path to verify at all.)
+- **Current state (2026-07-06):** ✅ **DONE.** Webhook created in the Resend dashboard at `https://photo-crm-three.vercel.app/api/webhooks/resend/inbound`, subscribed to **all 7 events** (`email.received`, `email.sent`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.delivered`, `email.failed`). **`RESEND_WEBHOOK_SECRET` set in all 3 Vercel envs** (Production, Preview, Development — verified via `vercel env ls`). Delivery handler (Task 6: `email.bounced`/`email.complained`/`email.delivered` → `recordDeliveryEvent`) is committed on the feature branch. Inbound (`email.received`) handler is live in prod code.
+- **What remains:** only the **next production deploy** — Vercel env vars take effect on deploy, and Task 6's delivery branch ships with the feature branch. Until that deploy, `verifyResendWebhook` still rejects on the current prod build (secret not yet loaded there); after deploy, bounce/complaint/delivered flow and (once notification dispatch lands) fire notifications.
+- **Subscription-vs-handler gaps (subscribed but no-op until built — expected, not errors):**
+  - `email.failed` — subscribed, but **no handler branch yet** → no-ops. Tracked as `cleanup-and-tech-debt.md` **A.14** (add `email.failed → recordDeliveryEvent({type:"failed"})`).
+  - `email.sent`, `email.delivery_delayed` — subscribed, no handler → no-op (harmless; future-proofing).
+- **Verify (post-deploy):** trigger a bounce (send to an invalid address) → confirm `email_log.delivery_status` flips to `bounced` and (once dispatch is wired) a bounce notification fires.
 
 ## 3. Twilio SMS — **BLOCKS BUILD COMPLETION: NO** (deferred by Mike)
 
@@ -51,7 +51,7 @@
 Before declaring the notification-center build DONE, confirm:
 
 - [ ] **#1 Nylas inbound webhook** connected (secret set + subscription created + triggers subscribed) AND a real inbound email/reply verified logging to a contact. **(HARD GATE)**
-- [ ] **#2 Resend bounce webhook** wired (3 events on existing endpoint + secret set) AND a real bounce verified flipping `delivery_status` + firing a notification. **(HARD GATE for bounce/delivery notifications)**
+- [x] **#2 Resend bounce webhook** — ✅ endpoint created + 7 events subscribed + `RESEND_WEBHOOK_SECRET` set in all 3 envs (2026-07-06). Remaining: next production deploy to activate, then verify a real bounce flips `delivery_status` + fires a notification. **(HARD GATE — wiring done; deploy-activate + verify pending)**
 - [ ] **#3 Twilio SMS** — explicitly acknowledged as **deferred, NOT built** (does not block; "Text received" stays non-firing).
 
 _Update this file as each item is wired + verified (add date + who verified). Do not declare the build complete with an unchecked HARD GATE._

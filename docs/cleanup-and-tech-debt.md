@@ -103,6 +103,13 @@ The following items from the 19-item memory backlog are Open or unverified. Full
 
 Not duplicated here (kept in `TODO.md` to avoid two sources of truth). Open item IDs as of 2026-07-05: **H5, H6, H7, H8, H10, H13, H14, H34, H36, H38** (High); **M1, M2, M3, M4, M5, M7, M8, M10, M12, M15, M17, M18, M19** (Medium); **L2, L3, L4, L5, L6, L7** (Low). Notable security-flavored: **L7** (open-redirect check on sign-in `redirect`), **H13** (HIBP password check), **H14** (hash verification tokens at rest), **H10** (auth events → audit log).
 
+### A.14 — Resend `email.failed` handler branch (native-lane async send-failure parity)
+
+- **What's wrong:** the Resend webhook **subscribe is live** (`email.failed` is subscribed on the endpoint), but the route has **no `email.failed` branch** — Task 6 wires only `email.bounced`/`email.complained`/`email.delivered`, so `email.failed` currently no-ops. Result: an **async** Resend send failure (Resend accepted the API call, then failed to send) leaves the `email_log` row stuck at `delivery_status="sent"` with no correction (`email.bounced` = recipient rejection, does not cover it; the synchronous send-error path in `src/lib/email.ts:69-83` only catches failures at send time).
+- **Fix:** add `email.failed → recordDeliveryEvent({ path: "resend", type: "failed" })` on the Resend lane, mirroring the Nylas `message.send_failed → type: "failed"` path (plan §Webhook Handler Changes). The `failed` delivery status + `email_log.failed_at` column already exist.
+- **file:lines:** `app/api/webhooks/resend/inbound/route.ts` (delivery-event branch); parity reference `src/modules/email-connections/nylas-inbound.ts` (`message.send_failed`).
+- **Severity:** user-visible (missed send-failure notification). Small/cheap. Closes the native/Resend-lane **async send-failure parity gap** vs the Nylas lane. **Status:** Open.
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

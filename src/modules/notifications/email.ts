@@ -11,6 +11,7 @@ import "server-only"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
+import { log } from "@/lib/log"
 import { user } from "@/modules/auth/schema"
 import { sendEmail } from "@/lib/email"
 
@@ -29,7 +30,15 @@ export async function sendNotificationEmail(
   if (!row?.email) return false
 
   const appBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
-  const linkHtml = linkPath ? `<p><a href="${appBase}${linkPath}">View in Pathway</a></p>` : ""
+
+  let linkHtml = ""
+  if (linkPath) {
+    if (isSafeLinkPath(linkPath)) {
+      linkHtml = `<p><a href="${appBase}${escapeHtml(linkPath)}">View in Pathway</a></p>`
+    } else {
+      log.warn({ linkPath }, "sendNotificationEmail: unsafe linkPath dropped")
+    }
+  }
 
   const html = [
     `<p><strong>${escapeHtml(title)}</strong></p>`,
@@ -53,4 +62,16 @@ function escapeHtml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
+}
+
+/**
+ * Returns true only for safe internal relative paths:
+ *   - must start with exactly one "/" (not protocol-relative "//")
+ *   - must not contain a URL scheme (e.g. "javascript:", "data:")
+ */
+function isSafeLinkPath(path: string): boolean {
+  if (!path.startsWith("/") || path.startsWith("//")) return false
+  // Reject anything that looks like scheme:// or scheme: anywhere in the path
+  if (/[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(path)) return false
+  return true
 }

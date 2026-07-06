@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const mockSendEmail = vi.hoisted(() => vi.fn())
 const mockLimit = vi.hoisted(() => vi.fn())
+const mockLogWarn = vi.hoisted(() => vi.fn())
 
 // ─── vi.mock declarations ─────────────────────────────────────────────────────
 
@@ -25,6 +26,10 @@ vi.mock("@/lib/env", () => ({
 }))
 
 vi.mock("@/lib/email", () => ({ sendEmail: mockSendEmail }))
+
+vi.mock("@/lib/log", () => ({
+  log: { warn: mockLogWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
+}))
 
 // Stub the db.select chain: db.select({}).from(user).where(cond).limit(1)
 vi.mock("@/lib/db", () => {
@@ -44,6 +49,7 @@ describe("sendNotificationEmail", () => {
   beforeEach(() => {
     mockSendEmail.mockReset()
     mockLimit.mockReset()
+    mockLogWarn.mockReset()
     mockSendEmail.mockResolvedValue({ id: "email_mock_id" })
   })
 
@@ -149,5 +155,59 @@ describe("sendNotificationEmail", () => {
     // Must not double-slash the URL
     expect(html).not.toContain("//path")
     expect(html).toContain("https://app.example.com/path/to/resource")
+  })
+
+  // ── Security: linkPath validation + escaping (XSS regression) ─────────────
+
+  it("security: valid relative linkPath produces correct href", async () => {
+    mockLimit.mockResolvedValue([{ email: "user@example.com" }])
+
+    await sendNotificationEmail("sec_valid", "Alert", null, "/valid/path")
+
+    const call = mockSendEmail.mock.calls[0]![0] as Record<string, unknown>
+    const html = call.html as string
+    expect(html).toContain('href="https://app.example.com/valid/path"')
+    expect(html).toContain("View in Pathway")
+  })
+
+  it("security: attribute-breakout linkPath is dropped — raw breakout absent from HTML", async () => {
+    mockLimit.mockResolvedValue([{ email: "user@example.com" }])
+
+    // Classic href breakout: the quote+angle-bracket sequence closes the attribute and injects a script tag
+    await sendNotificationEmail("sec_xss", "Alert", null, '"/x"><script>alert(1)</script>')
+
+    const call = mockSendEmail.mock.calls[0]![0] as Record<string, unknown>
+    const html = call.html as string
+    // The raw injection string MUST NOT appear verbatim in the output
+    expect(html).not.toContain('"><script')
+    // Link must be entirely omitted (invalid path → drop)
+    expect(html).not.toContain("View in Pathway")
+    expect(html).not.toContain("<a ")
+    // log.warn must have been called to record the dropped link
+    expect(mockLogWarn).toHaveBeenCalledOnce()
+  })
+
+  it("security: javascript: scheme linkPath is dropped", async () => {
+    mockLimit.mockResolvedValue([{ email: "user@example.com" }])
+
+    await sendNotificationEmail("sec_js", "Alert", null, "javascript:alert(1)")
+
+    const call = mockSendEmail.mock.calls[0]![0] as Record<string, unknown>
+    const html = call.html as string
+    expect(html).not.toContain("<a ")
+    expect(html).not.toContain("View in Pathway")
+    expect(mockLogWarn).toHaveBeenCalledOnce()
+  })
+
+  it("security: protocol-relative linkPath starting with // is dropped", async () => {
+    mockLimit.mockResolvedValue([{ email: "user@example.com" }])
+
+    await sendNotificationEmail("sec_proto", "Alert", null, "//evil.com")
+
+    const call = mockSendEmail.mock.calls[0]![0] as Record<string, unknown>
+    const html = call.html as string
+    expect(html).not.toContain("<a ")
+    expect(html).not.toContain("View in Pathway")
+    expect(mockLogWarn).toHaveBeenCalledOnce()
   })
 })

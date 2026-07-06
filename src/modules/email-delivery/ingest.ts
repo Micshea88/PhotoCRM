@@ -1,11 +1,13 @@
 import "server-only"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import type * as schema from "@/db/schema"
 import { db } from "@/lib/db"
 import { emailDeliveryEvents } from "./schema"
 import { emailLog } from "@/modules/email-log/schema"
+import { emitNotificationInTx } from "@/modules/notifications/dispatch"
+import { memberRole } from "@/modules/rbac/schema"
 
 export interface DeliveryEventInput {
   organizationId: string
@@ -119,8 +121,14 @@ export async function recordDeliveryEventInTx(
   }
 
   // 2. Read current denormalized status from email_log.
+  //    Also fetch userId / contactId / subject for Task 11 notification emit.
   const [currentRow] = await tx
-    .select({ deliveryStatus: emailLog.deliveryStatus })
+    .select({
+      deliveryStatus: emailLog.deliveryStatus,
+      userId: emailLog.userId,
+      contactId: emailLog.contactId,
+      subject: emailLog.subject,
+    })
     .from(emailLog)
     .where(
       and(eq(emailLog.id, input.emailLogId), eq(emailLog.organizationId, input.organizationId)),
@@ -158,7 +166,64 @@ export async function recordDeliveryEventInTx(
       and(eq(emailLog.id, input.emailLogId), eq(emailLog.organizationId, input.organizationId)),
     )
 
-  // Task 11: emit critical notification (bounce/fail/complaint) via notifications/dispatch — not wired yet
+  // Task 11: emit critical notification (bounce/fail/complaint) via notifications/dispatch.
+  if (input.type === "bounced" || input.type === "complained" || input.type === "failed") {
+    // Resolve recipients: sender (email_log.userId) + org owners/admins, deduped.
+    const adminRows = await tx
+      .select({ userId: memberRole.userId })
+      .from(memberRole)
+      .where(
+        and(
+          eq(memberRole.organizationId, input.organizationId),
+          inArray(memberRole.role, ["owner", "admin"]),
+        ),
+      )
+
+    const recipientSet = new Set<string>()
+    if (currentRow.userId) recipientSet.add(currentRow.userId)
+    for (const row of adminRows) recipientSet.add(row.userId)
+
+    const recipientUserIds = [...recipientSet]
+
+    if (recipientUserIds.length > 0) {
+      // Map delivery event type → notification type.
+      const notificationType =
+        input.type === "bounced"
+          ? "email.bounced"
+          : input.type === "complained"
+            ? "email.complained"
+            : "email.send_failed"
+
+      const subject = currentRow.subject ?? null
+      const reason = bounceReasonText(input.detail)
+
+      let title: string
+      let body: string
+      if (input.type === "bounced") {
+        title = "Email couldn't be delivered"
+        body = `Your email${subject ? ` "${subject}"` : ""} bounced${reason ? `: ${reason}` : "."}`
+      } else if (input.type === "complained") {
+        title = "Spam complaint"
+        body = `A recipient marked your email${subject ? ` "${subject}"` : ""} as spam.`
+      } else {
+        title = "Email failed to send"
+        body = `Your email${subject ? ` "${subject}"` : ""} failed to send${reason ? `: ${reason}` : "."}`
+      }
+
+      await emitNotificationInTx(tx, {
+        organizationId: input.organizationId,
+        type: notificationType,
+        recipientUserIds,
+        actorUserId: null, // delivery failure is NOT the user's action; do NOT suppress sender
+        contactId: currentRow.contactId ?? null,
+        title,
+        body,
+        linkPath: currentRow.contactId ? `/contacts/${currentRow.contactId}` : null,
+        payload: { emailLogId: input.emailLogId },
+        sourceModule: "email",
+      })
+    }
+  }
 
   return { recorded: true }
 }

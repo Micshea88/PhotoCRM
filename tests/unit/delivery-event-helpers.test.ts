@@ -14,6 +14,15 @@ import { describe, it, expect, vi } from "vitest"
 // Must appear before the module-under-test is imported (hoisted by vitest).
 vi.mock("@/lib/db", () => ({ db: {} }))
 
+// Task 11 wired emitNotificationInTx + memberRole into ingest.ts.
+// Mock them here so the server-side env/log chain they pull in doesn't
+// blow up in jsdom.  The pure helpers and the wrapper tests that use
+// type="delivered" never invoke these paths, so a no-op mock is enough.
+vi.mock("@/modules/notifications/dispatch", () => ({
+  emitNotificationInTx: vi.fn().mockResolvedValue({ created: 0 }),
+}))
+vi.mock("@/modules/rbac/schema", () => ({ memberRole: {} }))
+
 import {
   deliveryStatusRank,
   nextDeliveryStatus,

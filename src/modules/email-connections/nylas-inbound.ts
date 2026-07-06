@@ -6,6 +6,8 @@ import { log } from "@/lib/log"
 import { processInboundEmail, type InboundEmail } from "@/modules/email-log/inbound"
 import { nylasFetchMessage } from "@/lib/email/nylas"
 import { findLiveConnectionByAddressAnyOrg } from "./queries"
+import { findEmailLogByNylasMessageIdAnyOrg } from "@/modules/email-log/queries"
+import { classifyBounceClass, recordDeliveryEvent } from "@/modules/email-delivery/ingest"
 
 /**
  * Nylas inbound ingest (Commit 4) — runs ALONGSIDE the Resend inbound webhook
@@ -30,28 +32,82 @@ export function verifyNylasSignature(rawBody: string, signature: string | null):
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+/**
+ * Nylas v3 webhook event shape.
+ *
+ * NOTE — payload field uncertainty:
+ * - `id`: top-level event ID (uncertain; used as dedup key when present).
+ * - `data.object.message_id`: the ID of the bounced/failed message (may be
+ *   `id` instead — see nylasMessageId extraction below).
+ * - `data.object.bounce_type` / `data.object.type`: bounce class hint
+ *   (uncertain; classifyBounceClass handles both shapes defensively).
+ * - `data.object.date`: event timestamp as Unix seconds (uncertain; may be
+ *   absent or use a different field name such as `timestamp`).
+ * These fields MUST be verified against real payloads when the webhook is
+ * connected (build-completion gate — see task-7-report.md).
+ */
 interface NylasWebhookEvent {
+  /** Top-level Nylas v3 event ID — used as dedup key (field name uncertain). */
+  id?: string
   type?: string
-  data?: { object?: { grant_id?: string; id?: string; message_id?: string } }
+  data?: {
+    object?: {
+      grant_id?: string
+      /** Primary object ID — for message.created this is the Nylas message id. */
+      id?: string
+      /**
+       * ID of the message this delivery event is about (bounce / send_failed).
+       * Nylas v3 may use `message_id` for delivery events and `id` for message
+       * events — we try both (uncertain; flag for connect-time verification).
+       */
+      message_id?: string
+      /**
+       * Bounce/failure type hint.
+       * Nylas v3 may use `bounce_type`, `type`, or nested `detail.type`.
+       * `classifyBounceClass` handles all known shapes defensively.
+       */
+      bounce_type?: string
+      type?: string
+      /** Event timestamp as Unix seconds (field name uncertain). */
+      date?: number
+    }
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Extract the nylasMessageId from a delivery event's data.object.
+ * Tries `message_id` first (expected for bounce/send_failed events), then
+ * falls back to `id` (used by message.created).
+ * Returns null if neither is present.
+ */
+type NylasEventObject = NonNullable<NonNullable<NylasWebhookEvent["data"]>["object"]>
+
+function extractNylasMessageId(obj: NylasEventObject | undefined): string | null {
+  return obj?.message_id ?? obj?.id ?? null
 }
 
 /**
- * Full ingest: verify signature, parse the event, fetch the message, resolve the
- * receiving connection's source, process. Swallows errors — the route acks 200
- * regardless so Nylas doesn't disable the webhook. Returns rows written.
+ * Derive `occurredAt` from the data object's `date` field (Unix seconds).
+ * Falls back to `new Date()` when absent or not a number.
  */
-export async function ingestNylasWebhook(
-  rawBody: string,
-  signature: string | null,
-): Promise<number> {
-  if (!verifyNylasSignature(rawBody, signature)) return 0
-  let event: NylasWebhookEvent
-  try {
-    event = JSON.parse(rawBody) as NylasWebhookEvent
-  } catch {
-    return 0
-  }
-  if (event.type !== "message.created") return 0
+function extractOccurredAt(obj: NylasEventObject | undefined): Date {
+  const raw = obj?.date
+  return typeof raw === "number" ? new Date(raw * 1000) : new Date()
+}
+
+// ─── Inbound message helper (message.created branch) ─────────────────────────
+
+/**
+ * Process a Nylas `message.created` event — resolve grant/message, re-fetch
+ * the full message, find the receiving connection, and hand off to
+ * `processInboundEmail`.  Extracted from the original `ingestNylasWebhook` so
+ * the new dispatch structure can call it without duplicating logic.
+ *
+ * Behavior is UNCHANGED from the pre-refactor implementation.
+ */
+export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promise<number> {
   const obj = event.data?.object
   const grantId = obj?.grant_id
   const messageId = obj?.id ?? obj?.message_id
@@ -83,5 +139,106 @@ export async function ingestNylasWebhook(
   } catch (err) {
     log.error({ err }, "nylas-inbound: processing failed")
     return 0
+  }
+}
+
+// ─── Delivery event branches (bounce / send_failed) ───────────────────────────
+
+/**
+ * Shared logic for `message.bounce_detected` and `message.send_failed`.
+ * Resolves the `email_log` row by `nylasMessageId` and calls
+ * `recordDeliveryEvent`.  Returns 1 on success, 0 on any drop condition.
+ */
+async function handleNylasDeliveryEvent(
+  event: NylasWebhookEvent,
+  type: "bounced" | "failed",
+): Promise<number> {
+  const obj = event.data?.object
+  const nylasMessageId = extractNylasMessageId(obj)
+  if (!nylasMessageId) {
+    log.info({ eventType: event.type }, "nylas-delivery: missing nylasMessageId — dropped")
+    return 0
+  }
+
+  const match = await findEmailLogByNylasMessageIdAnyOrg(db, nylasMessageId)
+  if (!match) {
+    log.info(
+      { nylasMessageId, eventType: event.type },
+      "nylas-delivery: no email_log match — dropped (expected for mail sent before this shipped)",
+    )
+    return 0
+  }
+
+  const occurredAt = extractOccurredAt(obj)
+
+  // Dedup key: prefer the top-level event id; fall back to <nylasMessageId>:<type>.
+  // UNCERTAIN — Nylas v3 top-level event ID field name has not been confirmed
+  // against live payloads. Verify at connect time.
+  const providerEventId = event.id ?? `${nylasMessageId}:${type}`
+
+  await recordDeliveryEvent({
+    organizationId: match.organizationId,
+    emailLogId: match.id,
+    path: "nylas",
+    type,
+    bounceClass: type === "bounced" ? classifyBounceClass(obj) : null,
+    detail: obj ?? null,
+    providerEventId,
+    occurredAt,
+  })
+
+  return 1
+}
+
+// ─── Main dispatcher ──────────────────────────────────────────────────────────
+
+/**
+ * Full ingest: verify signature, parse the event, dispatch by event.type.
+ * Swallows errors — the route acks 200 regardless so Nylas doesn't disable
+ * the webhook.  Returns rows written (0 or 1).
+ *
+ * Dispatch table:
+ *   message.created        → ingestNylasInboundMessage (behavior unchanged)
+ *   message.bounce_detected → recordDeliveryEvent(type:"bounced")
+ *   message.send_failed    → recordDeliveryEvent(type:"failed")
+ *   grant.expired          → SEAM (Task 8 will implement status write)
+ *   thread.replied         → SEAM (Task 12 will implement reply notification)
+ *   <anything else>        → return 0
+ */
+export async function ingestNylasWebhook(
+  rawBody: string,
+  signature: string | null,
+): Promise<number> {
+  if (!verifyNylasSignature(rawBody, signature)) return 0
+  let event: NylasWebhookEvent
+  try {
+    event = JSON.parse(rawBody) as NylasWebhookEvent
+  } catch {
+    return 0
+  }
+
+  switch (event.type) {
+    case "message.created":
+      return ingestNylasInboundMessage(event)
+
+    case "message.bounce_detected":
+      return handleNylasDeliveryEvent(event, "bounced")
+
+    case "message.send_failed":
+      return handleNylasDeliveryEvent(event, "failed")
+
+    case "grant.expired":
+      // SEAM — Task 8 will write status="expired" + expired_at / expired_reason.
+      log.info("nylas: grant.expired — status write handled in Task 8")
+      return 0
+
+    case "thread.replied":
+      // SEAM — Task 12 will fire the reply-received notification.
+      // Inbound replies are already logged via message.created.
+      log.info("nylas: thread.replied — reply notification handled in Task 12")
+      return 0
+
+    default:
+      return 0
   }
 }

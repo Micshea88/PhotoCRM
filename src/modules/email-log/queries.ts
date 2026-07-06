@@ -38,3 +38,30 @@ export async function findEmailLogByResendEmailIdAnyOrg(
     .limit(1)
   return row ?? null
 }
+
+/**
+ * Cross-org resolver: find the most-recent `email_log` row whose
+ * `external_metadata->>'nylasMessageId'` matches the given Nylas message id.
+ *
+ * Mirrors `findEmailLogByResendEmailIdAnyOrg` exactly — plain `db.select()`,
+ * cross-org, base pool role bypasses RLS in production. In dev the GUC must
+ * be set externally for the query to return rows (see the Resend counterpart
+ * for the full RLS-bypass note).
+ */
+export async function findEmailLogByNylasMessageIdAnyOrg(
+  db: DbHandle,
+  nylasMessageId: string,
+): Promise<{ id: string; organizationId: string } | null> {
+  const [row] = await db
+    .select({ id: emailLog.id, organizationId: emailLog.organizationId })
+    .from(emailLog)
+    .where(
+      and(
+        sql`${emailLog.externalMetadata}->>'nylasMessageId' = ${nylasMessageId}`,
+        isNull(emailLog.deletedAt),
+      ),
+    )
+    .orderBy(desc(emailLog.sentAt))
+    .limit(1)
+  return row ?? null
+}

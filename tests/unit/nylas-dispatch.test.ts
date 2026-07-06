@@ -27,6 +27,7 @@ const mockFindEmailLogByNylasMessageIdAnyOrg = vi.hoisted(() => vi.fn())
 const mockRecordDeliveryEvent = vi.hoisted(() => vi.fn())
 const mockNylasFetchMessage = vi.hoisted(() => vi.fn())
 const mockFindLiveConnectionByAddressAnyOrg = vi.hoisted(() => vi.fn())
+const mockFindConnectionByGrantIdAnyOrg = vi.hoisted(() => vi.fn())
 const mockProcessInboundEmail = vi.hoisted(() => vi.fn())
 
 // Must be a literal here — vi.hoisted runs before any const declarations.
@@ -74,6 +75,7 @@ vi.mock("@/lib/email/nylas", () => ({
 }))
 vi.mock("@/modules/email-connections/queries", () => ({
   findLiveConnectionByAddressAnyOrg: mockFindLiveConnectionByAddressAnyOrg,
+  findConnectionByGrantIdAnyOrg: mockFindConnectionByGrantIdAnyOrg,
 }))
 vi.mock("@/modules/email-log/inbound", () => ({
   processInboundEmail: mockProcessInboundEmail,
@@ -103,6 +105,7 @@ describe("ingestNylasWebhook — dispatch by event.type (Task 7)", () => {
     mockRecordDeliveryEvent.mockReset()
     mockNylasFetchMessage.mockReset()
     mockFindLiveConnectionByAddressAnyOrg.mockReset()
+    mockFindConnectionByGrantIdAnyOrg.mockReset()
     mockProcessInboundEmail.mockReset()
     mockRecordDeliveryEvent.mockResolvedValue({ recorded: true })
     // message.created path: nylasFetchMessage returns null by default → returns 0
@@ -337,9 +340,11 @@ describe("ingestNylasWebhook — dispatch by event.type (Task 7)", () => {
     expect(result).toBe(0)
   })
 
-  // ── grant.expired SEAM ────────────────────────────────────────────────────
+  // ── grant.expired ─────────────────────────────────────────────────────────
 
-  it("grant.expired — is a no-op seam: recordDeliveryEvent NOT called, returns 0", async () => {
+  it("grant.expired — no connection match: findConnectionByGrantIdAnyOrg called, returns 0, recordDeliveryEvent NOT called", async () => {
+    mockFindConnectionByGrantIdAnyOrg.mockResolvedValue(null)
+
     const { body, sig } = makeSignedBody({
       type: "grant.expired",
       data: { object: { grant_id: "g_expired_1" } },
@@ -347,6 +352,10 @@ describe("ingestNylasWebhook — dispatch by event.type (Task 7)", () => {
 
     const result = await ingestNylasWebhook(body, sig)
 
+    expect(mockFindConnectionByGrantIdAnyOrg).toHaveBeenCalledWith(
+      expect.anything(), // db handle
+      "g_expired_1",
+    )
     expect(mockRecordDeliveryEvent).not.toHaveBeenCalled()
     expect(mockNylasFetchMessage).not.toHaveBeenCalled()
     expect(result).toBe(0)

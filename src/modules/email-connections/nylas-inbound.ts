@@ -1,13 +1,17 @@
 import "server-only"
 import { createHmac, timingSafeEqual } from "node:crypto"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
 import { log } from "@/lib/log"
 import { processInboundEmail, type InboundEmail } from "@/modules/email-log/inbound"
 import { nylasFetchMessage } from "@/lib/email/nylas"
-import { findLiveConnectionByAddressAnyOrg } from "./queries"
+import { findLiveConnectionByAddressAnyOrg, findConnectionByGrantIdAnyOrg } from "./queries"
+import { emailConnections } from "./schema"
 import { findEmailLogByNylasMessageIdAnyOrg } from "@/modules/email-log/queries"
 import { classifyBounceClass, recordDeliveryEvent } from "@/modules/email-delivery/ingest"
+import { emitNotificationInTx } from "@/modules/notifications/dispatch"
+import { memberRole } from "@/modules/rbac/schema"
 
 /**
  * Nylas inbound ingest (Commit 4) — runs ALONGSIDE the Resend inbound webhook
@@ -190,6 +194,82 @@ async function handleNylasDeliveryEvent(
   return 1
 }
 
+// ─── grant.expired handler ────────────────────────────────────────────────────
+
+/**
+ * Handle a Nylas `grant.expired` event.
+ *
+ * 1. Resolve the connection by grant_id (hash lookup → decrypt-scan fallback).
+ * 2. Open a transaction; set `app.current_org` GUC (mirrors ingest.ts).
+ * 3. Mark the connection status="expired", stamp expired_at + expired_reason.
+ * 4. Emit `email.disconnected` to the mailbox owner + org owners/admins (dedup).
+ *
+ * Always returns 0 on drop conditions (no grantId in payload / no connection
+ * match) so the route acks 200 without writing anything.
+ */
+export async function handleGrantExpired(event: NylasWebhookEvent): Promise<number> {
+  const grantId = event.data?.object?.grant_id
+  if (!grantId) {
+    log.info("nylas: grant.expired — missing grant_id in payload — dropped")
+    return 0
+  }
+
+  const conn = await findConnectionByGrantIdAnyOrg(db, grantId)
+  if (!conn) {
+    log.info("nylas: grant.expired — no connection match — dropped")
+    return 0
+  }
+
+  await db.transaction(async (tx) => {
+    // Set org GUC first so every subsequent write satisfies FORCE RLS.
+    await tx.execute(sql`SELECT set_config('app.current_org', ${conn.organizationId}, true)`)
+
+    // 1. Mark expired.
+    await tx
+      .update(emailConnections)
+      .set({
+        status: "expired",
+        expiredAt: new Date(),
+        expiredReason:
+          "Your email connection was disconnected by the provider and needs to be reconnected.",
+        updatedAt: new Date(),
+      })
+      .where(eq(emailConnections.id, conn.id))
+
+    // 2. Resolve recipients: connection owner + org owners/admins (dedup).
+    const adminRows = await tx
+      .select({ userId: memberRole.userId })
+      .from(memberRole)
+      .where(
+        and(
+          eq(memberRole.organizationId, conn.organizationId),
+          inArray(memberRole.role, ["owner", "admin"]),
+        ),
+      )
+
+    const recipientSet = new Set<string>()
+    recipientSet.add(conn.userId)
+    for (const row of adminRows) recipientSet.add(row.userId)
+    const recipientUserIds = [...recipientSet]
+
+    // 3. Emit notification.
+    await emitNotificationInTx(tx, {
+      organizationId: conn.organizationId,
+      type: "email.disconnected",
+      recipientUserIds,
+      actorUserId: null,
+      contactId: null,
+      title: "Email inbox disconnected",
+      body: `Your ${conn.email} connection stopped working. New emails are sending from your studio address until you reconnect.`,
+      linkPath: "/settings/integrations",
+      payload: { connectionId: conn.id },
+      sourceModule: "email",
+    })
+  })
+
+  return 1
+}
+
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
 /**
@@ -228,9 +308,7 @@ export async function ingestNylasWebhook(
       return handleNylasDeliveryEvent(event, "failed")
 
     case "grant.expired":
-      // SEAM — Task 8 will write status="expired" + expired_at / expired_reason.
-      log.info("nylas: grant.expired — status write handled in Task 8")
-      return 0
+      return handleGrantExpired(event)
 
     case "thread.replied":
       // SEAM — Task 12 will fire the reply-received notification.

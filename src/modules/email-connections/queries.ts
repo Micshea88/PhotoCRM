@@ -1,4 +1,5 @@
 import "server-only"
+import { createHash } from "node:crypto"
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
@@ -15,6 +16,76 @@ type DbHandle = NodePgDatabase<typeof schema>
  * the row; decrypt only at point of use via `decryptGrantId` (immediately
  * before a Nylas API call), never earlier and never into logs/audit.
  */
+
+/**
+ * SHA-256 hex digest of the plaintext grant_id.
+ *
+ * The canonical hash used in BOTH `upsertNylasConnection` (write path) and
+ * `findConnectionByGrantIdAnyOrg` (lookup path) so there is ONE implementation.
+ * The hash is a stable, non-reversible lookup key — not a secret — stored in
+ * `email_connections.grant_id_hash`.
+ */
+export function grantIdHash(grantId: string): string {
+  return createHash("sha256").update(grantId).digest("hex")
+}
+
+/**
+ * Find the live email_connections row for a given plaintext grant_id, across
+ * all orgs (cross-org: webhook has no session context — mirror the
+ * `…AnyOrg` pattern in this file).
+ *
+ * Strategy:
+ *   1. Hash lookup: WHERE grant_id_hash = hash AND deleted_at IS NULL — O(1)
+ *      via the index. Fast path for all connections set up after Task 8.
+ *   2. Decrypt-scan fallback: if no hash match, scan live rows whose
+ *      grant_id_hash IS NULL (legacy pre-Task-8 connections), decrypt each,
+ *      and find the one whose plaintext === grantId.  Opportunistically
+ *      backfills the matched row's grant_id_hash so the fallback pool shrinks
+ *      to zero as connections reconnect (no manual backfill step needed).
+ *
+ * Returns null when no match is found.
+ */
+export async function findConnectionByGrantIdAnyOrg(
+  db: DbHandle,
+  grantId: string,
+): Promise<EmailConnection | null> {
+  const hash = grantIdHash(grantId)
+
+  // ── Fast path: hash index lookup ─────────────────────────────────────────
+  const [byHash] = await db
+    .select()
+    .from(emailConnections)
+    .where(and(eq(emailConnections.grantIdHash, hash), isNull(emailConnections.deletedAt)))
+    .orderBy(desc(emailConnections.updatedAt))
+    .limit(1)
+  if (byHash) return byHash
+
+  // ── Fallback: decrypt-scan over legacy un-hashed rows ────────────────────
+  const unhashed = await db
+    .select()
+    .from(emailConnections)
+    .where(and(isNull(emailConnections.grantIdHash), isNull(emailConnections.deletedAt)))
+
+  for (const row of unhashed) {
+    let plain: string
+    try {
+      plain = decrypt(row.grantId, env.NYLAS_ENCRYPTION_KEY)
+    } catch {
+      // Corrupted ciphertext — skip without throwing; shouldn't halt the scan.
+      continue
+    }
+    if (plain === grantId) {
+      // Opportunistic backfill: stamp the hash so future lookups use the index.
+      await db
+        .update(emailConnections)
+        .set({ grantIdHash: hash, updatedAt: new Date() })
+        .where(eq(emailConnections.id, row.id))
+      return { ...row, grantIdHash: hash }
+    }
+  }
+
+  return null
+}
 
 /** The single live connection for a user, or null. */
 export async function getLiveConnectionForUser(

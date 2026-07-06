@@ -414,6 +414,13 @@
       "when": 1783258245445,
       "tag": "0058_chilly_hiroim",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1783366246347,
+      "tag": "0059_normal_shiva",
+      "breakpoints": true
     }
   ]
 }

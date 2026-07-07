@@ -53,8 +53,16 @@ export async function withPageOrgContext<T>(
   // member_role under a tentative ALS scope, fall back to
   // extendedFromBetterAuth if the row is missing (Layer-2 fallback per
   // rbac/README.md).
+  //
+  // SECURITY: fail CLOSED when the member row is missing. The user's session
+  // may still reference an org they were removed from (revoked membership).
+  // Defaulting the role to "member" here would grant read access to that org's
+  // data — matching the write-path bug that orgAction caught (it throws
+  // FORBIDDEN when m is null). Redirect to a safe landing page instead.
+  // See: src/lib/safe-action.ts orgAction "You are not a member of this organization."
   const memberRow = await getCurrentMember(activeOrgId, session.user.id)
-  const baRole = (memberRow?.role ?? "member") as BetterAuthRole
+  if (!memberRow) redirect("/onboarding/create-organization")
+  const baRole = memberRow.role as BetterAuthRole
   const tentativeExtended = extendedFromBetterAuth(baRole)
   const extendedRole =
     (await runWithOrgContext(

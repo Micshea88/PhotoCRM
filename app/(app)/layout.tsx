@@ -74,8 +74,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // member_role for the assignment-scoped RLS overlay. Fall back to the
   // BA→extended mapping if member_role hasn't been seeded for this user
   // (documented Layer 2 fallback in rbac/README.md).
+  //
+  // SECURITY: fail CLOSED when the member row is missing (revoked membership).
+  // The session may still reference an org the user was removed from; defaulting
+  // to "member" would grant read access to that org's data without authorization.
+  // Redirect to onboarding instead — mirrors orgAction's FORBIDDEN throw.
   const memberRow = await getCurrentMember(activeOrgId, session.user.id)
-  const baRole = (memberRow?.role ?? "member") as BetterAuthRole
+  if (!memberRow) redirect("/onboarding/create-organization")
+  const baRole = memberRow.role as BetterAuthRole
   const tentativeExtended = extendedFromBetterAuth(baRole)
 
   // First short-lived ALS scope: set context with the tentative extended

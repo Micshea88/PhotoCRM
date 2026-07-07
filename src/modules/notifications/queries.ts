@@ -4,9 +4,16 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
 import { notifications, notificationPreferences } from "./schema"
 import type { Notification, NotificationPreference } from "./schema"
+import { contacts } from "@/modules/contacts/schema"
 import { NEEDS_ACTION_TYPES } from "./types"
 
 type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * A notification row augmented with the linked contact's display name
+ * (null when contactId IS NULL or the contact has been hard-deleted).
+ */
+export type NotificationWithContact = Notification & { contactName: string | null }
 
 export interface NotificationFilter {
   preset?: "all" | "unread" | "needs_attention"
@@ -82,12 +89,41 @@ export async function listNotifications(
   orgId: string,
   userId: string,
   filter: NotificationFilter = {},
-): Promise<Notification[]> {
+): Promise<NotificationWithContact[]> {
   const { preset = "all", types, contactId, from, to, limit = 50, offset = 0 } = filter
 
-  return db
-    .select()
+  const rows = await db
+    .select({
+      // All notification columns
+      id: notifications.id,
+      organizationId: notifications.organizationId,
+      recipientUserId: notifications.recipientUserId,
+      type: notifications.type,
+      category: notifications.category,
+      tier: notifications.tier,
+      title: notifications.title,
+      body: notifications.body,
+      linkPath: notifications.linkPath,
+      contactId: notifications.contactId,
+      payload: notifications.payload,
+      sourceModule: notifications.sourceModule,
+      readAt: notifications.readAt,
+      archivedAt: notifications.archivedAt,
+      snoozedUntil: notifications.snoozedUntil,
+      scheduledFor: notifications.scheduledFor,
+      emailSentAt: notifications.emailSentAt,
+      createdAt: notifications.createdAt,
+      updatedAt: notifications.updatedAt,
+      // Contact anchor name (null when no linked contact)
+      contactName: sql<string | null>`
+        CASE WHEN ${contacts.id} IS NOT NULL
+          THEN trim(${contacts.firstName} || ' ' || ${contacts.lastName})
+          ELSE NULL
+        END
+      `.as("contact_name"),
+    })
     .from(notifications)
+    .leftJoin(contacts, eq(notifications.contactId, contacts.id))
     .where(
       and(
         eq(notifications.organizationId, orgId),
@@ -109,6 +145,8 @@ export async function listNotifications(
     .orderBy(desc(notifications.createdAt))
     .limit(limit)
     .offset(offset)
+
+  return rows
 }
 
 /**
@@ -120,11 +158,38 @@ export async function listArchivedNotifications(
   orgId: string,
   userId: string,
   opts: { limit?: number; offset?: number } = {},
-): Promise<Notification[]> {
+): Promise<NotificationWithContact[]> {
   const { limit = 50, offset = 0 } = opts
   return db
-    .select()
+    .select({
+      id: notifications.id,
+      organizationId: notifications.organizationId,
+      recipientUserId: notifications.recipientUserId,
+      type: notifications.type,
+      category: notifications.category,
+      tier: notifications.tier,
+      title: notifications.title,
+      body: notifications.body,
+      linkPath: notifications.linkPath,
+      contactId: notifications.contactId,
+      payload: notifications.payload,
+      sourceModule: notifications.sourceModule,
+      readAt: notifications.readAt,
+      archivedAt: notifications.archivedAt,
+      snoozedUntil: notifications.snoozedUntil,
+      scheduledFor: notifications.scheduledFor,
+      emailSentAt: notifications.emailSentAt,
+      createdAt: notifications.createdAt,
+      updatedAt: notifications.updatedAt,
+      contactName: sql<string | null>`
+        CASE WHEN ${contacts.id} IS NOT NULL
+          THEN trim(${contacts.firstName} || ' ' || ${contacts.lastName})
+          ELSE NULL
+        END
+      `.as("contact_name"),
+    })
     .from(notifications)
+    .leftJoin(contacts, eq(notifications.contactId, contacts.id))
     .where(
       and(
         eq(notifications.organizationId, orgId),

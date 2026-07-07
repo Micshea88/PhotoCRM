@@ -129,6 +129,31 @@ Not duplicated here (kept in `TODO.md` to avoid two sources of truth). Open item
 - **Depends on:** the prod base-pool role actually having `BYPASSRLS` (see `pending-integration-setup.md` pre-deploy check) — if it does NOT, this write (and all AnyOrg SELECT resolvers) return 0 rows in prod.
 - **Severity:** benign / single-tenant-safe. **Status:** ✅ RESOLVED (commit 3b2ffe0, 2026-07-07). Chosen fix: resolver is now PURE-READ (no cross-org write); the `grant_id_hash` backfill moved into `handleGrantExpired`'s existing org-GUC'd `UPDATE` (idempotent `grantIdHash: conn.grantIdHash`). No write through the AnyOrg seam without a GUC anywhere; works regardless of the prod pool's BYPASSRLS. (Preferred over the literal nested-tx GUC-wrap, whose transaction-local GUC misbehaves under withTestDb's shared transaction.)
 
+### A.17 — Multi-tenant isolation remediation (four-audit findings, 2026-07-07) — IN PROGRESS
+
+Full detail + fixes + effort + tests: **`docs/multi-tenant-remediation-plan.md`** (authoritative tracker). Owner standard: multi-tenant-correct, NO deferrals — every item below is being FIXED on branch `fix/multi-tenant-isolation`, not accepted. Reframes the prior "single-tenant-safe" deferrals (below) as must-fix.
+
+**TIER 1 (blocks merge):**
+
+- **T1.1 (HIGH):** 7 org-scoped tables have NO RLS at all — `files`, `items`, `audit_log`, `org_preferences`, `file_share_links`, `file_share_link_events`, `file_scan_diagnostics`. No live exploit (app filters defensively) but zero DB backstop — same class as the confirmed Shanzy→K&K prod leak (`0041`). Add RLS+FORCE+org policy; document in-code any genuinely-public path that must run as owner.
+- **T1.2 (HIGH):** `src/modules/items/` template teaches the no-RLS pattern to every scaffolded module → fix template + `/new-module`.
+- **T1.3 (HIGH):** `user_preferences` has policies but no `FORCE` (owner bypasses) — the only such table; was undocumented. Add FORCE.
+- **T1.4 (MEDIUM, live read exposure):** `page-org-context.ts` defaults `role="member"` on null membership instead of throwing → a REVOKED member keeps READ access until session refresh (≤7-day session / 5-min cache). Fail closed, mirroring `orgAction`.
+- **T1.5 (LOW):** `0041` header falsely asserts "every org-scoped table has FORCE RLS" — add a CI guard that enforces it once true.
+
+**TIER 2 (multi-tenant-activation holes — fix, not defer):**
+
+- **T2.1 (MEDIUM):** `workflow-execute`→`handleUpdateField` updates contacts/projects/etc by ID, no org filter + no `SET LOCAL ROLE` → cross-org write possible. Org-scope + role switch.
+- **T2.2 (MED/HIGH):** `findContactAnyOrg` routes inbound email by cross-org "latest updatedAt wins" → inbound/reply hijack once a 2nd org exists. Resolve org from the receiving mailbox, look up contact within it.
+- **T2.3 (MEDIUM):** `listIncompleteSignups` shows all-orgs' incomplete signups to any admin. Org-scope.
+- **T2.4 (LOW latent):** fail-OPEN role predicates — payments `COALESCE(role,'') IN (…,'')` + assignment overlay `NOT IN ('user')`. Make fail-closed.
+- **T2.5 (LOW defense-in-depth):** `emitNotification`/`recordDeliveryEvent`/`handleGrantExpired`/cron write paths set the org GUC but skip `SET LOCAL ROLE` → RLS inert (writes correct only via explicit org tagging). Add the role switch.
+- **T2.6 (LOW boundary):** email-pixel route (`app/api/email/track/[pixelId]`) imports `@/lib/db`+drizzle directly (undocumented `app/` escape hatch) + cross-org UPDATE by pixel id. Move into the module data layer.
+
+**Verified solid (NOT touched):** GUC lifecycle (no pool bleed); fail-closed `current_setting(...,true)`; membership verified on writes + on active-org-set; crown-jewel tables ENABLE+FORCE; notifications two-policy INSERT; blob private-by-default. **Already fixed:** Shanzy prod leak (`0041`), A.16 (above), contacts assignment overlay (`0015`/`0021`).
+
+**Reclassifies these former SECTION B "deferred to multi-tenant" items as MUST-FIX** (see plan): multi-tenant email sender (B.10), account linking (B.11) — revisit against the no-deferrals standard.
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

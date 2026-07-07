@@ -5,6 +5,7 @@ import type * as schema from "@/db/schema"
 import { blob } from "@/lib/blob"
 import { scanFile, type ScanVerdict } from "@/lib/cloudmersive"
 import { log } from "@/lib/log"
+import { withOrgContext } from "@/lib/org-context"
 import { logScanStep } from "./scan-diagnostics"
 import { files } from "./schema"
 
@@ -55,22 +56,32 @@ export async function scanAndResolveFile(
     "[SCAN-DIAG] files.scan resolve complete",
   )
 
-  if (verdict === "clean") {
-    await db
-      .update(files)
-      .set({ scanStatus: "clean", scannedAt: new Date() })
-      .where(eq(files.id, fileId))
-  } else if (verdict === "infected") {
-    // Quarantine: remove the bytes from Blob, mark the row infected.
+  if (verdict === "infected") {
+    // Quarantine: remove the bytes from Blob before marking the row.
     try {
       await blob.del(url)
     } catch (err) {
       log.error({ err, fileId }, "files.scan: failed to delete infected blob")
     }
-    await db
-      .update(files)
-      .set({ scanStatus: "infected", scannedAt: new Date() })
-      .where(eq(files.id, fileId))
+  }
+
+  if (verdict === "clean" || verdict === "infected") {
+    // `files` now has FORCE RLS (0061). This sessionless upload callback must
+    // write org-scoped, not on the BYPASSRLS owner — resolve the org from the
+    // upload's verified token (`orgId`) and run under app_authenticated + GUC.
+    // The update is also PK-scoped (files.id), so it can never touch another org.
+    const applyStatus = (h: DbHandle) =>
+      h
+        .update(files)
+        .set({ scanStatus: verdict, scannedAt: new Date() })
+        .where(eq(files.id, fileId))
+    if (orgId) {
+      await withOrgContext((tx) => applyStatus(tx), { orgId, role: "owner", userId: "" })
+    } else {
+      // No org on the payload should not happen (files always carry an org);
+      // fall back to the passed handle so a scan result is never silently lost.
+      await applyStatus(db)
+    }
   }
   if (verdict !== "error") {
     await logScanStep("scan_status_updated", { fileId, filename, status: verdict, orgId })

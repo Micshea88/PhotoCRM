@@ -15,6 +15,7 @@ import { DialerProvider, type DialerBootstrapClient } from "@/modules/telephony/
 import { DockedDialer } from "@/modules/telephony/ui/docked-dialer"
 import { getUserPreference } from "@/modules/user-preferences/queries"
 import { unreadCount as getUnreadCount } from "@/modules/notifications/queries"
+import { listExpiredConnectionsForUser } from "@/modules/email-connections/queries"
 
 /**
  * Server-side bootstrap fetch for the inline dialer. Returns null on
@@ -96,29 +97,40 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // propagate into async child server components — those render
   // outside the layout's frame. Resolve here, fully await, and pass
   // plain values to the client wrapper.
-  const { sidebarItems, navCollapsed, settingsExpanded, dialerBootstrap, initialUnreadCount } =
-    await runWithOrgContext(
-      { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
-      async () => {
-        const [items, navPref, settingsPref, bootstrap, unread] = await Promise.all([
-          resolveSidebarItems(session.user.id, extendedRole),
-          getUserPreference("nav_collapsed", null),
-          getUserPreference("nav_settings_expanded", null),
-          tryDialerBootstrap(activeOrgId, session.user.id),
-          withOrgContext((db) => getUnreadCount(db, activeOrgId, session.user.id)),
-        ])
-        return {
-          sidebarItems: items,
-          // Cast jsonb unknown → boolean; defaults to false when unset
-          // or any non-boolean (defensive against forward-incompat
-          // value shapes).
-          navCollapsed: navPref === true,
-          settingsExpanded: settingsPref === true,
-          dialerBootstrap: bootstrap,
-          initialUnreadCount: unread,
-        }
-      },
-    )
+  const {
+    sidebarItems,
+    navCollapsed,
+    settingsExpanded,
+    dialerBootstrap,
+    initialUnreadCount,
+    initialExpiredConnections,
+  } = await runWithOrgContext(
+    { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
+    async () => {
+      const [items, navPref, settingsPref, bootstrap, unread, expiredConns] = await Promise.all([
+        resolveSidebarItems(session.user.id, extendedRole),
+        getUserPreference("nav_collapsed", null),
+        getUserPreference("nav_settings_expanded", null),
+        tryDialerBootstrap(activeOrgId, session.user.id),
+        withOrgContext((db) => getUnreadCount(db, activeOrgId, session.user.id)),
+        withOrgContext((db) => listExpiredConnectionsForUser(db, activeOrgId, session.user.id)),
+      ])
+      return {
+        sidebarItems: items,
+        // Cast jsonb unknown → boolean; defaults to false when unset
+        // or any non-boolean (defensive against forward-incompat
+        // value shapes).
+        navCollapsed: navPref === true,
+        settingsExpanded: settingsPref === true,
+        dialerBootstrap: bootstrap,
+        initialUnreadCount: unread,
+        // Slim projection: only id + email needed by the banner.
+        // Date columns are excluded to keep the client-boundary payload
+        // minimal and JSON-safe without conversion.
+        initialExpiredConnections: expiredConns.map((c) => ({ id: c.id, email: c.email })),
+      }
+    },
+  )
 
   return (
     <div className="flex h-screen flex-col">
@@ -134,6 +146,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         sidebarItems={sidebarItems}
         initialCollapsed={navCollapsed}
         initialSettingsExpanded={settingsExpanded}
+        initialExpiredConnections={initialExpiredConnections}
       >
         <DialerProvider bootstrap={dialerBootstrap}>
           {children}

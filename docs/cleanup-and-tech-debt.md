@@ -7,6 +7,7 @@
 > - `TODO.md` — the 2026-05-06 foundation Audit Punch List (Critical all done; open: H5, H6, H7, H8, H10, H13, H14, H34, H36, H38, M1–M5, M7, M8, M10, M12, M15, M17, M18, M19, L2–L7). Remains tracked in `TODO.md`; the open IDs are listed in §A.13.
 > - `post-3a-polish-backlog` memory: `~/.claude/projects/-Users-kellyshea-git-PhotoCRM/memory/project_contact_detail_polish_backlog.md` (19 items, full verbatim text).
 > - **`docs/pending-integration-setup.md`** — required integration WIRING (Nylas inbound webhook, Resend bounce webhook, Twilio SMS) as a **build-completion gate**. The dormant-but-built integrations live there, not here.
+> - **`docs/features-backlog.md`** — forward-looking **product roadmap features** (net-new capabilities, e.g. template usage indicators, import UX + durable batches + bulk actions). Feature roadmap lives there, not here (this doc is debt/deferred-scope of current work).
 
 ---
 

@@ -139,7 +139,7 @@ export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promi
     sentAt: msg.date,
   }
   try {
-    return await processInboundEmail(inbound, conn.sourceValue)
+    return await processInboundEmail(inbound, conn.sourceValue, { recipientUserIds: [conn.userId] })
   } catch (err) {
     log.error({ err }, "nylas-inbound: processing failed")
     return 0
@@ -281,12 +281,13 @@ export async function handleGrantExpired(
  * the webhook.  Returns rows written (0 or 1).
  *
  * Dispatch table:
- *   message.created        → ingestNylasInboundMessage (behavior unchanged)
+ *   message.created         → ingestNylasInboundMessage (behavior unchanged)
  *   message.bounce_detected → recordDeliveryEvent(type:"bounced")
- *   message.send_failed    → recordDeliveryEvent(type:"failed")
- *   grant.expired          → SEAM (Task 8 will implement status write)
- *   thread.replied         → SEAM (Task 12 will implement reply notification)
- *   <anything else>        → return 0
+ *   message.send_failed     → recordDeliveryEvent(type:"failed")
+ *   grant.expired           → handleGrantExpired (Task 8)
+ *   thread.replied          → NO-OP (reply notification fires via
+ *                             message.created → processInboundEmail; Task 12)
+ *   <anything else>         → return 0
  */
 export async function ingestNylasWebhook(
   rawBody: string,
@@ -314,9 +315,12 @@ export async function ingestNylasWebhook(
       return handleGrantExpired(event)
 
     case "thread.replied":
-      // SEAM — Task 12 will fire the reply-received notification.
-      // Inbound replies are already logged via message.created.
-      log.info("nylas: thread.replied — reply notification handled in Task 12")
+      // Intentionally a no-op. The canonical reply-received trigger is
+      // message.created → processInboundEmail, which is dedup-safe (guards on
+      // the existing message-id row).  Wiring thread.replied here would
+      // double-notify: Nylas sends BOTH message.created AND thread.replied for
+      // the same inbound reply.  Task 12 emits email.reply_received inside
+      // processInboundEmail — no action needed here.
       return 0
 
     default:

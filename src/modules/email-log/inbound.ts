@@ -8,6 +8,8 @@ import { log } from "@/lib/log"
 import { contacts } from "@/modules/contacts/schema"
 import { emailLog } from "./schema"
 import { deriveThreadId, parseMessageIdList } from "./threading"
+import { emitNotification } from "@/modules/notifications/dispatch"
+import { memberRole } from "@/modules/rbac/schema"
 
 /**
  * Resend inbound-email ingest (Commit 3, Phase C). The webhook is metadata-only
@@ -132,6 +134,8 @@ function bareEmail(value: string): string {
 interface ContactRow {
   id: string
   organizationId: string
+  firstName: string
+  lastName: string
 }
 
 /** Cross-org sender lookup (owner connection — the webhook has no org context;
@@ -140,7 +144,12 @@ async function findContactAnyOrg(email: string): Promise<ContactRow | null> {
   const lowered = bareEmail(email)
   if (!lowered) return null
   const [row] = await db
-    .select({ id: contacts.id, organizationId: contacts.organizationId })
+    .select({
+      id: contacts.id,
+      organizationId: contacts.organizationId,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+    })
     .from(contacts)
     .where(
       and(
@@ -161,7 +170,12 @@ async function findContactInOrg(orgId: string, email: string): Promise<ContactRo
   const lowered = bareEmail(email)
   if (!lowered) return null
   const [row] = await db
-    .select({ id: contacts.id, organizationId: contacts.organizationId })
+    .select({
+      id: contacts.id,
+      organizationId: contacts.organizationId,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+    })
     .from(contacts)
     .where(
       and(
@@ -187,8 +201,16 @@ async function findContactInOrg(orgId: string, email: string): Promise<ContactRo
  * domain inbound webhook (default), or "gmail" / "outlook" / "imap" for a
  * photographer's Nylas-connected mailbox. Both dedup and the stored row key on
  * it, so Resend-logged and Nylas-logged mail coexist cleanly.
+ *
+ * `opts.recipientUserIds` — the mailbox owner(s) to notify on reply.  The
+ * Nylas lane passes `[conn.userId]`; the Resend lane omits opts, causing a
+ * fallback query to the org's owners + admins via memberRole.
  */
-export async function processInboundEmail(email: InboundEmail, source = "resend"): Promise<number> {
+export async function processInboundEmail(
+  email: InboundEmail,
+  source = "resend",
+  opts?: { recipientUserIds?: string[] },
+): Promise<number> {
   const sender = await findContactAnyOrg(email.from)
   if (!sender) {
     log.info("resend-inbound: unknown sender — dropped")
@@ -234,8 +256,7 @@ export async function processInboundEmail(email: InboundEmail, source = "resend"
   }
   const logged = new Set<string>()
 
-  let written = 0
-  await db.transaction(async (tx) => {
+  const { written, emailLogId } = await db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
     await tx.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
@@ -258,7 +279,9 @@ export async function processInboundEmail(email: InboundEmail, source = "resend"
       })
       .onConflictDoNothing()
       .returning({ id: emailLog.id })
-    written += inserted.length
+
+    let txWritten = inserted.length
+    const txEmailLogId: string | null = inserted[0]?.id ?? null
 
     // Other participants: external_id null (the unique index allows it).
     for (const c of recipientContacts) {
@@ -276,10 +299,100 @@ export async function processInboundEmail(email: InboundEmail, source = "resend"
         externalId: null,
         threadId,
       })
-      written += 1
+      txWritten += 1
     }
+
+    return { written: txWritten, emailLogId: txEmailLogId }
   })
+
+  // Emit email.reply_received ONLY when:
+  //   1. A new row was written (dedup-safe — the guard above already returns 0
+  //      if this messageId was previously logged).
+  //   2. The sender row was inserted (emailLogId is non-null).
+  //   3. The inbound is a REPLY: inReplyTo is set, OR we threaded onto an
+  //      existing conversation (inheritedThreadId found in our log).
+  //      Cold new inbound (no in-reply-to, no thread match) is a fresh inquiry
+  //      → does NOT fire reply_received; that's a future lead.new_inquiry.
+  if (
+    written > 0 &&
+    emailLogId !== null &&
+    (email.inReplyTo !== null || inheritedThreadId !== null)
+  ) {
+    try {
+      // Resolve notification recipients.
+      let recipientUserIds: string[]
+      if (opts?.recipientUserIds && opts.recipientUserIds.length > 0) {
+        // Nylas lane: caller supplies the mailbox owner explicitly.
+        recipientUserIds = [...new Set(opts.recipientUserIds)]
+      } else {
+        // Resend lane (no per-user connection context): notify org owners+admins.
+        const adminRows = await db
+          .select({ userId: memberRole.userId })
+          .from(memberRole)
+          .where(
+            and(eq(memberRole.organizationId, orgId), inArray(memberRole.role, ["owner", "admin"])),
+          )
+        recipientUserIds = [...new Set(adminRows.map((r) => r.userId))]
+      }
+
+      if (recipientUserIds.length > 0) {
+        const senderName = [sender.firstName, sender.lastName]
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(" ")
+        const senderDisplay = senderName || bareEmail(email.from)
+        const title = `${senderDisplay} replied`
+        const bodyPreview = buildBodyPreview(email.body)
+        const bodyParts = [email.subject, bodyPreview].filter(Boolean)
+        const body = bodyParts.length > 0 ? bodyParts.join(" — ") : null
+
+        await emitNotification({
+          organizationId: orgId,
+          type: "email.reply_received",
+          recipientUserIds,
+          actorUserId: null,
+          contactId: sender.id,
+          title,
+          body,
+          linkPath: `/contacts/${sender.id}`,
+          payload: { threadId, emailLogId, messageId: email.messageId },
+          sourceModule: "email",
+        })
+      }
+    } catch (err) {
+      // Notification failure must not block or fail the ingest — a missed
+      // notification is recoverable; a dropped email_log row is not.
+      log.error({ err }, "inbound: failed to emit email.reply_received — notification skipped")
+    }
+  }
+
   return written
+}
+
+/**
+ * Strip HTML tags and quoted-reply lines from an email body, then trim to
+ * `maxLen` characters.  Used to build the reply-received notification body
+ * preview.  Pure — no side effects, exported for unit testing.
+ *
+ * Order matters: split on newlines first (to detect > quoted lines), then
+ * strip HTML tags from the remaining lines so that HTML attributes containing
+ * ">" are not mistakenly treated as quoted-reply markers.
+ */
+export function buildBodyPreview(body: string | null, maxLen = 140): string | null {
+  if (!body) return null
+  // Split on newlines BEFORE stripping HTML so that quoted-reply lines
+  // ("> Some quoted text") can be reliably detected by their leading ">".
+  const withoutQuotes = body
+    .split("\n")
+    .filter((line) => !line.trim().startsWith(">"))
+    .join(" ")
+  // Strip HTML tags from the remaining text, then collapse whitespace.
+  const stripped = withoutQuotes
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (!stripped) return null
+  return stripped.length > maxLen ? stripped.slice(0, maxLen - 1) + "…" : stripped
 }
 
 /**

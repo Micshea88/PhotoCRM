@@ -98,4 +98,24 @@ From **any list/selection** — including an imported batch — act on the whole
 
 ---
 
+## F4 — Smart file / document creation with clean naming (Smart Documents / Proposals, P12+)
+
+Research-backed (HoneyBook pain point).
+
+**Capability:** when creating a client-facing file (Proposal / Contract / Invoice / Questionnaire / Guide / etc.) on a project, offer **three starting points** (HoneyBook model):
+
+- **(a) Use a template.**
+- **(b) Start from a recent file** — clone a recently-sent file as a starting point.
+- **(c) Start from blank.**
+
+**CRITICAL BUG TO AVOID (HoneyBook does this wrong):** when cloning from a recent/previous file, the new file's name must use **ONLY the CURRENT project's name + the file type** — it must **NOT** retain the ORIGINAL file's project name. HoneyBook concatenates them, so cloning _"Allison Fluker and Jacob's wedding Guest List Guide"_ into Annika's project produces _"Annika Uhren's Project Allison Fluker and Jacob's wedding Guest List Guide"_ — **leaking a DIFFERENT client's names into this client's file** (a naming bug AND a privacy/professionalism leak the client sees).
+
+**Correct behavior:** cloning a recent file must **strip the source project's name/identifiers and re-derive the name from the CURRENT project only** — e.g. _"Annika Uhren's Project — Guest List Guide."_ Applies to the **file name AND any auto-populated title/header fields**. Also **scrub any other source-client data** that shouldn't carry over (source project references, prior recipient names) — only the reusable **content/layout** clones, never the previous client's **identity**.
+
+**Design note (system-wide rule):** this reinforces the **naming-hygiene rule for the whole clone/duplicate system** — cloning copies **structure/content, never the prior record's identity fields**. Applies to ANY clone-from-existing across the app.
+
+**Module:** Smart Documents / Proposals (P12+); the clean-clone pattern applies to any clone-from-existing app-wide.
+
+---
+
 _Roadmap only — not scheduled. When one is picked up, run it through the standing research → synthesize → complaint-scope → options → approval path before building._

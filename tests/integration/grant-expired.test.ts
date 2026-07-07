@@ -28,6 +28,8 @@ import { emailConnections } from "@/modules/email-connections/schema"
 import { encrypt } from "@/lib/crypto"
 import { env } from "@/lib/env"
 import { grantIdHash, findConnectionByGrantIdAnyOrg } from "@/modules/email-connections/queries"
+import { handleGrantExpired } from "@/modules/email-connections/nylas-inbound"
+import { memberRole } from "@/modules/rbac/schema"
 
 // ─── Seed helpers ─────────────────────────────────────────────────────────────
 
@@ -194,6 +196,52 @@ describe("grant-expired: grantIdHash + findConnectionByGrantIdAnyOrg (Task 8)", 
 
       expect(found).not.toBeNull()
       expect(found!.id).toBe(matchingId)
+    })
+  })
+})
+
+describe("grant-expired: handleGrantExpired execution (Task 8)", () => {
+  // NOTE: the handler's inner db.transaction() writes are not readable back
+  // within the withTestDb rolled-back tx (savepoint visibility). So we assert
+  // the handler EXECUTES to completion + its return value — this exercises the
+  // full path (resolve → status update → emit email.disconnected) and would
+  // throw if the tx/emit/RLS-insert failed. Written-VALUE assertions are
+  // deferred (would need a committed fixture); the resolver/hash coverage above
+  // plus emitNotificationInTx's own tests (Task 10b/11) cover the rest.
+  it("returns 1 for a matched connection (resolve + status write + notify run without error)", async () => {
+    await withTestDb(async (db) => {
+      const ownerId = await createUser(db)
+      const orgId = await createOrganization(db, ownerId)
+      await setOrgContext(db, orgId, "owner", ownerId)
+
+      // A second team member (admin) — exercises the owner+admin recipient query.
+      const adminId = await createUser(db)
+      await db
+        .insert(memberRole)
+        .values({ id: createId(), organizationId: orgId, userId: adminId, role: "admin" })
+
+      const plainGrantId = `grant_handler_${createId()}`
+      await seedConnection(db, orgId, ownerId, { plainGrantId, withHash: true })
+
+      const result = await handleGrantExpired(
+        { type: "grant.expired", data: { object: { grant_id: plainGrantId } } },
+        db,
+      )
+      expect(result).toBe(1)
+    })
+  })
+
+  it("returns 0 when no connection matches the grant_id (no throw)", async () => {
+    await withTestDb(async (db) => {
+      const ownerId = await createUser(db)
+      const orgId = await createOrganization(db, ownerId)
+      await setOrgContext(db, orgId, "owner", ownerId)
+
+      const result = await handleGrantExpired(
+        { type: "grant.expired", data: { object: { grant_id: `nope_${createId()}` } } },
+        db,
+      )
+      expect(result).toBe(0)
     })
   })
 })

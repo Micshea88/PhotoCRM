@@ -207,20 +207,23 @@ async function handleNylasDeliveryEvent(
  * Always returns 0 on drop conditions (no grantId in payload / no connection
  * match) so the route acks 200 without writing anything.
  */
-export async function handleGrantExpired(event: NylasWebhookEvent): Promise<number> {
+export async function handleGrantExpired(
+  event: NylasWebhookEvent,
+  dbHandle: Parameters<typeof findConnectionByGrantIdAnyOrg>[0] = db,
+): Promise<number> {
   const grantId = event.data?.object?.grant_id
   if (!grantId) {
     log.info("nylas: grant.expired — missing grant_id in payload — dropped")
     return 0
   }
 
-  const conn = await findConnectionByGrantIdAnyOrg(db, grantId)
+  const conn = await findConnectionByGrantIdAnyOrg(dbHandle, grantId)
   if (!conn) {
     log.info("nylas: grant.expired — no connection match — dropped")
     return 0
   }
 
-  await db.transaction(async (tx) => {
+  await dbHandle.transaction(async (tx) => {
     // Set org GUC first so every subsequent write satisfies FORCE RLS.
     await tx.execute(sql`SELECT set_config('app.current_org', ${conn.organizationId}, true)`)
 

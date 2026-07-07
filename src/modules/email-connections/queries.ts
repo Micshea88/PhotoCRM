@@ -156,6 +156,36 @@ export async function findLiveConnectionByAddressAnyOrg(
   return row ?? null
 }
 
+/**
+ * All live expired connections for a specific user in the given org.
+ *
+ * Used by the app-shell reconnect banner (Task 19): runs on every page load
+ * so it must be cheap. Indexed on (organizationId, userId, deletedAt) and
+ * the query narrows to status="expired", so the result set is tiny in
+ * practice (≤ active connections for the user, usually 1 or 0).
+ *
+ * User-scoped: only the mailbox owner's expired connections are returned.
+ * Admins do NOT see other users' connections from this query.
+ */
+export async function listExpiredConnectionsForUser(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+): Promise<EmailConnection[]> {
+  return db
+    .select()
+    .from(emailConnections)
+    .where(
+      and(
+        eq(emailConnections.organizationId, orgId),
+        eq(emailConnections.userId, userId),
+        eq(emailConnections.status, "expired"),
+        isNull(emailConnections.deletedAt),
+      ),
+    )
+    .orderBy(desc(emailConnections.createdAt))
+}
+
 /** Decrypt a stored grant_id at point of use. */
 export function decryptGrantId(connection: EmailConnection): string {
   return decrypt(connection.grantId, env.NYLAS_ENCRYPTION_KEY)

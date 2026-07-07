@@ -2,8 +2,8 @@ import "server-only"
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
-import { notifications } from "./schema"
-import type { Notification } from "./schema"
+import { notifications, notificationPreferences } from "./schema"
+import type { Notification, NotificationPreference } from "./schema"
 import { NEEDS_ACTION_TYPES } from "./types"
 
 type DbHandle = NodePgDatabase<typeof schema>
@@ -135,4 +135,26 @@ export async function listArchivedNotifications(
     .orderBy(desc(notifications.archivedAt))
     .limit(limit)
     .offset(offset)
+}
+
+/**
+ * Task 15F — Return all stored notification preferences for the given user.
+ * Includes the `mobile` column added in Task 15F part 3. Rows not present in
+ * this result have no override — callers should fall back to the registry
+ * defaultChannels for those types.
+ */
+export async function getNotificationPreferences(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+): Promise<NotificationPreference[]> {
+  return db
+    .select()
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.organizationId, orgId),
+        eq(notificationPreferences.userId, userId),
+      ),
+    )
 }

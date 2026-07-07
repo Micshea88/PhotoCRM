@@ -1,0 +1,1 @@
+ALTER TABLE "notification_preferences" ADD COLUMN "mobile" boolean DEFAULT false NOT NULL;

@@ -421,6 +421,13 @@
       "when": 1783366246347,
       "tag": "0059_normal_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1783396415594,
+      "tag": "0060_powerful_shockwave",
+      "breakpoints": true
     }
   ]
 }

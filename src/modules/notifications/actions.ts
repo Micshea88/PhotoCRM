@@ -314,6 +314,8 @@ export const updateNotificationPreference = orgAction
       type: z.string().min(1),
       inApp: z.boolean(),
       email: z.boolean(),
+      /** Task 15F — Mobile push channel. Persisted but UI renders it disabled until the app ships. */
+      mobile: z.boolean(),
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
@@ -333,12 +335,14 @@ export const updateNotificationPreference = orgAction
         type: parsedInput.type,
         inApp: parsedInput.inApp,
         email: parsedInput.email,
+        mobile: parsedInput.mobile,
       })
       .onConflictDoUpdate({
         target: [notificationPreferences.userId, notificationPreferences.type],
         set: {
           inApp: parsedInput.inApp,
           email: parsedInput.email,
+          mobile: parsedInput.mobile,
           updatedAt: new Date(),
         },
       })
@@ -353,7 +357,12 @@ export const updateNotificationPreference = orgAction
       "notifications.preference_updated",
       {
         resourceType: "notification_preference",
-        metadata: { type: parsedInput.type, inApp: parsedInput.inApp, email: parsedInput.email },
+        metadata: {
+          type: parsedInput.type,
+          inApp: parsedInput.inApp,
+          email: parsedInput.email,
+          mobile: parsedInput.mobile,
+        },
       },
     )
     revalidatePath("/notifications")

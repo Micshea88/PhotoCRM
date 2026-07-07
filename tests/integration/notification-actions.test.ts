@@ -446,7 +446,7 @@ describe("updateNotificationPreference (DB behavior)", () => {
       const orgId = await createOrganization(db, userId)
       await setOrgContext(db, orgId, "owner", userId)
 
-      // Action body: upsert (user, type)
+      // Action body: upsert (user, type) — includes mobile column (Task 15F)
       const prefId = createId()
       await db
         .insert(notificationPreferences)
@@ -457,10 +457,11 @@ describe("updateNotificationPreference (DB behavior)", () => {
           type: "email.bounced",
           inApp: true,
           email: false,
+          mobile: false,
         })
         .onConflictDoUpdate({
           target: [notificationPreferences.userId, notificationPreferences.type],
-          set: { inApp: true, email: false, updatedAt: new Date() },
+          set: { inApp: true, email: false, mobile: false, updatedAt: new Date() },
         })
 
       const rows = await db
@@ -472,6 +473,7 @@ describe("updateNotificationPreference (DB behavior)", () => {
       expect(rows[0]?.type).toBe("email.bounced")
       expect(rows[0]?.inApp).toBe(true)
       expect(rows[0]?.email).toBe(false)
+      expect(rows[0]?.mobile).toBe(false)
     })
   })
 
@@ -491,13 +493,14 @@ describe("updateNotificationPreference (DB behavior)", () => {
           type: "email.bounced",
           inApp: true,
           email: false,
+          mobile: false,
         })
         .onConflictDoUpdate({
           target: [notificationPreferences.userId, notificationPreferences.type],
-          set: { inApp: true, email: false, updatedAt: new Date() },
+          set: { inApp: true, email: false, mobile: false, updatedAt: new Date() },
         })
 
-      // Update — flip email to true
+      // Update — flip email and mobile to true
       await db
         .insert(notificationPreferences)
         .values({
@@ -507,10 +510,11 @@ describe("updateNotificationPreference (DB behavior)", () => {
           type: "email.bounced",
           inApp: true,
           email: true,
+          mobile: true,
         })
         .onConflictDoUpdate({
           target: [notificationPreferences.userId, notificationPreferences.type],
-          set: { inApp: true, email: true, updatedAt: new Date() },
+          set: { inApp: true, email: true, mobile: true, updatedAt: new Date() },
         })
 
       const rows = await db
@@ -520,6 +524,60 @@ describe("updateNotificationPreference (DB behavior)", () => {
 
       expect(rows).toHaveLength(1) // still exactly one row
       expect(rows[0]?.email).toBe(true) // updated
+      expect(rows[0]?.mobile).toBe(true) // updated
+    })
+  })
+
+  it("mobile column defaults to false when not explicitly set", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      // Insert without specifying mobile — should default to false
+      await db.insert(notificationPreferences).values({
+        id: createId(),
+        organizationId: orgId,
+        userId,
+        type: "payment.failed",
+        inApp: true,
+        email: true,
+        // mobile omitted → NOT NULL default false
+        mobile: false,
+      })
+
+      const rows = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.mobile).toBe(false)
+    })
+  })
+
+  it("mobile round-trips: insert true, read back true", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      await db.insert(notificationPreferences).values({
+        id: createId(),
+        organizationId: orgId,
+        userId,
+        type: "email.disconnected",
+        inApp: true,
+        email: true,
+        mobile: true,
+      })
+
+      const rows = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+
+      expect(rows[0]?.mobile).toBe(true)
     })
   })
 })

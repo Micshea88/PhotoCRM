@@ -160,6 +160,12 @@ export const notificationPreferences = pgTable(
     type: text("type").notNull(),
     inApp: boolean("in_app").notNull(),
     email: boolean("email").notNull(),
+    /**
+     * Task 15F — Mobile push channel. Persisted but UI renders it disabled/OFF
+     * until the mobile app ships (Task 16 concern, not Task 15F). Additive
+     * migration; no new RLS policy (table already has FORCE RLS from Task 9).
+     */
+    mobile: boolean("mobile").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

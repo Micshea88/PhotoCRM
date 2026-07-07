@@ -175,13 +175,20 @@ export function NotificationSettingsPanel({ prefs }: NotificationSettingsPanelPr
             mobile: cur.mobile,
           })
         }),
-      ).then((results) => {
-        const hasError = results.some((r) => r.serverError)
-        if (hasError) {
+      )
+        .then((results) => {
+          const hasError = results.some((r) => r.serverError)
+          if (hasError) {
+            setOptimisticPrefs(prevPrefs)
+            setError("Failed to save preferences. Please try again.")
+          }
+        })
+        .catch(() => {
+          // A thrown rejection (not a returned serverError) must still roll
+          // the optimistic UI back and surface the failure.
           setOptimisticPrefs(prevPrefs)
           setError("Failed to save preferences. Please try again.")
-        }
-      })
+        })
     })
   }
 

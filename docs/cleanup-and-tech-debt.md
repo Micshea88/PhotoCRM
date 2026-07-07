@@ -8,6 +8,7 @@
 > - `post-3a-polish-backlog` memory: `~/.claude/projects/-Users-kellyshea-git-PhotoCRM/memory/project_contact_detail_polish_backlog.md` (19 items, full verbatim text).
 > - **`docs/pending-integration-setup.md`** — required integration WIRING (Nylas inbound webhook, Resend bounce webhook, Twilio SMS) as a **build-completion gate**. The dormant-but-built integrations live there, not here.
 > - **`docs/features-backlog.md`** — forward-looking **product roadmap features** (net-new capabilities, e.g. template usage indicators, import UX + durable batches + bulk actions). Feature roadmap lives there, not here (this doc is debt/deferred-scope of current work).
+> - **`docs/theme-token-layer-plan.md`** — the approved design-token / theme-layer architecture + migration plan (Phase 1; values TBD). The **running hardcoded-palette / dark-mode / micro-font hotspot inventory** lives there (§5), not duplicated here. Reskin frozen until notifications ships.
 
 ---
 

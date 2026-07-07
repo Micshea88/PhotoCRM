@@ -187,6 +187,14 @@ Not duplicated here (kept in `TODO.md` to avoid two sources of truth). Open item
 - **What:** Vercel Cron + results-cache table + notification UI for the existing Push-4 matching engine.
 - **Owner:** V1 (deferred from Push 4). **Why deferred:** `docs/pathway-build-roadmap.md:365-369` — matching engine exists; the scheduled scan + surfacing is later.
 
+### B.13 — Notification quiet-hours + digest: settings UI + scheduling + flush cron (Task 17, deferred as ONE unit)
+
+- **What:** the deferred back half of the notification-center build (email round). Three pieces that only make sense TOGETHER: (1) a **quiet-hours + digest settings UI** (the front door — deliberately scoped OUT of the Task 16 settings panel); (2) **scheduling** — actually deferring a notification's delivery per the user's quiet-hours/digest window; (3) a **flush cron** that releases deferred notifications when their window opens / on a digest cadence.
+- **Already in place (foundations, do NOT rebuild):** `computeScheduledFor` (`src/modules/notifications/types.ts`) + the `notifications.settings` KV row shape (Task 0 Option A). The engine currently emits every notification immediately (nothing is deferred), so a flush cron built alone would have **nothing to flush** — that's why it's deferred as a unit, not piecemeal.
+- **Why deferred (conscious, Mike-approved 2026-07-07):** building the flush cron before the quiet-hours settings UI + scheduling is infrastructure for a feature whose front door isn't open. Ship it as one coherent follow-up: settings UI → scheduling on emit → flush cron, with tests end-to-end.
+- **When picked up:** run the standing build path (research → synthesize → options → approval). Pairs with the notification center already shipped (Tasks 1-16 + 12).
+- **Severity:** deferred scope (not a bug). **Status:** Deferred (named unit).
+
 ---
 
 ## SECTION C — WATCH ITEMS (flagged — do NOT fix yet; monitor)

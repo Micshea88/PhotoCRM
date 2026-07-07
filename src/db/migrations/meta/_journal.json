@@ -428,6 +428,13 @@
       "when": 1783396415594,
       "tag": "0060_powerful_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1783465435909,
+      "tag": "0061_lethal_invaders",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core"
+import { pgPolicy, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 
 export const auditLog = pgTable(
@@ -31,8 +32,21 @@ export const auditLog = pgTable(
       t.resourceId,
       t.createdAt.desc(),
     ),
+    // Org-isolation RLS policy — mirrors email_log / contacts / etc.
+    // FORCE RLS is hand-appended to the generated migration SQL (drizzle-kit
+    // emits ENABLE, not FORCE) per AGENTS.md §10a. Every audit() writer runs
+    // either in an orgAction/withOrgContext scoped tx whose app.current_org
+    // equals ctx.organizationId (INSERT satisfies WITH CHECK), or on the bare
+    // BYPASSRLS owner connection (cron purge, workflow matcher) which bypasses
+    // the policy. No writer runs under app_authenticated without a matching org.
+    pgPolicy("audit_log_org_isolation", {
+      as: "permissive",
+      for: "all",
+      using: sql`organization_id = current_setting('app.current_org', true)`,
+      withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+    }),
   ],
-)
+).enableRLS()
 
 export type AuditLog = typeof auditLog.$inferSelect
 export type NewAuditLog = typeof auditLog.$inferInsert

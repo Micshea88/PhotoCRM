@@ -390,15 +390,6 @@ describe("buildBodyPreview (pure helper — no DB)", () => {
   })
 })
 
-// ─── thread.replied dispatch: no-op (documented) ─────────────────────────
-
-describe("thread.replied stays a no-op (Task 12 decision)", () => {
-  it("is covered by tests/unit/nylas-dispatch.test.ts which asserts result===0 and processInboundEmail NOT called", () => {
-    // The thread.replied branch in ingestNylasWebhook is already tested in
-    // nylas-dispatch.test.ts:
-    //   "thread.replied — is a no-op seam: recordDeliveryEvent NOT called, returns 0"
-    // Task 12 updated the comment (not the behaviour), so no additional
-    // assertion is needed here.  The existing test covers it.
-    expect(true).toBe(true)
-  })
-})
+// thread.replied stays a no-op (Task 12 decision) — coverage lives in
+// tests/unit/nylas-dispatch.test.ts ("thread.replied — is a no-op seam:
+// recordDeliveryEvent NOT called, returns 0"). No test here would add value.

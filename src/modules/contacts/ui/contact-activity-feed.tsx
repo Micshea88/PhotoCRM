@@ -136,6 +136,24 @@ export interface ActivityEntry {
         shareLinkToken?: string
       }[]
     | null
+  // Task 18 — delivery-status + open-tracking fields (outbound emails only).
+  // Optional so non-email kinds + inbound rows are unaffected.
+  /** "sent"|"delivered"|"bounced"|"failed"|"complained". Only present for
+   *  email entries; inbound emails default to "sent" but the chip gates on
+   *  `direction === "outbound"` so it never renders for received mail. */
+  deliveryStatus?: string | null
+  /** Human-readable bounce reason (filled by the delivery-event writer). */
+  bounceReason?: string | null
+  /** Timestamp of the first bounce event. */
+  bouncedAt?: Date | null
+  /** Timestamp of the first permanent-failure event. */
+  failedAt?: Date | null
+  /** Classified open counts (Task 13). */
+  openHumanCount?: number | null
+  openBotCount?: number | null
+  openUnknownCount?: number | null
+  openCount?: number | null
+  firstOpenedAt?: Date | null
 }
 
 /**

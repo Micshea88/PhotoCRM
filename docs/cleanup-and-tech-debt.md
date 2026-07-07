@@ -122,6 +122,13 @@ Not duplicated here (kept in `TODO.md` to avoid two sources of truth). Open item
 - **file:lines:** `app/(app)/settings/integrations/page.tsx` (Browse fetch); `src/modules/integrations/ui/integrations-browser.tsx`; `src/modules/integrations/ui/connected-apps-list.tsx`; canonical sources `src/modules/telephony/queries.ts` (RingCentral) + `src/modules/email-connections/queries.ts` (Nylas/email). (Note: the email/Nylas provider must be wired into the same connected-status derivation as telephony.)
 - **Severity:** user-visible — status is misleading and connected apps go missing. **Status:** Open. (Fuller, confirmed version of the earlier polish-backlog **#4** referenced in §A.12 — which was RingCentral-only; this now also covers Gmail/email missing from Connected-apps.)
 
+### A.16 — grant_id_hash backfill writes across orgs without an org GUC (final-review finding)
+
+- **What's wrong:** `findConnectionByGrantIdAnyOrg`'s decrypt-scan fallback issues an `UPDATE email_connections SET grant_id_hash=…` on the base `db` handle with **no `app.current_org` set** (`src/modules/email-connections/queries.ts:79-82`), before `handleGrantExpired` opens its GUC'd transaction. This is the ONLY place in the notification-center branch that WRITES through the AnyOrg/BYPASSRLS seam. Benign (writes only a non-secret SHA-256 to the exact row already matched; idempotent; in dev NOBYPASSRLS it's a silent no-op), but it's a cross-org write without the GUC — surfaced by the final whole-branch review as a conscious-acceptance item, distinct from the unbounded-scan concern (Task 8 notes).
+- **Fix options (when addressed):** wrap the backfill UPDATE in a `db.transaction` that `set_config('app.current_org', row.organizationId, true)` first (clean, ~5 lines, also makes it work in dev); OR move the backfill into the caller's GUC'd tx; OR drop opportunistic backfill entirely (a scheduled migration backfills legacy hashes once).
+- **Depends on:** the prod base-pool role actually having `BYPASSRLS` (see `pending-integration-setup.md` pre-deploy check) — if it does NOT, this write (and all AnyOrg SELECT resolvers) return 0 rows in prod.
+- **Severity:** benign / single-tenant-safe. **Status:** Open (conscious-accept for K&K single-tenant; fix before multi-tenant).
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")
@@ -194,6 +201,7 @@ Not duplicated here (kept in `TODO.md` to avoid two sources of truth). Open item
 - **Already in place (foundations, do NOT rebuild):** `computeScheduledFor` (`src/modules/notifications/types.ts`) + the `notifications.settings` KV row shape (Task 0 Option A). The engine currently emits every notification immediately (nothing is deferred), so a flush cron built alone would have **nothing to flush** — that's why it's deferred as a unit, not piecemeal.
 - **Why deferred (conscious, Mike-approved 2026-07-07):** building the flush cron before the quiet-hours settings UI + scheduling is infrastructure for a feature whose front door isn't open. Ship it as one coherent follow-up: settings UI → scheduling on emit → flush cron, with tests end-to-end.
 - **When picked up:** run the standing build path (research → synthesize → options → approval). Pairs with the notification center already shipped (Tasks 1-16 + 12).
+- **⚠️ HARD ORDERING CONSTRAINT (final-review finding #2):** the flush cron MUST ship in the SAME unit as any quiet-hours settings writer. `dispatch.ts` already calls `computeScheduledFor` live; the moment a writer populates `user_preferences["notifications.settings"].quietHoursStart/End`, routine-tier notification **emails** get `scheduledFor` set and — with NO flush cron — **never send** (silently swallowed). Today it's dormant (the Task 16 settings UI writes only per-type channel toggles, never quiet-hours fields, so `parseNotificationSettings` yields null → immediate delivery). Do NOT ship a quiet-hours writer without the flush cron.
 - **Severity:** deferred scope (not a bug). **Status:** Deferred (named unit).
 
 ---

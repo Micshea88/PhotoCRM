@@ -111,6 +111,16 @@ Not duplicated here (kept in `TODO.md` to avoid two sources of truth). Open item
 - **file:lines:** `app/api/webhooks/resend/inbound/route.ts` (delivery-event branch); parity reference `src/modules/email-connections/nylas-inbound.ts` (`message.send_failed`).
 - **Severity:** user-visible (missed send-failure notification). Small/cheap. Closes the native/Resend-lane **async send-failure parity gap** vs the Nylas lane. **Status:** Open.
 
+### A.15 — Settings → Integrations: connection status inconsistent across the three views
+
+- **What's wrong:** on `/settings/integrations`, connection state is only correct on the individual provider **DETAIL** pages; the **Browse** tab and the **Connected-apps** tab are out of sync with reality. Confirmed symptoms:
+  - **Gmail** is actually connected (detail page shows "Connected") but shows **"Not connected" on Browse** AND is **entirely MISSING from Connected-apps** (should appear next to RingCentral).
+  - **RingCentral** shows **"Connected" in Connected-apps** but **"Not connected" in Browse**.
+- **Root cause (likely):** the Browse cards and the Connected-apps list don't read live per-provider connection state the way the detail pages do (they derive status from a stale/incomplete source rather than the canonical connection tables).
+- **Fix:** all three views — **Browse cards, Connected-apps list, detail pages** — must reflect the **same actual per-provider connection status** from one canonical source. Ensure ANY connected provider (email/Nylas AND telephony/RingCentral) appears in Connected-apps.
+- **file:lines:** `app/(app)/settings/integrations/page.tsx` (Browse fetch); `src/modules/integrations/ui/integrations-browser.tsx`; `src/modules/integrations/ui/connected-apps-list.tsx`; canonical sources `src/modules/telephony/queries.ts` (RingCentral) + `src/modules/email-connections/queries.ts` (Nylas/email). (Note: the email/Nylas provider must be wired into the same connected-status derivation as telephony.)
+- **Severity:** user-visible — status is misleading and connected apps go missing. **Status:** Open. (Fuller, confirmed version of the earlier polish-backlog **#4** referenced in §A.12 — which was RingCentral-only; this now also covers Gmail/email missing from Connected-apps.)
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

@@ -73,4 +73,29 @@ From **any list/selection** — including an imported batch — act on the whole
 
 ---
 
+## F3 — At-a-glance engagement on list views (Contacts + Events/Projects lists)
+
+**What:** surface **per-record engagement indicators** on list views as optional **COLUMNS** (or a compact status cell), so a user can scan a whole list/batch and instantly see, per contact:
+
+- **Last email opened** — Y/N + when.
+- **Link clicked** — Y/N.
+- **Replied** — Y/N.
+- **Last SMS / activity.**
+
+**Purpose:** see engagement **across a list** without clicking into every record. Especially valuable **right after a bulk send** (e.g. the Oxford Exchange showcase batch) to spot who's engaging.
+
+**Pain point solved (research-backed, HoneyBook):** HoneyBook **hides** email opens/clicks/reply/SMS status **inside each contact** — you can't see engagement across a list without opening every record one by one.
+
+**Design:**
+
+- Reuse the tracking data already captured by the email/notification build: **opens** (via the pixel, with the **Automated-Open / Human / Unknown** honesty model), **clicks**, **replies**, and the **delivery-event model**.
+- Columns are **toggleable/addable** like other list columns, and **sortable/filterable** — e.g. _"show me everyone who opened but didn't reply."_
+- **Respect the opens-are-directional honesty framing** — a list-level open indicator carries the same **"estimate"** caveat (opens are inflated by privacy proxies; lean on clicks/replies). Don't present a list-level open flag as hard truth.
+
+**Ties:** depends on the **email tracking + delivery-event data** (building now) and the **list / saved-views + bulk-actions** system. Pairs naturally with **post-import bulk actions** (see F2) — scan engagement, then bulk-follow-up the non-openers.
+
+**Module:** Contacts / Events list views + the list-column system.
+
+---
+
 _Roadmap only — not scheduled. When one is picked up, run it through the standing research → synthesize → complaint-scope → options → approval path before building._

@@ -11,7 +11,17 @@
 // ---------------------------------------------------------------------------
 
 export type NotificationChannel = "in_app" | "email"
-export type NotificationCategory = "system" | "client" | "lead" | "project" | "payment"
+/**
+ * Task 15F — 6 category keys (the settings SECTIONS).
+ * Replaces the old 5-value set ("system"|"client"|"lead"|"project"|"payment").
+ */
+export type NotificationCategory =
+  | "messages_email"
+  | "payments"
+  | "documents"
+  | "leads"
+  | "scheduling"
+  | "system"
 export type NotificationTier = "critical" | "routine"
 
 // ---------------------------------------------------------------------------
@@ -19,27 +29,154 @@ export type NotificationTier = "critical" | "routine"
 // ---------------------------------------------------------------------------
 
 export const NOTIFICATION_TYPES = {
+  // ── Messages & email ──────────────────────────────────────────────────────
   "email.bounced": {
-    category: "client" as NotificationCategory,
+    category: "messages_email" as NotificationCategory,
     tier: "critical" as NotificationTier,
     label: "Email bounced",
     defaultChannels: { in_app: true, email: true },
     needsAction: true,
   },
   "email.complained": {
-    category: "client" as NotificationCategory,
+    category: "messages_email" as NotificationCategory,
     tier: "critical" as NotificationTier,
     label: "Spam complaint",
     defaultChannels: { in_app: true, email: true },
     needsAction: true,
   },
   "email.send_failed": {
-    category: "client" as NotificationCategory,
+    category: "messages_email" as NotificationCategory,
     tier: "critical" as NotificationTier,
     label: "Email failed to send",
     defaultChannels: { in_app: true, email: true },
     needsAction: true,
   },
+  "email.reply_received": {
+    category: "messages_email" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "New email reply",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+  "email.clicked": {
+    category: "messages_email" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Link clicked",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+  /**
+   * email.opened defaults OFF/OFF — opens log to the timeline only and are
+   * NEVER emitted as a notification. The toggle exists for completeness.
+   */
+  "email.opened": {
+    category: "messages_email" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Email opened",
+    defaultChannels: { in_app: false, email: false },
+    needsAction: false,
+  },
+  "sms.received": {
+    category: "messages_email" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Text received",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+
+  // ── Payments ──────────────────────────────────────────────────────────────
+  "payment.received": {
+    category: "payments" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Payment received",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+  "payment.failed": {
+    category: "payments" as NotificationCategory,
+    tier: "critical" as NotificationTier,
+    label: "Payment failed",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+
+  // ── Documents ─────────────────────────────────────────────────────────────
+  "proposal.viewed": {
+    category: "documents" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Proposal viewed",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+  "form.started": {
+    category: "documents" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Form started",
+    defaultChannels: { in_app: true, email: false },
+    needsAction: false,
+  },
+  "form.completed": {
+    category: "documents" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Form completed",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+  "contract.signed": {
+    category: "documents" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Contract signed",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+
+  // ── Leads ─────────────────────────────────────────────────────────────────
+  "lead.new_inquiry": {
+    category: "leads" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "New inquiry",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+  "lead.untouched_reminder": {
+    category: "leads" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Untouched-lead reminder",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+
+  // ── Scheduling ────────────────────────────────────────────────────────────
+  "booking.made": {
+    category: "scheduling" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Booking made",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+  "booking.cancelled": {
+    category: "scheduling" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Booking cancelled",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: true,
+  },
+  "call.completed": {
+    category: "scheduling" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Call completed",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+  "meeting.notes_ready": {
+    category: "scheduling" as NotificationCategory,
+    tier: "routine" as NotificationTier,
+    label: "Meeting notes ready",
+    defaultChannels: { in_app: true, email: true },
+    needsAction: false,
+  },
+
+  // ── System ────────────────────────────────────────────────────────────────
   "email.disconnected": {
     category: "system" as NotificationCategory,
     tier: "critical" as NotificationTier,
@@ -47,11 +184,11 @@ export const NOTIFICATION_TYPES = {
     defaultChannels: { in_app: true, email: true },
     needsAction: true,
   },
-  "email.reply_received": {
-    category: "client" as NotificationCategory,
-    tier: "routine" as NotificationTier,
-    label: "New email reply",
-    defaultChannels: { in_app: true, email: false },
+  "account.security": {
+    category: "system" as NotificationCategory,
+    tier: "critical" as NotificationTier,
+    label: "Account & security",
+    defaultChannels: { in_app: true, email: true },
     needsAction: true,
   },
 }

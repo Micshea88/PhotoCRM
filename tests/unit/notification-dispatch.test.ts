@@ -142,7 +142,7 @@ describe("emitNotificationInTx", () => {
 
     expect(inserted).toHaveLength(1)
     const row = inserted[0] as Record<string, unknown>
-    expect(row.category).toBe("client") // email.bounced category
+    expect(row.category).toBe("messages_email") // email.bounced category (Task 15F)
     expect(row.tier).toBe("critical") // email.bounced tier
     expect(row.type).toBe("email.bounced")
   })

@@ -52,7 +52,7 @@ async function seedNotification(
     organizationId: orgId,
     recipientUserId,
     type: opts.type ?? "email.bounced",
-    category: "client",
+    category: "messages_email",
     tier: "critical",
     title: "Test notification",
     sourceModule: "email",

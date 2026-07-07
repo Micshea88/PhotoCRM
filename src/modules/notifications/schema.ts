@@ -63,7 +63,7 @@ export const notifications = pgTable(
 
     /** Open-ended — NO check constraint. e.g. "email.bounced", "lead.assigned". */
     type: text("type").notNull(),
-    /** Open-ended — NO check constraint. e.g. "system", "client", "lead", "project", "payment". */
+    /** Open-ended — NO check constraint. e.g. "messages_email", "payments", "documents", "leads", "scheduling", "system". */
     category: text("category").notNull(),
     /** Open-ended — NO check constraint. Conventional values: "critical" | "routine". */
     tier: text("tier").notNull(),

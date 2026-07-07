@@ -1,34 +1,69 @@
 /**
  * Unit tests for the notification type registry and computeScheduledFor helper.
  * Task 10a — pure functions only (no DB, no mailer).
+ * Task 15F — expanded registry: 21 types, 6 categories.
  */
 import { describe, it, expect } from "vitest"
 import {
   NOTIFICATION_TYPES,
+  NEEDS_ACTION_TYPES,
   getNotificationTypeMeta,
   computeScheduledFor,
 } from "@/modules/notifications/types"
 import type { NotificationSettings } from "@/modules/notifications/types"
 
 // ---------------------------------------------------------------------------
-// Registry
+// Registry — Task 15F expanded registry
 // ---------------------------------------------------------------------------
 
 describe("NOTIFICATION_TYPES registry", () => {
-  it("contains exactly 5 entries", () => {
-    expect(Object.keys(NOTIFICATION_TYPES)).toHaveLength(5)
-    expect(Object.keys(NOTIFICATION_TYPES).sort()).toEqual([
+  it("contains exactly 21 entries", () => {
+    expect(Object.keys(NOTIFICATION_TYPES)).toHaveLength(21)
+  })
+
+  it("contains all expected type keys", () => {
+    const keys = Object.keys(NOTIFICATION_TYPES).sort()
+    expect(keys).toEqual([
+      "account.security",
+      "booking.cancelled",
+      "booking.made",
+      "call.completed",
+      "contract.signed",
       "email.bounced",
+      "email.clicked",
       "email.complained",
       "email.disconnected",
+      "email.opened",
       "email.reply_received",
       "email.send_failed",
+      "form.completed",
+      "form.started",
+      "lead.new_inquiry",
+      "lead.untouched_reminder",
+      "meeting.notes_ready",
+      "payment.failed",
+      "payment.received",
+      "proposal.viewed",
+      "sms.received",
     ])
   })
 
+  it("all 6 NotificationCategory values are represented", () => {
+    const categories = new Set(Object.values(NOTIFICATION_TYPES).map((v) => v.category))
+    expect(categories).toContain("messages_email")
+    expect(categories).toContain("payments")
+    expect(categories).toContain("documents")
+    expect(categories).toContain("leads")
+    expect(categories).toContain("scheduling")
+    expect(categories).toContain("system")
+    expect(categories.size).toBe(6)
+  })
+
+  // ── messages_email types ──────────────────────────────────────────────────
+
   it("email.bounced has correct shape", () => {
     const entry = NOTIFICATION_TYPES["email.bounced"]
-    expect(entry.category).toBe("client")
+    expect(entry.category).toBe("messages_email")
     expect(entry.tier).toBe("critical")
     expect(entry.label).toBe("Email bounced")
     expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
@@ -37,7 +72,7 @@ describe("NOTIFICATION_TYPES registry", () => {
 
   it("email.complained has correct shape", () => {
     const entry = NOTIFICATION_TYPES["email.complained"]
-    expect(entry.category).toBe("client")
+    expect(entry.category).toBe("messages_email")
     expect(entry.tier).toBe("critical")
     expect(entry.label).toBe("Spam complaint")
     expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
@@ -46,12 +81,50 @@ describe("NOTIFICATION_TYPES registry", () => {
 
   it("email.send_failed has correct shape", () => {
     const entry = NOTIFICATION_TYPES["email.send_failed"]
-    expect(entry.category).toBe("client")
+    expect(entry.category).toBe("messages_email")
     expect(entry.tier).toBe("critical")
     expect(entry.label).toBe("Email failed to send")
     expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
     expect(entry.needsAction).toBe(true)
   })
+
+  it("email.reply_received has correct shape (email default now ON per spec)", () => {
+    const entry = NOTIFICATION_TYPES["email.reply_received"]
+    expect(entry.category).toBe("messages_email")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("New email reply")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  it("email.clicked has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["email.clicked"]
+    expect(entry.category).toBe("messages_email")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Link clicked")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("email.opened has both defaults OFF (log-only, no emitter)", () => {
+    const entry = NOTIFICATION_TYPES["email.opened"]
+    expect(entry.category).toBe("messages_email")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Email opened")
+    expect(entry.defaultChannels).toEqual({ in_app: false, email: false })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("sms.received has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["sms.received"]
+    expect(entry.category).toBe("messages_email")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Text received")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  // ── system types ──────────────────────────────────────────────────────────
 
   it("email.disconnected has correct shape", () => {
     const entry = NOTIFICATION_TYPES["email.disconnected"]
@@ -62,21 +135,165 @@ describe("NOTIFICATION_TYPES registry", () => {
     expect(entry.needsAction).toBe(true)
   })
 
-  it("email.reply_received is the only routine entry and has email:false", () => {
-    const entry = NOTIFICATION_TYPES["email.reply_received"]
-    expect(entry.category).toBe("client")
-    expect(entry.tier).toBe("routine")
-    expect(entry.label).toBe("New email reply")
-    expect(entry.defaultChannels).toEqual({ in_app: true, email: false })
+  it("account.security has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["account.security"]
+    expect(entry.category).toBe("system")
+    expect(entry.tier).toBe("critical")
+    expect(entry.label).toBe("Account & security")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
     expect(entry.needsAction).toBe(true)
+  })
 
-    // All others must be critical
-    const others = Object.entries(NOTIFICATION_TYPES).filter(
-      ([key]) => key !== "email.reply_received",
-    )
-    for (const [, meta] of others) {
-      expect(meta.tier).toBe("critical")
-    }
+  // ── payments types ────────────────────────────────────────────────────────
+
+  it("payment.received has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["payment.received"]
+    expect(entry.category).toBe("payments")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Payment received")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("payment.failed has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["payment.failed"]
+    expect(entry.category).toBe("payments")
+    expect(entry.tier).toBe("critical")
+    expect(entry.label).toBe("Payment failed")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  // ── documents types ───────────────────────────────────────────────────────
+
+  it("proposal.viewed has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["proposal.viewed"]
+    expect(entry.category).toBe("documents")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Proposal viewed")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("form.started has correct shape (bell-only default, no needsAction)", () => {
+    const entry = NOTIFICATION_TYPES["form.started"]
+    expect(entry.category).toBe("documents")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Form started")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: false })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("form.completed has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["form.completed"]
+    expect(entry.category).toBe("documents")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Form completed")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  it("contract.signed has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["contract.signed"]
+    expect(entry.category).toBe("documents")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Contract signed")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  // ── leads types ───────────────────────────────────────────────────────────
+
+  it("lead.new_inquiry has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["lead.new_inquiry"]
+    expect(entry.category).toBe("leads")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("New inquiry")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  it("lead.untouched_reminder has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["lead.untouched_reminder"]
+    expect(entry.category).toBe("leads")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Untouched-lead reminder")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  // ── scheduling types ──────────────────────────────────────────────────────
+
+  it("booking.made has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["booking.made"]
+    expect(entry.category).toBe("scheduling")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Booking made")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("booking.cancelled has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["booking.cancelled"]
+    expect(entry.category).toBe("scheduling")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Booking cancelled")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(true)
+  })
+
+  it("call.completed has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["call.completed"]
+    expect(entry.category).toBe("scheduling")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Call completed")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+
+  it("meeting.notes_ready has correct shape", () => {
+    const entry = NOTIFICATION_TYPES["meeting.notes_ready"]
+    expect(entry.category).toBe("scheduling")
+    expect(entry.tier).toBe("routine")
+    expect(entry.label).toBe("Meeting notes ready")
+    expect(entry.defaultChannels).toEqual({ in_app: true, email: true })
+    expect(entry.needsAction).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// NEEDS_ACTION_TYPES
+// ---------------------------------------------------------------------------
+
+describe("NEEDS_ACTION_TYPES", () => {
+  it("contains exactly the types with needsAction=true", () => {
+    const expectedNeedsAction = Object.entries(NOTIFICATION_TYPES)
+      .filter(([, v]) => v.needsAction)
+      .map(([k]) => k)
+      .sort()
+
+    expect([...NEEDS_ACTION_TYPES].sort()).toEqual(expectedNeedsAction)
+  })
+
+  it("includes all delivery-critical types", () => {
+    expect(NEEDS_ACTION_TYPES).toContain("email.bounced")
+    expect(NEEDS_ACTION_TYPES).toContain("email.complained")
+    expect(NEEDS_ACTION_TYPES).toContain("email.send_failed")
+    expect(NEEDS_ACTION_TYPES).toContain("email.disconnected")
+    expect(NEEDS_ACTION_TYPES).toContain("account.security")
+    expect(NEEDS_ACTION_TYPES).toContain("payment.failed")
+  })
+
+  it("does NOT include log-only or routine info types", () => {
+    expect(NEEDS_ACTION_TYPES).not.toContain("email.opened")
+    expect(NEEDS_ACTION_TYPES).not.toContain("email.clicked")
+    expect(NEEDS_ACTION_TYPES).not.toContain("payment.received")
+    expect(NEEDS_ACTION_TYPES).not.toContain("proposal.viewed")
+    expect(NEEDS_ACTION_TYPES).not.toContain("form.started")
+    expect(NEEDS_ACTION_TYPES).not.toContain("contract.signed")
+    expect(NEEDS_ACTION_TYPES).not.toContain("booking.made")
+    expect(NEEDS_ACTION_TYPES).not.toContain("call.completed")
+    expect(NEEDS_ACTION_TYPES).not.toContain("meeting.notes_ready")
   })
 })
 

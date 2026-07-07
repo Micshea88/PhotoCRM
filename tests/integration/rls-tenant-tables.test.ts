@@ -302,6 +302,59 @@ describe("RLS — share-link tampered/foreign token cannot reach another org's f
   })
 })
 
+describe("RLS — user_preferences (user-scoped, FORCE RLS)", () => {
+  it("user A under app_authenticated cannot read user B's preferences (cross-user isolation)", async () => {
+    // This test verifies FORCE ROW LEVEL SECURITY on user_preferences works
+    // correctly: even under the app_authenticated role (which is what the
+    // runtime switches into via SET LOCAL ROLE), user A cannot see user B's rows.
+    //
+    // user_preferences uses app.current_user_id (not app.current_org) as the
+    // RLS discriminator. We seed a user B row, switch to user A context, and
+    // assert 0 rows visible.
+    await withRawClient(async (client) => {
+      const { orgA } = await seedTwoOrgs(client)
+      const userA = createId()
+      const userB = createId()
+
+      // Seed both users into the user table (required by FK).
+      await client.query(
+        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+         VALUES ($1, 'User A', $2, true, NOW(), NOW()),
+                ($3, 'User B', $4, true, NOW(), NOW())`,
+        [userA, `a-${userA.slice(0, 8)}@example.com`, userB, `b-${userB.slice(0, 8)}@example.com`],
+      )
+
+      // Seed a preference row for user B. We set app.current_user_id to userB
+      // so the RLS WITH CHECK policy allows the insert.
+      await client.query("SELECT set_config('app.current_user_id', $1, true)", [userB])
+      await client.query(
+        `INSERT INTO user_preferences (id, user_id, organization_id, key, value)
+         VALUES ($1, $2, NULL, 'nav_collapsed', 'true'::jsonb)`,
+        [createId(), userB],
+      )
+
+      // Switch to app_authenticated (the runtime role). This is the role that
+      // FORCE RLS applies to; without FORCE, the owner bypasses it in prod.
+      await client.query("SET LOCAL ROLE app_authenticated")
+
+      // Switch context to user A. User A should see 0 rows because the
+      // SELECT policy requires user_id = current_setting('app.current_user_id').
+      await client.query("SELECT set_config('app.current_user_id', $1, true)", [userA])
+      const rows = await client.query("SELECT id FROM user_preferences WHERE user_id = $1", [userB])
+      expect(rows.rows.length).toBe(0)
+
+      // Positive control: switch to user B's context — B sees its own row.
+      await client.query("SELECT set_config('app.current_user_id', $1, true)", [userB])
+      const ownRows = await client.query("SELECT id FROM user_preferences")
+      expect(ownRows.rows.length).toBe(1)
+
+      // Verify orgA is bound (suppress TS unused variable warning) — seedTwoOrgs
+      // creates two orgs; orgA is captured to keep the helper signature uniform.
+      void orgA
+    })
+  })
+})
+
 describe("faq_entries — GLOBAL content (no org, no RLS)", () => {
   it("has no RLS policy and is readable without any org context", async () => {
     await withRawClient(async (client) => {

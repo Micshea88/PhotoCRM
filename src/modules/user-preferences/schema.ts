@@ -53,7 +53,7 @@ export const userPreferences = pgTable(
       .where(sql`${t.organizationId} IS NULL`),
     index("user_preferences_user_org_idx").on(t.userId, t.organizationId),
   ],
-)
+).enableRLS()
 
 export type UserPreference = typeof userPreferences.$inferSelect
 export type NewUserPreference = typeof userPreferences.$inferInsert

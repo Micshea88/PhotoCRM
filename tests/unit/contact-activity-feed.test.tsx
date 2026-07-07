@@ -68,7 +68,45 @@ vi.mock("@/modules/telephony/ui/dialer-context", () => ({
   DialerProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
 
-import { DeliveryStatusChip, OpensPopout } from "@/modules/contacts/ui/contact-activity-feed"
+import {
+  DeliveryStatusChip,
+  OpensPopout,
+  ActivityCard,
+  type ActivityEntry,
+} from "@/modules/contacts/ui/contact-activity-feed"
+
+// ─── Outbound gate (via ActivityCard) ──────────────────────────────────────
+
+describe("ActivityCard email delivery affordances — outbound gate", () => {
+  function emailEntry(direction: "outbound" | "inbound"): ActivityEntry {
+    return {
+      id: `email-${direction}`,
+      kind: "email",
+      timestamp: new Date("2026-07-07T12:00:00Z"),
+      title: "Subject line",
+      direction,
+      // Delivery + open data is present for BOTH — so the only thing that can
+      // suppress the chip/opens on inbound is the direction gate, not missing data.
+      deliveryStatus: "delivered",
+      openCount: 3,
+      openHumanCount: 2,
+      openBotCount: 1,
+      openUnknownCount: 0,
+    }
+  }
+
+  it("OUTBOUND email renders the delivery chip + opens affordance", () => {
+    render(<ActivityCard entry={emailEntry("outbound")} collapsedAll={false} eventOptions={[]} />)
+    expect(screen.getByTestId("delivery-status-chip-delivered")).toBeInTheDocument()
+    expect(screen.getByTestId("opens-popout-trigger")).toBeInTheDocument()
+  })
+
+  it("INBOUND email renders NEITHER the delivery chip NOR the opens affordance", () => {
+    render(<ActivityCard entry={emailEntry("inbound")} collapsedAll={false} eventOptions={[]} />)
+    expect(screen.queryByTestId("delivery-status-chip-delivered")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("opens-popout-trigger")).not.toBeInTheDocument()
+  })
+})
 
 // ─── DeliveryStatusChip ────────────────────────────────────────────────────
 

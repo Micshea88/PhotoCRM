@@ -1094,7 +1094,7 @@ function EmailAttachments({
  *      menu. The delete action prompts via the shared ConfirmModal
  *      (Item 1b — replaces window.confirm).
  */
-function ActivityCard({
+export function ActivityCard({
   entry,
   collapsedAll,
   eventOptions,
@@ -1214,17 +1214,18 @@ function ActivityCard({
         <span className="shrink-0">{kindIcon(entry.kind)}</span>
         <h3 className="flex-1 truncate text-sm font-medium">{entryTitleText(entry)}</h3>
         {entry.kind === "call" && <DispositionBadge disposition={entry.callDisposition} />}
-        {/* Task 18 — delivery chip + opens popout for OUTBOUND emails only. */}
+        {/* Task 18 — delivery chip + opens popout for OUTBOUND emails only.
+            Inbound (received/reply) email entries render neither. */}
         {entry.kind === "email" && entry.direction === "outbound" && (
-          <DeliveryStatusChip status={entry.deliveryStatus} bounceReason={entry.bounceReason} />
-        )}
-        {entry.kind === "email" && entry.direction === "outbound" && (
-          <OpensPopout
-            openCount={entry.openCount}
-            openHumanCount={entry.openHumanCount}
-            openBotCount={entry.openBotCount}
-            openUnknownCount={entry.openUnknownCount}
-          />
+          <>
+            <DeliveryStatusChip status={entry.deliveryStatus} bounceReason={entry.bounceReason} />
+            <OpensPopout
+              openCount={entry.openCount}
+              openHumanCount={entry.openHumanCount}
+              openBotCount={entry.openBotCount}
+              openUnknownCount={entry.openUnknownCount}
+            />
+          </>
         )}
         <time className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
           {timeAgo(entry.timestamp)}

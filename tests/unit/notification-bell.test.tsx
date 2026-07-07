@@ -49,8 +49,11 @@ vi.stubGlobal(
 )
 
 import { NotificationBell } from "@/modules/notifications/ui/notification-bell"
-import { NotificationRow } from "@/modules/notifications/ui/notification-row"
-import { relativeTime } from "@/modules/notifications/ui/notification-row"
+import {
+  NotificationRow,
+  relativeTime,
+  SNOOZE_OPTIONS,
+} from "@/modules/notifications/ui/notification-row"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 
 // ---------------------------------------------------------------------------
@@ -153,13 +156,14 @@ describe("NotificationRow", () => {
   })
 
   it("renders relative time in layer 3", () => {
-    const now = new Date("2026-07-07T10:30:00Z")
+    // Use a fixed createdAt so the component renders a deterministic string.
+    // relativeTime() is unit-tested separately; here we just confirm the row
+    // wires the field through to the DOM (rendered value will be "Xm/h/d ago"
+    // or a date, depending on when the test runs — assert it's non-empty).
     const n = makeNotification({ createdAt: new Date("2026-07-07T10:00:00Z") })
-    const expected = relativeTime(new Date("2026-07-07T10:00:00Z"), now)
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    // The rendered relative time should be truthy (format tested below)
-    expect(screen.getByTestId("notification-time").textContent).toBeTruthy()
-    expect(expected).toBe("30m ago")
+    const timeEl = screen.getByTestId("notification-time")
+    expect(timeEl.textContent).not.toBe("")
   })
 
   it("shows unread dot when readAt is null", () => {
@@ -230,38 +234,36 @@ describe("relativeTime", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Snooze — future `until` computation
+// Snooze — future `until` computation (calls production SNOOZE_OPTIONS)
 // ---------------------------------------------------------------------------
 
 describe("Snooze option `until` computation", () => {
-  // Import SNOOZE_OPTIONS by re-testing the logic they encode.
-  // "1 hour" → now + 1 hour; always in the future.
-  it("1 hour option computes a date 60 min in the future", () => {
-    const now = new Date("2026-07-07T10:00:00Z")
-    const until = new Date(now.getTime() + 60 * 60 * 1000)
-    expect(until.getTime()).toBeGreaterThan(now.getTime())
-    expect(until.getTime() - now.getTime()).toBe(3_600_000)
+  // Fixed reference point: 2026-07-07T10:00:00Z, a Tuesday
+  const fixedNow = new Date("2026-07-07T10:00:00Z")
+
+  it("SNOOZE_OPTIONS[0] '1 hour' computes a date exactly 60 min in the future", () => {
+     
+    const until = SNOOZE_OPTIONS[0]!.computeUntil(fixedNow)
+    expect(until.getTime() - fixedNow.getTime()).toBe(3_600_000)
+    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
   })
 
-  it("Tomorrow option produces next day at 09:00 (before midnight)", () => {
-    const now = new Date("2026-07-07T10:00:00Z")
-    const d = new Date(now)
-    d.setDate(d.getDate() + 1)
-    d.setHours(9, 0, 0, 0)
-    expect(d.getTime()).toBeGreaterThan(now.getTime())
-    expect(d.getHours()).toBe(9)
-    expect(d.getMinutes()).toBe(0)
+  it("SNOOZE_OPTIONS[1] 'Tomorrow' produces next-calendar-day at 09:00 local time", () => {
+     
+    const until = SNOOZE_OPTIONS[1]!.computeUntil(fixedNow)
+    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
+    expect(until.getHours()).toBe(9)
+    expect(until.getMinutes()).toBe(0)
+    expect(until.getSeconds()).toBe(0)
   })
 
-  it("Next week option computes the coming Monday at 09:00", () => {
-    // July 7, 2026 is a Tuesday (day 2)
-    const now = new Date("2026-07-07T10:00:00Z")
-    const d = new Date(now)
-    const daysUntilMonday = (8 - d.getDay()) % 7 || 7
-    d.setDate(d.getDate() + daysUntilMonday)
-    d.setHours(9, 0, 0, 0)
-    expect(d.getTime()).toBeGreaterThan(now.getTime())
-    expect(d.getDay()).toBe(1) // Monday
-    expect(d.getHours()).toBe(9)
+  it("SNOOZE_OPTIONS[2] 'Next week' computes the coming Monday at 09:00 local time", () => {
+    // July 7, 2026 is a Tuesday (getDay() === 2), so next Monday is July 13
+     
+    const until = SNOOZE_OPTIONS[2]!.computeUntil(fixedNow)
+    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
+    expect(until.getDay()).toBe(1) // 1 === Monday
+    expect(until.getHours()).toBe(9)
+    expect(until.getMinutes()).toBe(0)
   })
 })

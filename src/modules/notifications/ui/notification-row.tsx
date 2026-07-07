@@ -65,7 +65,7 @@ interface SnoozeOption {
   computeUntil: (now: Date) => Date
 }
 
-const SNOOZE_OPTIONS: SnoozeOption[] = [
+export const SNOOZE_OPTIONS: SnoozeOption[] = [
   {
     label: "1 hour",
     computeUntil: (now) => new Date(now.getTime() + 60 * 60 * 1000),

@@ -1,5 +1,5 @@
 import { headers } from "next/headers"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { blob } from "@/lib/blob"
@@ -26,11 +26,18 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   const activeOrgId = session.session.activeOrganizationId
   if (!activeOrgId) return new Response("No active organization", { status: 403 })
 
-  const [row] = await db
-    .select()
-    .from(files)
-    .where(and(eq(files.id, id), eq(files.organizationId, activeOrgId), isNull(files.deletedAt)))
-    .limit(1)
+  // `files` now has FORCE org-isolation RLS. Read inside a tx scoped to the
+  // session's active org (SET LOCAL ROLE app_authenticated + app.current_org) so
+  // RLS enforces too — belt-and-suspenders alongside the explicit org filter.
+  const [row] = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
+    await tx.execute(sql`SELECT set_config('app.current_org', ${activeOrgId}, true)`)
+    return tx
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), eq(files.organizationId, activeOrgId), isNull(files.deletedAt)))
+      .limit(1)
+  })
   if (!row) return new Response("Not found", { status: 404 })
 
   const result = await blob.get(row.url)

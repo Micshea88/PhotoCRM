@@ -75,11 +75,10 @@ export async function findConnectionByGrantIdAnyOrg(
       continue
     }
     if (plain === grantId) {
-      // Opportunistic backfill: stamp the hash so future lookups use the index.
-      await db
-        .update(emailConnections)
-        .set({ grantIdHash: hash, updatedAt: new Date() })
-        .where(eq(emailConnections.id, row.id))
+      // Pure read — no cross-org write here (final-review A.16). The matched
+      // hash is returned in-memory; the caller (handleGrantExpired) persists it
+      // via its own org-GUC'd transaction, so we never write through the AnyOrg
+      // seam without an org context.
       return { ...row, grantIdHash: hash }
     }
   }

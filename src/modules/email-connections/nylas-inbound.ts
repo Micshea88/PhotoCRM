@@ -227,7 +227,10 @@ export async function handleGrantExpired(
     // Set org GUC first so every subsequent write satisfies FORCE RLS.
     await tx.execute(sql`SELECT set_config('app.current_org', ${conn.organizationId}, true)`)
 
-    // 1. Mark expired.
+    // 1. Mark expired. Also stamp grant_id_hash here (idempotent) — this is the
+    //    org-GUC'd home for the opportunistic backfill that the AnyOrg resolver
+    //    deliberately does NOT do itself (final-review A.16). `conn.grantIdHash`
+    //    is the hash the resolver computed (fast-path or fallback).
     await tx
       .update(emailConnections)
       .set({
@@ -235,6 +238,7 @@ export async function handleGrantExpired(
         expiredAt: new Date(),
         expiredReason:
           "Your email connection was disconnected by the provider and needs to be reconnected.",
+        grantIdHash: conn.grantIdHash,
         updatedAt: new Date(),
       })
       .where(eq(emailConnections.id, conn.id))

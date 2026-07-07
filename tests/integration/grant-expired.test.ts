@@ -127,13 +127,10 @@ describe("grant-expired: grantIdHash + findConnectionByGrantIdAnyOrg (Task 8)", 
 
       expect(found).not.toBeNull()
       expect(found!.id).toBe(connId)
-
-      // Opportunistic backfill: grantIdHash should now be set on the row
-      const [after] = await db
-        .select({ grantIdHash: emailConnections.grantIdHash })
-        .from(emailConnections)
-        .where(eq(emailConnections.id, connId))
-      expect(after!.grantIdHash).toBe(grantIdHash(plainGrantId))
+      // The resolver is pure-read (A.16): it returns the computed hash in-memory
+      // but does NOT write it. Persistence to the DB happens in the handler's
+      // org-GUC'd tx — asserted by the handler legacy-fallback test below.
+      expect(found!.grantIdHash).toBe(grantIdHash(plainGrantId))
     })
   })
 

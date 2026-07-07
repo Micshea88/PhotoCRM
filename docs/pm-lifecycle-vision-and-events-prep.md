@@ -69,3 +69,41 @@ Extract locked Events/Pipeline/lifecycle architecture verbatim from docs/decisio
 - [ ] For any CONFLICT: surface explicitly and decide consciously — do NOT overwrite a good locked call.
 - [ ] Confirm the lifecycle→work architecture already exists for the photography vertical — reference what's there, fill gaps only.
       (Locked-decision extract goes here once pulled.)
+
+## 10. AI STACK & AI-ASSISTED ONBOARDING (vision — reconcile before build)
+
+### 10.1 AI-assisted onboarding / workflow import (premium/AI-tier feature)
+
+Inverts the setup wall (the #1 killer of PM/CRM adoption). Instead of "here's a blank system, configure your workflow," it's "show us how you already work, we'll build it."
+
+- On setup (and ongoing), users can upload their existing process: screenshots of automations from another system (e.g. HoneyBook trigger→wait→send→task flows), written SOPs/process docs, exported workflow configs, or a plain-language description of how they run a job.
+- AI parses those inputs and BUILDS a draft workflow — the dependency tree, task tree, gates — in Pathway, ALONGSIDE Pathway's own suggested best-practice workflow.
+- The user reviews both SIDE-BY-SIDE and chooses per-piece what to keep (theirs, ours, or both). Respects a refined existing process AND exposes a better way, delivered as a CHOICE not a config burden. This is the client-facing expression of opinionated-defaults + customization.
+- Users can archive/delete unused workflows to prevent overwhelm (no fancy merge layer required — let them prune).
+- CRITICAL UX: AI reconstruction is imperfect (misreads screenshots, guesses dependencies wrong). This is NOT "AI builds it and you're done" — it's "AI builds a DRAFT you review, edit, and approve." The review/edit step is what makes imperfect AI output safe and trustworthy, and it fits the onboarding-wizard-with-a-why concept (the wizard IS the guided review of what the AI built).
+- MUST be genuinely good, not a demo gimmick — a real added benefit or it damages trust.
+
+### 10.2 Tiering (meters AI compute, not user effort)
+
+- AI-CREATED workflows are tier-limited (e.g. 10 / 20 / 30 by tier) to control AI cost and create upgrade incentive.
+- Even the cheapest/free-trial tier gets 2 AI-built workflows — a genuine taste to drive upgrades.
+- MANUAL workflow creation is UNLIMITED at every tier. The tier meters the expensive thing (AI compute), never the cheap thing (a user building their own workflow). Reinforces "engine runs config for everyone; AI authors config as a paid layer."
+
+### 10.3 AI stack principles (forward-compatible shape; specific models deferred to cost-model pass)
+
+- PROVIDER-AGNOSTIC AI SERVICE ABSTRACTION — never hardcode a vendor (same discipline as the SMS provider abstraction for Twilio/RingCentral). Swap models as pricing/quality shift (this market re-prices quarterly).
+- TASK-TYPED MODEL ROUTING — each AI job routes to a cost-appropriate model: cheap/open-weight models (DeepSeek/Llama/Qwen/MiniMax class) for extraction, classification, parsing screenshots/docs; premium models (Claude/GPT class) for hard reasoning (building a correct dependency tree, AI upsell logic). Routing cuts AI spend ~60–86% vs. using a premium model for everything, with minimal quality loss.
+- AI AUTHORS CONFIG; THE ENGINE RUNS CONFIG — AI is a builder/authoring layer on top of a workflow engine that is FULLY FUNCTIONAL WITHOUT AI. Lower tiers work manually; AI is the paid accelerant. AI and the runtime engine must be cleanly separable.
+- THE TASK-TREE / WORKFLOW SCHEMA IS THE SHARED GENERATION TARGET — AI-import, smart-doc→project scaffolding (§4-B), and templates all generate into the SAME clean, well-defined format. Because many things generate into it, the schema must be a first-class, generation-friendly target. THIS IS THE KEY THING EVENTS (P6) MUST BUILD TO.
+- Cost multipliers to design around: vision/image inputs cost 2–10x more per effective token (downscale/preprocess screenshots before sending); prompt caching (up to ~90% off cached input) slashes cost on repeated system prompts (e.g. the workflow-building instructions).
+- Reliability: if using cheap/open models, route through a reliable host (Together/Fireworks/DeepInfra), not first-party endpoints with inconsistent availability. Don't self-host early — hosted APIs are cheaper below ~500K tokens/day sustained.
+
+### 10.4 Open action items (pre-launch, not now)
+
+- Build a rough PER-CUSTOMER AI-COST MODEL once actual token volumes are known, so pricing tiers cover cost with margin (do NOT run AI features at a loss).
+- Define which features belong to which subscription tier, and price accordingly.
+- Finalize the specific model choices per task type against the cost model (specific vendors intentionally NOT locked here — the abstraction lets us choose/swap later).
+
+### 10.5 P6 forward-compatibility line (carry into the CC forward-compat brief)
+
+"P6's task-tree/workflow schema must be a clean generation target that an AI authoring layer can write into." This single requirement protects AI-import, smart-doc scaffolding, templates, and the AI upsell layer — all of which read from and write into the Events data model.

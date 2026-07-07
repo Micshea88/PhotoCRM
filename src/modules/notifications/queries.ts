@@ -1,0 +1,138 @@
+import "server-only"
+import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
+import type * as schema from "@/db/schema"
+import { notifications } from "./schema"
+import type { Notification } from "./schema"
+import { NEEDS_ACTION_TYPES } from "./types"
+
+type DbHandle = NodePgDatabase<typeof schema>
+
+export interface NotificationFilter {
+  preset?: "all" | "unread" | "needs_attention"
+  /** Filter to these type keys (OR within the list). */
+  types?: string[]
+  /** Only notifications linked to this contact. */
+  contactId?: string
+  /** created_at range lower bound (inclusive). */
+  from?: Date
+  /** created_at range upper bound (inclusive). */
+  to?: Date
+  /** Default 50. */
+  limit?: number
+  /** Simple offset pagination. Default 0. */
+  offset?: number
+}
+
+/**
+ * "Live" definition:
+ *   archived_at IS NULL  AND  (snoozed_until IS NULL OR snoozed_until <= now())
+ *
+ * A snoozed row whose snoozed_until has passed in the past is live again.
+ * An archived row is never live regardless of snoozed_until.
+ */
+function livePredicate() {
+  return and(
+    isNull(notifications.archivedAt),
+    or(isNull(notifications.snoozedUntil), lte(notifications.snoozedUntil, sql`now()`)),
+  )
+}
+
+/**
+ * Count of live unread notifications for the given user in the given org.
+ * Caller is responsible for setting up RLS context (app.current_org / app.current_user_id)
+ * on the provided db handle before calling. The explicit WHERE clause on
+ * organization_id + recipient_user_id provides clarity and index alignment;
+ * RLS enforces the same constraint as an additional safety net.
+ */
+export async function unreadCount(db: DbHandle, orgId: string, userId: string): Promise<number> {
+  const [row] = await db
+    .select({ cnt: count() })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        livePredicate(),
+        isNull(notifications.readAt),
+      ),
+    )
+  return row?.cnt ?? 0
+}
+
+/**
+ * List live notifications for the given user, with optional preset + stacking filters.
+ *
+ * Presets:
+ *   all             — all live rows (default)
+ *   unread          — live rows where read_at IS NULL
+ *   needs_attention — live + unread + type ∈ NEEDS_ACTION_TYPES
+ *
+ * Additional filters (all combine with AND; types list is OR-within):
+ *   types      — only notifications of these types
+ *   contactId  — only notifications linked to this contact
+ *   from / to  — created_at range (inclusive)
+ *   limit      — default 50
+ *   offset     — default 0
+ *
+ * Results ordered by created_at DESC.
+ */
+export async function listNotifications(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+  filter: NotificationFilter = {},
+): Promise<Notification[]> {
+  const { preset = "all", types, contactId, from, to, limit = 50, offset = 0 } = filter
+
+  return db
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        livePredicate(),
+        // Preset conditions
+        preset === "unread" ? isNull(notifications.readAt) : undefined,
+        preset === "needs_attention" ? isNull(notifications.readAt) : undefined,
+        preset === "needs_attention" && NEEDS_ACTION_TYPES.length > 0
+          ? inArray(notifications.type, NEEDS_ACTION_TYPES)
+          : undefined,
+        // Stacking filters (AND with preset)
+        types && types.length > 0 ? inArray(notifications.type, types) : undefined,
+        contactId ? eq(notifications.contactId, contactId) : undefined,
+        from ? gte(notifications.createdAt, from) : undefined,
+        to ? lte(notifications.createdAt, to) : undefined,
+      ),
+    )
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit)
+    .offset(offset)
+}
+
+/**
+ * List archived notifications for the given user (archived_at IS NOT NULL),
+ * newest-first. For the Archive tab.
+ */
+export async function listArchivedNotifications(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<Notification[]> {
+  const { limit = 50, offset = 0 } = opts
+  return db
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        isNotNull(notifications.archivedAt),
+      ),
+    )
+    .orderBy(desc(notifications.archivedAt))
+    .limit(limit)
+    .offset(offset)
+}

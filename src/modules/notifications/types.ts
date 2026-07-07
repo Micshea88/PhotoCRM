@@ -58,6 +58,19 @@ export const NOTIFICATION_TYPES = {
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES
 
+/**
+ * Task 14 — derived list of type keys whose `needsAction === true`.
+ * Used by listNotifications (preset="needs_attention") and by the UI bell badge.
+ *
+ * NOTE: As of Task 10a, all registered types have needsAction=true, so
+ * NEEDS_ACTION_TYPES equals Object.keys(NOTIFICATION_TYPES). This is accurate
+ * and intentional — extend NOTIFICATION_TYPES with needsAction=false entries as
+ * the product grows and this list will automatically stay correct.
+ */
+export const NEEDS_ACTION_TYPES: string[] = Object.entries(NOTIFICATION_TYPES)
+  .filter(([, v]) => v.needsAction)
+  .map(([k]) => k)
+
 // ---------------------------------------------------------------------------
 // Settings interface
 // ---------------------------------------------------------------------------

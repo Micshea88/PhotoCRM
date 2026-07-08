@@ -40,13 +40,43 @@ This skill is the canonical checklist for `/new-module`. The slash command deleg
    - `tests/e2e/helpers/reset-db.ts` — append the new table to `TABLES_TO_TRUNCATE` so e2e tests truncate it between specs.
    - `app/api/jobs/cron/purge-deleted/route.ts` — if the new module has soft-delete columns (it will, since you copied items), add a delete loop modeled on the existing `items` / `files` blocks. Without this, soft-deleted rows accumulate forever.
 
-6. **Generate + review migration:**
+6. **Declare RLS + generate migration (MANDATORY — do NOT skip):**
+
+   In the new `schema.ts`, confirm the table already has `pgPolicy` org-isolation
+   and `.enableRLS()` (copied from `items`). If not, add them now following the
+   `items/schema.ts` pattern exactly:
+
+   ```ts
+   pgPolicy("<name>_org_isolation", {
+     as: "permissive",
+     for: "all",
+     using: sql`organization_id = current_setting('app.current_org', true)`,
+     withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+   }),
+   ```
+
+   and `.enableRLS()` on the table.
+
+   Then generate the migration:
 
    ```bash
    pnpm db:generate
    ```
 
-   Read the new SQL file. Confirm only `CREATE TABLE` / `CREATE INDEX`. Then apply:
+   Read the new SQL file. Drizzle-kit emits `ENABLE ROW LEVEL SECURITY` but NOT
+   `FORCE`. **Hand-append** the following line to the generated `.sql` file (per
+   AGENTS.md §10a — this is the ONE permitted hand-edit):
+
+   ```sql
+   ALTER TABLE "<name>" FORCE ROW LEVEL SECURITY;
+   ```
+
+   Without FORCE the BYPASSRLS owner role (neondb_owner in prod) silently bypasses
+   RLS — the bug class that caused the Shanzy Studio / K&K contacts leak. The
+   `scripts/check-rls-force.mjs` guard (wired into `pnpm verify --tier=1`) will
+   fail the build if you forget this step.
+
+   Apply the migration:
 
    ```bash
    pnpm db:migrate

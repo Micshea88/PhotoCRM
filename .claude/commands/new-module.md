@@ -13,8 +13,10 @@ After running the skill, verify all of these landed:
 - [ ] New module directory `src/modules/$ARGUMENTS/`
 - [ ] `src/db/schema.ts` re-exports it
 - [ ] New SQL migration generated and applied locally
+- [ ] **`pgPolicy` org-isolation + `.enableRLS()` declared in the new schema.ts** (copied from `items/schema.ts`)
+- [ ] **`ALTER TABLE "<name>" FORCE ROW LEVEL SECURITY;` hand-appended to the generated `.sql` migration** (drizzle-kit emits ENABLE, not FORCE — FORCE is load-bearing; see AGENTS.md §10a)
 - [ ] Routes under `app/(app)/$ARGUMENTS/`
 - [ ] Integration test `tests/integration/$ARGUMENTS.test.ts`
 - [ ] `tests/e2e/helpers/reset-db.ts` `TABLES_TO_TRUNCATE` includes the new table(s)
 - [ ] `app/api/jobs/cron/purge-deleted/route.ts` purges the new table if it has soft-delete columns
-- [ ] `pnpm verify --tier=2` passes
+- [ ] `pnpm verify --tier=2` passes (includes `check-rls-force` which will fail if FORCE was forgotten)

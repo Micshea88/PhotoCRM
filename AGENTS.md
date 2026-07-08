@@ -92,11 +92,29 @@ The fastest, safest path is to copy `src/modules/items/` and rename:
 4. **If the new module has soft-delete columns, add it to the per-module lists:**
    - `tests/e2e/helpers/reset-db.ts` → append the table to `TABLES_TO_TRUNCATE`
    - `app/api/jobs/cron/purge-deleted/route.ts` → add a delete loop modeled on the existing `items` / `files` blocks
-5. Run `pnpm db:generate`. Review the generated SQL in `src/db/migrations/`.
-6. Run `pnpm db:migrate` to apply locally.
-7. Add routes under `app/(app)/<your-feature>/`.
-8. Add an integration test at `tests/integration/<your-feature>.test.ts`.
-9. Run `pnpm verify --tier=2`. Fix anything red.
+5. **Declare RLS (MANDATORY — the CI guard will fail if you skip this):**
+
+   The new schema must carry the org-isolation RLS policy and FORCE. Confirm `items/schema.ts` is your copy source — it already has both. If for any reason they're missing, add:
+
+   ```ts
+   pgPolicy("<name>_org_isolation", {
+     as: "permissive",
+     for: "all",
+     using: sql`organization_id = current_setting('app.current_org', true)`,
+     withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+   }),
+   ```
+
+   and `.enableRLS()` on the table.
+
+6. Run `pnpm db:generate`. Review the generated SQL in `src/db/migrations/`.
+
+   **Hand-append** `ALTER TABLE "<name>" FORCE ROW LEVEL SECURITY;` to the new `.sql` file (per AGENTS.md §10a). Drizzle-kit emits `ENABLE` but not `FORCE`; without `FORCE` the BYPASSRLS owner role (neondb_owner in prod) silently bypasses RLS — the same bug class that caused the K&K / Shanzy contacts leak. The `scripts/check-rls-force.mjs` guard (run by `pnpm verify --tier=1`) fails the build if this is missing.
+
+7. Run `pnpm db:migrate` to apply locally.
+8. Add routes under `app/(app)/<your-feature>/`.
+9. Add an integration test at `tests/integration/<your-feature>.test.ts`.
+10. Run `pnpm verify --tier=2`. Fix anything red.
 
 The `/new-module <name>` slash command (defined in `.claude/commands/new-module.md`) walks through the same steps. The `add-module` skill (`.claude/skills/add-module/SKILL.md`) is the canonical source — the slash command delegates to it.
 

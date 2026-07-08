@@ -118,4 +118,26 @@ Research-backed (HoneyBook pain point).
 
 ---
 
+## F5 — AI feature build requirements (LOCKED — bake in from the start)
+
+From the adversarial architecture review. These are **not optional polish** — they are required properties of ANY AI feature (AI-imported workflows, workflow drafts, upsell, summaries). Governed by the LOCKED laws in `AGENTS.md` → Standing design laws (esp. LAW 3 AI-is-a-tool, LAW 4 no-cross-tenant, LAW 5 plain-English). Ties to the AI stack vision in `docs/pm-lifecycle-vision-and-events-prep.md` §10.
+
+1. **Plain-language, verifiable reconstruction.** AI-imported workflows present their reconstruction in plain English the user verifies — e.g. _"When a client does NOT fill the form in 7 days → send reminder. Is that right?"_ — and **EXPLICITLY flag negative/inverted conditionals** ("does NOT", "unless", "except") for user confirmation before saving. (LAW 5.)
+2. **Test / dry-run before live.** ALL workflows (AI-imported OR hand-built) support a **test/dry-run on fake data** before deploying to the live environment. **Mandatory** for AI-imported workflows. (Companion to the seed-then-validate discipline of LAW 2.)
+3. **Validation layer (never trust AI output into the DB).** AI-generated config is **validated against the real schema** (valid user_ids, foreign keys, entity references) BEFORE it is saved or rendered. Unresolved entities (e.g. an assignee name that isn't yet a team member) are **surfaced for the user to map** — _"We found 'John' — which team member is this, or create them?"_ — never written as a raw string that can crash the UI.
+4. **AI-output normalization (harden the model boundary).** The provider-agnostic AI layer **normalizes/sanitizes every model response** — strip markdown fences, coerce key casing to schema, validate against schema, repair-retry loop — and uses **structured-output / JSON mode** where supported, so swapping models never breaks parsing. (Ties to the provider-agnostic, task-typed-routing AI stack, §10.3.)
+5. **AI cost control by ATTEMPTS, not saved count.** Meter AI by **generation attempts / compute**, not final saved-workflow count (count-based limits are gameable via delete-and-retry). Rate-limit generation attempts, **cache/reuse parses of identical uploads**, cap retries. Fold into the pre-launch AI cost model (§10.4).
+
+**Cross-tenant safeguard (LAW 4, restated for AI):** none of the above may read, embed, cache, or condition on another tenant's data. Validation is against the CURRENT tenant's schema/entities only.
+
+## F6 — Dedicated client-presentation view (persona-law companion)
+
+**What:** a **dedicated client-facing view** (first use case: the **day-of timeline** for live consultations) that **by design contains only client-safe data** — nothing internal is wired into it, so nothing internal can leak. Within the view, the user **opts fields IN via toggles** (show price, show 2nd shooter, show event details, …).
+
+**Why this shape (not a toggle on an internal screen):** satisfies **LAW 1 persona separation** (no internal screen is ever exposed to a client) AND the live-consultation use case. **Opt-in, not opt-out** — so unintended internal data can _never_ be shown (the failure mode of an opt-out toggle is one missed switch = a leak).
+
+**Ties:** persona-separation law (`AGENTS.md`); pairs with the client-facing lifecycle views mapped in `docs/pm-lifecycle-vision-and-events-prep.md` §5 (which also require cross-client data isolation from day one). **Module:** Events / Scheduling + a client-view layer.
+
+---
+
 _Roadmap only — not scheduled. When one is picked up, run it through the standing research → synthesize → complaint-scope → options → approval path before building._

@@ -44,6 +44,31 @@ Required patterns, applied AT BUILD TIME (not retrofitted later):
 
 This is a **"build it right" discipline, not a gamble**: the patterns are standard and well-understood; the failure mode is _neglecting_ them, not that they're hard. The seeded-production test is the PROOF, not a substitute for building it right.
 
+### LAW 3 — AI is a tool, not the owner
+
+**AI SURFACES; the human ACTS.** AI in Pathway surfaces suggestions, gaps, and opportunities for the human to act on. It **NEVER takes client-facing or business action on its own** — never auto-contacts a client, never auto-sends, never completes a suggested action, never invents or does anything it wasn't explicitly asked to do.
+
+- Anything AI surfaces (upsell opportunities, workflow drafts, insights) requires **explicit human approval before it does anything**.
+- The human is **always the gate** on anything client-facing and the **source of truth** on all approvals.
+- Why: this defuses the catastrophic failure mode of an automated upsell firing at a client in a sensitive situation — the photographer, who knows the human context, always decides.
+
+### LAW 4 — Tenant data is NEVER cross-referenced (CRITICAL — enforce like RLS)
+
+**A studio's data is ITS data.** It is never leaked, shared, pooled, or cross-referenced to any other company/studio in the system — for AI training, upsell suggestions, market insights, or ANY purpose. **AI learns ONLY from the individual tenant's own data.** No cross-tenant intelligence, no aggregated-market suggestions derived from other tenants' data, ever.
+
+- Build it exactly this way and safeguard against any possible error. A cross-tenant data leak would end Pathway and invite major lawsuits.
+- **Enforce with the same rigor as the multi-tenant RLS isolation** (Hard rules §4/§10a; `docs/multi-tenant-remediation-plan.md`). Any AI feature that reads data to inform a suggestion must be provably scoped to the single tenant — no query, embedding store, cache, or model context may span tenants.
+
+### LAW 5 — Plain-English UI
+
+**Pathway is built by an everyday human for everyday humans** (non-technical event professionals) — NOT for developers, computers, or other AI. ALL UI language — labels, instructions, prompts, questions, AI-generated summaries of workflows — must be **simple, plain English a moderate English speaker easily understands.** No tech-speak, no code, no jargon.
+
+- Action item (pre-build research): benchmark the reading level of prompts/UI copy in leading CRMs and adopt a similarly accessible level.
+
+### Persona-law companion — client-presentation views are DEDICATED, opt-in
+
+To satisfy LAW 1 (persona separation) for live-consultation / client-facing display use cases, do NOT add a "hide internal data" toggle to an internal screen. Instead build a **dedicated client-facing view** (e.g. the day-of timeline) that **by design contains only client-safe data — nothing internal is wired into it, so nothing internal can leak.** Within that view, the user opts fields IN via toggles (show price, show 2nd shooter, show event details…). **Opt-in, not opt-out**, so unintended data can never be shown. (Feature detail: `docs/features-backlog.md`.)
+
 (Design-doc statement + wireframe checklist: `docs/pathway-design-system.md`.)
 
 ## Build-planning audits — STANDING PROCESS (every audit)

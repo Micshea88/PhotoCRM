@@ -67,6 +67,26 @@ wireframe/UI checklist:
   production, validating the views stay fast at that scale, then
   removing the seed** — not a substitute for building it right.
 
+- **LAW 3 — AI is a tool, not the owner.** AI SURFACES suggestions;
+  the HUMAN acts. No AI auto-contacts a client, auto-sends, or completes
+  an action on its own — everything AI surfaces needs explicit human
+  approval. The human is always the gate on client-facing action.
+
+- **LAW 4 — Tenant data is NEVER cross-referenced (CRITICAL).** A
+  studio's data is its own. Never pooled, shared, or cross-referenced to
+  another tenant for AI training, upsell, market insight, or any purpose.
+  AI learns only from the individual tenant's own data. Enforce like RLS.
+
+- **LAW 5 — Plain-English UI.** All UI copy — labels, prompts,
+  questions, AI summaries — is simple plain English for a non-technical
+  event professional. No tech-speak, code, or jargon.
+
+- **Persona-law companion — client-presentation views are dedicated +
+  opt-in.** For client-facing display (e.g. day-of timeline), build a
+  DEDICATED client-safe view (nothing internal wired in) and let the user
+  opt fields IN via toggles — never an opt-out "hide internal" toggle on
+  an internal screen.
+
 ---
 
 ## 1. Inline edit + autosave UX contract

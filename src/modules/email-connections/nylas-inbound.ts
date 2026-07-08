@@ -224,6 +224,12 @@ export async function handleGrantExpired(
   }
 
   await dbHandle.transaction(async (tx) => {
+    // Drop into the NOBYPASSRLS app role FIRST (before any GUC) so FORCE RLS
+    // genuinely enforces on this system-context write — mirroring
+    // processInboundEmail (src/modules/email-log/inbound.ts:260-262). Tables
+    // touched (email_connections UPDATE, member_role SELECT) are org-scoped;
+    // emitNotificationInTx sets app.current_user_id per-recipient.
+    await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
     // Set org GUC first so every subsequent write satisfies FORCE RLS.
     await tx.execute(sql`SELECT set_config('app.current_org', ${conn.organizationId}, true)`)
 

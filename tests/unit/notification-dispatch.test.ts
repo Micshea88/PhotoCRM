@@ -494,11 +494,15 @@ describe("emitNotification (public wrapper)", () => {
     // 2. tx.execute must have been called at least once (the GUC set_config calls).
     expect(mockTx.execute).toHaveBeenCalled()
 
-    // 3. The FIRST execute SQL argument must reference set_config + organizationId
-    //    (app.current_org must be set before any per-recipient calls).
+    // 3. The FIRST execute must be the role switch into the NOBYPASSRLS app
+    //    role (before any GUC), so FORCE RLS enforces on this system write.
     const firstSql = JSON.stringify(capturedSqlArgs[0])
-    expect(firstSql).toContain("set_config")
-    expect(firstSql).toContain(orgId)
+    expect(firstSql).toContain("SET LOCAL ROLE app_authenticated")
+
+    // 3b. The SECOND execute must set the org GUC before any per-recipient calls.
+    const secondSql = JSON.stringify(capturedSqlArgs[1])
+    expect(secondSql).toContain("set_config")
+    expect(secondSql).toContain(orgId)
 
     // 4. Delegation: emitNotificationInTx issues an insert → confirm it ran.
     expect(mockTx.insert).toHaveBeenCalled()

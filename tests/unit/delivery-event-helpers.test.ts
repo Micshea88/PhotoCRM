@@ -225,10 +225,16 @@ describe("recordDeliveryEvent (public wrapper)", () => {
     // 1. A transaction must have been opened.
     expect(mockTransaction).toHaveBeenCalledOnce()
 
-    // 2. tx.execute must have been called exactly once (the GUC set_config call).
-    expect(mockTx.execute).toHaveBeenCalledOnce()
+    // 2. tx.execute must have been called twice: the role switch FIRST, then
+    //    the org GUC set_config. The role switch makes FORCE RLS enforce on
+    //    this NOBYPASSRLS-owner write path (mirrors processInboundEmail).
+    expect(mockTx.execute).toHaveBeenCalledTimes(2)
 
-    // 3. The SQL argument must reference set_config and embed the organizationId.
+    // 3a. The FIRST execute must be the role switch (before any GUC).
+    const firstSerialized = JSON.stringify(mockTx.execute.mock.calls[0]?.[0])
+    expect(firstSerialized).toContain("SET LOCAL ROLE app_authenticated")
+
+    // 3b. The SECOND execute must reference set_config and embed the org id.
     //    drizzle's sql`` template produces an SQL object whose queryChunks contain
     //    the literal text and the interpolated param. JSON.stringify makes both
     //    accessible for a straightforward assertion.
@@ -278,8 +284,11 @@ describe("recordDeliveryEvent (public wrapper)", () => {
       occurredAt: new Date("2026-07-04T10:00:00Z"),
     })
 
-    // GUC was still set even on the dedup path.
-    expect(mockTx.execute).toHaveBeenCalledOnce()
+    // Role switch + org GUC were still set even on the dedup path.
+    expect(mockTx.execute).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(mockTx.execute.mock.calls[0]?.[0])).toContain(
+      "SET LOCAL ROLE app_authenticated",
+    )
     // Core writer returned { recorded: false } and the wrapper passes it through.
     expect(result).toEqual({ recorded: false })
   })

@@ -65,8 +65,15 @@ export interface EmitNotificationInput {
  */
 export async function emitNotification(input: EmitNotificationInput): Promise<{ created: number }> {
   return db.transaction(async (tx) => {
-    // Mirror src/modules/email-delivery/ingest.ts — set org GUC FIRST so every
-    // subsequent write satisfies FORCE RLS without a session.
+    // Drop into the NOBYPASSRLS app role FIRST (before any GUC) so FORCE RLS
+    // genuinely enforces on this system-context write — mirroring
+    // processInboundEmail (src/modules/email-log/inbound.ts:260-262). Without
+    // the role switch the BYPASSRLS owner silently skips RLS in prod.
+    await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
+    // Set org GUC so every subsequent write satisfies FORCE RLS. The
+    // notifications INSERT policy is org-only; the notifications UPDATE,
+    // notification_preferences and user_preferences policies additionally key
+    // off app.current_user_id, which emitNotificationInTx sets per-recipient.
     await tx.execute(sql`SELECT set_config('app.current_org', ${input.organizationId}, true)`)
     return emitNotificationInTx(tx, input)
   })

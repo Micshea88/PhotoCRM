@@ -23,10 +23,13 @@ type DbHandle = NodePgDatabase<typeof schema>
  *   ActionError so the executor can record `deferred` status — never
  *   silently no-op.
  *
- * The executor calls these from system context: app.current_org is
- * already set to workflow.organizationId, app.current_role='admin' so
- * the underlying writes pass RLS WITH CHECK. Audit rows are written
- * with `actorUserId: null` (system actor).
+ * The executor calls these from system context under the NOBYPASSRLS
+ * app_authenticated role: app.current_org is set to workflow.organizationId,
+ * app.current_role='admin', and app.current_view_all_events='true' (the
+ * contacts/projects/tasks overlay keys write access off view_all_events, not
+ * the role string) so the underlying writes pass RLS WITH CHECK. Each update
+ * ALSO carries an explicit organizationId filter as defense-in-depth. Audit
+ * rows are written with `actorUserId: null` (system actor).
  */
 
 export interface DispatchContext {
@@ -210,16 +213,33 @@ async function handleUpdateField(
   }
   switch (resourceType) {
     case "contact":
-      await ctx.db.update(contacts).set(fields).where(eq(contacts.id, resourceId))
+      await ctx.db
+        .update(contacts)
+        .set(fields)
+        .where(and(eq(contacts.id, resourceId), eq(contacts.organizationId, ctx.organizationId)))
       break
     case "project":
-      await ctx.db.update(projects).set(fields).where(eq(projects.id, resourceId))
+      await ctx.db
+        .update(projects)
+        .set(fields)
+        .where(and(eq(projects.id, resourceId), eq(projects.organizationId, ctx.organizationId)))
       break
     case "opportunity":
-      await ctx.db.update(opportunities).set(fields).where(eq(opportunities.id, resourceId))
+      await ctx.db
+        .update(opportunities)
+        .set(fields)
+        .where(
+          and(
+            eq(opportunities.id, resourceId),
+            eq(opportunities.organizationId, ctx.organizationId),
+          ),
+        )
       break
     case "task":
-      await ctx.db.update(tasks).set(fields).where(eq(tasks.id, resourceId))
+      await ctx.db
+        .update(tasks)
+        .set(fields)
+        .where(and(eq(tasks.id, resourceId), eq(tasks.organizationId, ctx.organizationId)))
       break
     default:
       throw new ActionError("VALIDATION", `Unknown resourceType: ${resourceType}`)
@@ -250,7 +270,12 @@ async function handleChangePipelineStage(
   await ctx.db
     .update(opportunities)
     .set({ stageId: targetStageId, stageChangedAt: new Date() })
-    .where(eq(opportunities.id, opportunityId))
+    .where(
+      and(
+        eq(opportunities.id, opportunityId),
+        eq(opportunities.organizationId, ctx.organizationId),
+      ),
+    )
   await audit(
     { db: ctx.db, organizationId: ctx.organizationId, actorUserId: null },
     "workflows.action.change_pipeline_stage",
@@ -279,14 +304,14 @@ async function handleTag(
       .set({
         tags: sql`array(SELECT DISTINCT unnest(coalesce(${contacts.tags}, ARRAY[]::text[]) || ${[tag]}::text[]))`,
       })
-      .where(eq(contacts.id, contactId))
+      .where(and(eq(contacts.id, contactId), eq(contacts.organizationId, ctx.organizationId)))
   } else {
     await ctx.db
       .update(contacts)
       .set({
         tags: sql`array_remove(${contacts.tags}, ${tag})`,
       })
-      .where(eq(contacts.id, contactId))
+      .where(and(eq(contacts.id, contactId), eq(contacts.organizationId, ctx.organizationId)))
   }
   await audit(
     { db: ctx.db, organizationId: ctx.organizationId, actorUserId: null },
@@ -310,13 +335,21 @@ async function handleAssignOwner(
   }
   switch (resourceType) {
     case "contact":
-      await ctx.db.update(contacts).set({ ownerUserId }).where(eq(contacts.id, resourceId))
+      await ctx.db
+        .update(contacts)
+        .set({ ownerUserId })
+        .where(and(eq(contacts.id, resourceId), eq(contacts.organizationId, ctx.organizationId)))
       break
     case "opportunity":
       await ctx.db
         .update(opportunities)
         .set({ ownerUserId })
-        .where(eq(opportunities.id, resourceId))
+        .where(
+          and(
+            eq(opportunities.id, resourceId),
+            eq(opportunities.organizationId, ctx.organizationId),
+          ),
+        )
       break
     case "project":
       // Projects don't have an owner_user_id column; use referredByContactId
@@ -352,7 +385,12 @@ async function handleMarkWonLost(
       stageChangedAt: new Date(),
       lostReason: outcome === "lost" ? lostReason : null,
     })
-    .where(eq(opportunities.id, opportunityId))
+    .where(
+      and(
+        eq(opportunities.id, opportunityId),
+        eq(opportunities.organizationId, ctx.organizationId),
+      ),
+    )
   await audit(
     { db: ctx.db, organizationId: ctx.organizationId, actorUserId: null },
     `workflows.action.mark_${outcome}`,

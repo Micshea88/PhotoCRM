@@ -247,8 +247,13 @@ export async function recordDeliveryEvent(
   input: DeliveryEventInput,
 ): Promise<{ recorded: boolean }> {
   return db.transaction(async (tx) => {
-    // Mirror src/modules/email-log/inbound.ts:238–270 — set org GUC first so
-    // every subsequent write satisfies FORCE RLS without a session.
+    // Drop into the NOBYPASSRLS app role FIRST (before any GUC) so FORCE RLS
+    // genuinely enforces on this system-context write — mirroring
+    // processInboundEmail (src/modules/email-log/inbound.ts:260-262). All
+    // tables touched here (email_delivery_events, email_log, member_role SELECT)
+    // are org-scoped; emitNotificationInTx sets app.current_user_id per-recipient.
+    await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
+    // Set org GUC so every subsequent write satisfies FORCE RLS.
     await tx.execute(sql`SELECT set_config('app.current_org', ${input.organizationId}, true)`)
     return recordDeliveryEventInTx(tx, input)
   })

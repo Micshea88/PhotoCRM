@@ -61,8 +61,18 @@ export async function GET(request: Request) {
 
       // Open a tx with the org's RLS context, then execute.
       await db.transaction(async (tx) => {
+        // Drop into the NOBYPASSRLS app role FIRST (before any GUC) so FORCE RLS
+        // genuinely enforces on this system-context write — mirroring
+        // processInboundEmail (src/modules/email-log/inbound.ts:260-262).
+        // Without the role switch the BYPASSRLS owner silently skips RLS in prod.
+        await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
         await tx.execute(sql`SELECT set_config('app.current_org', ${exec.organizationId}, true)`)
         await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
+        // System context sees every event: the contacts/projects/tasks RLS
+        // overlay (migration 0047) keys write access off app.current_view_all_events,
+        // NOT app.current_role — so update_field / create_task steps need this
+        // set to 'true' or they affect 0 rows once RLS is active.
+        await tx.execute(sql`SELECT set_config('app.current_view_all_events', 'true', true)`)
         const result = await executeWorkflow(tx, exec.id)
         processed += 1
         if (result.status === "succeeded") succeeded += 1

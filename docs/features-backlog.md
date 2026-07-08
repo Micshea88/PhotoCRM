@@ -145,4 +145,31 @@ From the adversarial architecture review. These are **not optional polish** — 
 
 ---
 
+## F7 — User-created sub-project type templates (self-serve workflow building)
+
+Extends the shipped sub-project templates: users build and save their OWN reusable sub-project types — **no developer needed** (per the opinionated-defaults + simple-customization law, `docs/pm-lifecycle-vision-and-events-prep.md` §2).
+
+**Flow:**
+
+- User creates a sub-project, defines its typical **tasks + dependencies**, and **SAVES it as a reusable project-type template.**
+- When starting/adding to a project, the user picks a sub-project type from a **templated menu** → it drops in showing the **sub-project name with its standard tasks listed underneath.**
+- **Per-instance editing (does NOT alter the saved template):** a **(−)** control next to each task removes it for THIS instance; a **(+)** at the bottom adds a one-off task for this instance.
+- **Dependency wiring in plain language, as they build:** when adding a task, prompt inline — _"Does this task have dependencies, or is it the end of the chain for this sub-project?"_ (LAW 5 plain-English).
+
+**Architecture tie:** generates into the **SAME task-tree / workflow schema** as the shipped templates AND the AI-import feature — the shared generation target (`docs/pm-lifecycle-vision-and-events-prep.md` §10.3; the schema Events/P6 must build to). **Relabelable per vertical** (verbiage-agnostic underbelly). **Module:** Events / PM + the task-tree/template system.
+
+## F8 — Soft-gate override confirmation (replaces the mandatory note)
+
+When a user overrides a soft-gate / marks a blocked task done early, do NOT force a required note (too much friction — softens the §2 soft-gate rule that currently prompts for a reason). Instead:
+
+- Show **"Was this task completed?"** with **Yes / No.**
+- **Yes** → mark done, no further input.
+- **No** → a free-text reasoning box **OPENS but is OPTIONAL** — the user can save "No" with no reasoning.
+- **ADMIN / ORG SETTING:** whether reasoning is **REQUIRED on a "No"** is controlled at the admin level **per org**, so each studio sets its own data-capture rules (some want an audit trail, some want speed).
+- **Scope note:** acceptable to ship the required-reasoning admin toggle as a **later add-on** if it's scope creep in v1 — but the **Yes/No + optional-free-text behavior is the baseline** (must be in the first version).
+
+**Module:** Events / PM soft-gate + override framework (`docs/pm-lifecycle-vision-and-events-prep.md` §2); admin toggle → org settings.
+
+---
+
 _Roadmap only — not scheduled. When one is picked up, run it through the standing research → synthesize → complaint-scope → options → approval path before building._

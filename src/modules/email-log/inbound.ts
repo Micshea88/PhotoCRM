@@ -26,7 +26,10 @@ import { memberRole } from "@/modules/rbac/schema"
  *    message starts a new thread rooted at its own Message-ID.
  *  - Dedup: re-delivered webhooks are skipped (existing external_id check +
  *    the (org, source, external_id) unique index backstop).
- *  - Single-tenant V1: the org is the sender contact's org.
+ *  - Org routing (T2.2): the receiving org is resolved authoritatively —
+ *    caller-supplied org (Nylas connected mailbox) → reply ref-match against
+ *    the sent message's org → else fail-closed on an ambiguous cold sender.
+ *    (Superseded the old "sender contact's org, most-recent across all orgs".)
  *
  * RLS writes follow the server-to-server pattern (SET LOCAL ROLE + GUCs), since
  * the webhook has no session.
@@ -192,7 +195,16 @@ async function findEmailLogOrgByExternalIdsAnyOrg(refIds: string[]): Promise<str
   const [row] = await db
     .select({ organizationId: emailLog.organizationId })
     .from(emailLog)
-    .where(and(inArray(emailLog.externalId, refIds), isNull(emailLog.deletedAt)))
+    // Match only OUTBOUND messages: a reply's org is the org that SENT the
+    // message being replied to. An inbound row's own Message-ID must not
+    // resolve the org (2B review — semantic precision + defense-in-depth).
+    .where(
+      and(
+        inArray(emailLog.externalId, refIds),
+        eq(emailLog.direction, "outbound"),
+        isNull(emailLog.deletedAt),
+      ),
+    )
     .limit(1)
   return row?.organizationId ?? null
 }

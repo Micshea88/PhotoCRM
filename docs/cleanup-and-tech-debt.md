@@ -161,6 +161,12 @@ Full detail + fixes + effort + tests: **`docs/multi-tenant-remediation-plan.md`*
 - **Surfaced by:** the 2C+2D review (T2.6). The specific pixel-route violation is already FIXED (moved into `email-log/pixel-tracking.ts`); this item is the underlying lint-coverage gap.
 - **Severity:** internal (defense-in-depth guard gap; no known live isolation leak). **Status:** Open (follow-up).
 
+### A.19 — `member_role` RLS declared in SQL (migration 0006), not in the TS schema
+
+- **What's wrong:** `member_role` has correct FORCE RLS + policies (migration `0006`, org-only SELECT + admin-write), but `src/modules/rbac/schema.ts` has no `.enableRLS()`/`pgPolicy` declaration — the RLS is SQL-only (older pattern). `check-rls-force` passes (it parses migrations) and `db:check` is green, so there's no drift today, but the TS schema doesn't reflect the table's RLS. Pre-existing (predates the isolation branch).
+- **Fix (someday, low priority):** add the `pgPolicy` + `.enableRLS()` declarations to `rbac/schema.ts` to match the SQL, bringing it into the TS-tracked pattern (like the Tier-1 tables). Snapshot-neutral if the SQL already matches.
+- **Severity:** internal (cosmetic schema/SQL drift; enforcement is correct + tested). **Status:** Open (follow-up). Surfaced by the final whole-branch review (2026-07-08).
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

@@ -10,6 +10,16 @@
 
 ---
 
+## FINAL WHOLE-BRANCH REVIEW — ✅ READY-WITH-NITS → MERGE (2026-07-08)
+
+Opus review over the entire combined branch (notification build + Tier 1 + Tier 2). **No Critical, no must-fix-before-merge.** Verdicts:
+
+- **A↔B interaction SAFE** — every system-write path (emitNotification / recordDeliveryEvent / handleGrantExpired / workflow-execute) sets all required GUCs in correct order after `SET LOCAL ROLE app_authenticated`; the critical `member_role` SELECT is org-only so recipient resolution never zeroes out; proven by unmocked real-Postgres tests (delivery-notification-wiring asserts real rows; grant-expired `result===1` is proof). No notification-flow regression.
+- **Isolation: NO org-A-reaches-org-B path.** 50 tables FORCE (check-rls-force exit 0); public paths token-scoped; fail-opens closed; routing authoritative; listIncompleteSignups scoped.
+- **Migrations 0055-0063 additive; 0063 journaling defect confirmed fixed.**
+- **All logged Minors triaged SAFE-TO-DEFER.** Two ⚠️ = the standing deploy gates (#0 prod BYPASSRLS confirm; Nylas/Resend live payload shapes) in `pending-integration-setup.md`.
+- Observation (not a blocker, pre-existing): `member_role` RLS is declared in SQL (0006) not TS schema → see cleanup A.19. Merge-ready regardless.
+
 ## TIER 1 — ✅ COMPLETE + REVIEWED (2026-07-07)
 
 Commits `8e5c3c9`→`5d339b5` on `fix/multi-tenant-isolation`. All 5 items done; review found a Critical (redirect loop in the T1.4 fix) + Important (guard coverage) + Minor — ALL fixed (`092b4a9`/`c1cbb25`/`5d339b5`) and re-verified. `check-rls-force` now confirms **all 50 org-bearing tables have FORCE RLS**. tier-2 green (1199 tests). Awaiting Mike's Tier-1 sign-off before Tier 2.

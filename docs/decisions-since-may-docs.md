@@ -294,6 +294,28 @@ New PIVOTS_LEDGER entries: RC transcript → user notes (06-14); disposition 6+7
 
 18.6 **[Feature — tracked in `docs/features-backlog.md` F7]** User-created sub-project type templates (self-serve workflow building): users build/save/edit their own reusable sub-project types (tasks + dependencies), reusable across projects, generating into the SAME task-tree/workflow schema as the shipped templates + AI-import (shared generation target, `pm-lifecycle-vision-and-events-prep.md` §10.3). Relabelable per vertical.
 
+### 18.7–18.11 — Events / Tasks / Pipeline / Calendar navigation + screen homes (07-08)
+
+**Reconciles with the existing V1 wireframe — does NOT rebuild or change it.** Sidebar nav stays as-is: **Dashboard / Contacts / Events / Pipeline / Tasks / Settings.** Wireframe Screen 08 (Team This Week), Screen 09 (Calendar), Screen 07 (per-event tasks) stand. This section only clarifies which job lives on which screen.
+
+18.7 **[LOCKED 07-08] Per-event Tasks/PM screen — PER-EVENT ONLY.** Each event has its OWN dedicated Tasks/PM screen = that event's task tree + dependencies + Gantt + soft-gates (the deep-work surface for ONE event). It is **strictly per-event / per-project — it NEVER shows all-events tasks** (that job is Calendar, 18.8). It does **NOT** get its own left-sidebar tab (no sidebar change). Reached by drilling IN:
+
+- (a) **Pipeline Kanban board → DOUBLE-CLICK a card** opens that event's Tasks/PM screen. Single-click/drag is reserved for moving a card between stages, so opening the detail MUST be double-click, not single-click.
+- (b) **Events tab → opening an event** (whose task list is created when the event is booked) opens that event's full Tasks/PM screen.
+  (Note: this is distinct from the sidebar **Tasks** tab — the dedicated /tasks list page, memory #11 — which stays as-is; the per-event Tasks/PM deep screen is a drill-in, not that list.)
+
+18.8 **[LOCKED 07-08] Calendar = the all-events upcoming / workload view (CONFIRMS + extends Screen 09).** Upcoming tasks/deliverables ACROSS ALL booked events live here — NOT in Tasks/PM. Views: **Day / Week / Month / Agenda** (already in Screen 09) PLUS **custom date range** (new), quickly switchable. **CAPACITY-PLANNING behavior:** heavy/crunch days stand out visually — a day cell surfaces its LOAD (e.g. "Jun 23 — 2 weddings shooting + 3 galleries due; day before has 2 culls; day after owes sneaks for 2 weddings"), so the user spots collisions before they hit and can plan (move a delivery, add a 2nd shooter, warn a client). Highlight daily LOAD, don't just list tasks. **Ties to Gantt/date-cascade (§18.2):** moving an overloaded day's delivery reschedules dependents.
+
+18.9 **[LOCKED 07-08] Team This Week = people / assignment view (CONFIRMS Screen 08, unchanged).** Assigning people to tasks and seeing who's doing what lives here — NOT in Tasks/PM, NOT in Calendar. Per-person workload.
+
+18.10 **[LOCKED 07-08 — Law 5 clarity: three distinct homes, no overlap]**
+
+- **Tasks/PM** = deep work on ONE event (per-event only).
+- **Calendar** = all-events time/workload view with crunch-day highlighting.
+- **Team This Week** = people / assignment.
+
+18.11 **[SUPERSEDES]** This supersedes the earlier working idea of an "all-events workload view inside the Tasks section" — that job belongs to **Calendar** (18.8) per the wireframe.
+
 ---
 
 **End of inventory.**

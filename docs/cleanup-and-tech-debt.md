@@ -154,6 +154,13 @@ Full detail + fixes + effort + tests: **`docs/multi-tenant-remediation-plan.md`*
 
 **Reclassifies these former SECTION B "deferred to multi-tenant" items as MUST-FIX** (see plan): multi-tenant email sender (B.10), account linking (B.11) — revisit against the no-deferrals standard.
 
+### A.18 — ESLint "no `@/lib/db` in `app/`" rule likely misses Next.js dynamic-route (`[param]`) handlers
+
+- **What's wrong (suspected):** the AGENTS-rule-1 guard (`eslint.config.mjs:71`, `files: ["app/**/*.ts","app/**/*.tsx"]`) is meant to block `@/lib/db`/`drizzle-orm`/`@/modules/*/schema` imports from `app/`. But `app/api/email/track/[pixelId]/route.ts` imported `@/lib/db` directly from Task 13 until T2.6 (2026-07-08) and **passed CI the whole time** — strong evidence the rule's glob does NOT match paths containing a literal `[param]` segment (ESLint/minimatch treats `[pixelId]` as a glob character class, so the file escapes `files:`). This would let ANY Next.js dynamic-route handler (`app/**/[x]/route.ts`) silently bypass rule 1.
+- **Fix (separate task — do NOT bundle):** verify the hypothesis (add a throwaway `@/lib/db` import to another `[param]` route → does lint catch it?); if confirmed, fix the glob (escape brackets / adjust the flat-config `files` matcher) so dynamic routes are covered. **CAUTION:** closing it may surface OTHER currently-hidden violations across dynamic routes — those must be triaged/fixed as part of the task, which is why it's scoped separately, not folded into Tier 2.
+- **Surfaced by:** the 2C+2D review (T2.6). The specific pixel-route violation is already FIXED (moved into `email-log/pixel-tracking.ts`); this item is the underlying lint-coverage gap.
+- **Severity:** internal (defense-in-depth guard gap; no known live isolation leak). **Status:** Open (follow-up).
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

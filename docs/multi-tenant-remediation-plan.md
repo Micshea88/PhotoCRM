@@ -74,6 +74,17 @@ Has correct user-scoped policies (keyed on `app.current_user_id`) but only `ENAB
 
 ---
 
+## TIER 2 — ✅ COMPLETE + REVIEWED (2026-07-08)
+
+Commits `227a47c`→`e21a8fd` on `fix/multi-tenant-isolation`. All 6 items done + reviewed:
+
+- **2A (T2.1+T2.5):** `SET LOCAL ROLE app_authenticated` added to the 4 system-write txs (emitNotification / recordDeliveryEvent / handleGrantExpired / workflow-execute) → FORCE RLS genuinely enforces (no owner-bypass); workflow updates org-scoped; cross-org write proven denied. Review ✅.
+- **2B (T2.2):** inbound-email routing hijack closed — Nylas lane authoritative (conn.organizationId), reply org resolved by matching In-Reply-To → the SENT message's org, cold-ambiguous FAILS CLOSED (drops). Review ✅ ("hijack closed").
+- **2C (T2.4):** `payment_installments` fail-open closed (dropped `''` from the role IN-list). **Caught + fixed a migration-journaling defect** (0063 wasn't in the drizzle journal → `db:migrate` silently skipped it → would never apply in prod; redone via `generate --custom`). Assignment overlay was already fail-closed via 0047. Review ✅.
+- **2D (T2.3+T2.6):** `listIncompleteSignups` org-scoped via pending invitations (no cross-org signup exposure); email-pixel route moved into `email-log/pixel-tracking.ts` (last `app/` DB escape hatch closed). Review ✅ after restoring the classified-counter unit assertions (review Important).
+- Follow-up logged: **A.18** (ESLint rule likely misses `[param]` dynamic routes — separate task; the specific pixel violation is fixed).
+  tier-2 green throughout (1200 unit + 688 integration + build + db:check); `check-rls-force` = all 50 org tables FORCE.
+
 ## TIER 2 — multi-tenant-activation write/routing holes (fix, do NOT defer)
 
 ### T2.1 — `workflow-execute` → `handleUpdateField` cross-org write — MEDIUM

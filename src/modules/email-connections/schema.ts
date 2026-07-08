@@ -92,12 +92,25 @@ export const emailConnections = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: text("deleted_by").references(() => user.id, { onDelete: "set null" }),
+    /** Timestamp when the Nylas grant expired. Set by the grant.expired webhook
+     *  handler (Task 8). NULL until then. */
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    /** Plain-English cause surfaced by the reconnect banner (Task 19). NULL
+     *  until the grant.expired webhook sets it. */
+    expiredReason: text("expired_reason"),
+    /** SHA-256 hex of the plaintext grant_id. Populated on connect (Task 8);
+     *  NULL for legacy rows until they reconnect or the decrypt-scan fallback
+     *  backfills them. Used as a lookup key by the grant.expired webhook handler
+     *  so we can find the connection without decrypting every row. */
+    grantIdHash: text("grant_id_hash"),
   },
   (t) => [
     // Common read path: "is this user connected in this org?"
     index("email_connections_org_user_idx").on(t.organizationId, t.userId, t.deletedAt),
     // Inbound routing: resolve the receiving mailbox address → connection/org.
     index("email_connections_org_email_idx").on(t.organizationId, t.email, t.deletedAt),
+    // grant.expired lookup: resolve grant_id (hashed) → connection, cross-org.
+    index("email_connections_grant_id_hash_idx").on(t.grantIdHash),
     // One LIVE connection per (org, user, provider). Soft-deleted rows bypass
     // the constraint so disconnect + reconnect is free and keeps history.
     uniqueIndex("email_connections_org_user_provider_live_uidx")

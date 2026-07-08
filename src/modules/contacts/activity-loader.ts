@@ -155,6 +155,16 @@ export async function loadContactActivityWithDb(
         projectId: emailLog.projectId,
         opportunityId: emailLog.opportunityId,
         attachments: emailLog.attachments,
+        // Task 18 — delivery / open fields (threaded through from Tasks 2/4/13).
+        deliveryStatus: emailLog.deliveryStatus,
+        bounceReason: emailLog.bounceReason,
+        bouncedAt: emailLog.bouncedAt,
+        failedAt: emailLog.failedAt,
+        openHumanCount: emailLog.openHumanCount,
+        openBotCount: emailLog.openBotCount,
+        openUnknownCount: emailLog.openUnknownCount,
+        openCount: emailLog.openCount,
+        firstOpenedAt: emailLog.firstOpenedAt,
         actorName: user.name,
         actorEmail: user.email,
       })
@@ -265,6 +275,16 @@ export async function loadContactActivityWithDb(
         opportunityId: m.opportunityId,
         threadId: m.threadId,
         attachments: m.attachments,
+        // Task 18 — delivery / open fields.
+        deliveryStatus: m.deliveryStatus,
+        bounceReason: m.bounceReason,
+        bouncedAt: m.bouncedAt,
+        failedAt: m.failedAt,
+        openHumanCount: m.openHumanCount,
+        openBotCount: m.openBotCount,
+        openUnknownCount: m.openUnknownCount,
+        openCount: m.openCount,
+        firstOpenedAt: m.firstOpenedAt,
       })
     }
 

@@ -7,6 +7,7 @@ import { encrypt } from "@/lib/crypto"
 import { env } from "@/lib/env"
 import { emailConnections } from "./schema"
 import type { NylasGrantResponse } from "./nylas-oauth"
+import { grantIdHash } from "./queries"
 
 type DbHandle = NodePgDatabase<typeof schema>
 
@@ -38,6 +39,7 @@ export async function upsertNylasConnection(
 ): Promise<{ id: string; reactivated: boolean }> {
   const now = args.now ?? new Date()
   const grantCipher = encrypt(args.grant.grant_id, env.NYLAS_ENCRYPTION_KEY)
+  const grantHash = grantIdHash(args.grant.grant_id)
   const sourceValue = args.sourceValue
   const scopes = args.grant.scope ?? ""
 
@@ -63,6 +65,7 @@ export async function upsertNylasConnection(
         sourceValue,
         email: args.grant.email,
         grantId: grantCipher,
+        grantIdHash: grantHash,
         scopes,
         status: "connected",
         deletedAt: null,
@@ -84,6 +87,7 @@ export async function upsertNylasConnection(
     sourceValue,
     email: args.grant.email,
     grantId: grantCipher,
+    grantIdHash: grantHash,
     scopes,
     status: "connected",
     createdAt: now,

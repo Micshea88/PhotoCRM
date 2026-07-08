@@ -162,3 +162,75 @@ describe("payment_installments — financial RLS role gate (Tech Arch §4)", () 
     })
   })
 })
+
+describe("payment_installments — fail-CLOSED role gate (0063 regression: role-unset must be denied)", () => {
+  /**
+   * Before migration 0063, the IN-list contained a trailing '' so that
+   * COALESCE(unset_role, '') = '' would match and PASS the financial gate.
+   * After 0063 the trailing '' is removed: `'' IN ('owner','admin','accountant')`
+   * = FALSE → denied (fail-closed). These tests prove the regression is fixed.
+   *
+   * Each test: seed as owner, then explicitly clear the role to '' before probing.
+   */
+  it("SELECT returns 0 rows when app.current_role is unset (empty string)", async () => {
+    await withRawClient(async (client) => {
+      const a = await seedOrgAndProject(client)
+      // Simulate a role-unset context — COALESCE('',...) = '' which must NOT
+      // match after the fix.
+      await client.query("SELECT set_config('app.current_role', '', true)")
+      const r = await client.query(`SELECT id FROM payment_installments WHERE id = $1`, [
+        a.installmentId,
+      ])
+      expect(r.rows.length).toBe(0)
+    })
+  })
+
+  it("INSERT is blocked when app.current_role is unset", async () => {
+    await withRawClient(async (client) => {
+      const a = await seedOrgAndProject(client)
+      await client.query("SELECT set_config('app.current_role', '', true)")
+      await expect(
+        client.query(
+          `INSERT INTO payment_installments (id, organization_id, project_id, sequence_no, split_method, amount_cents)
+           VALUES ($1, $2, $3, 99, 'pay_in_full', 1)`,
+          [createId(), a.orgId, a.projectId],
+        ),
+      ).rejects.toThrow(/row-level security|policy/i)
+    })
+  })
+
+  it("UPDATE affects 0 rows when app.current_role is unset (USING hides the row)", async () => {
+    await withRawClient(async (client) => {
+      const a = await seedOrgAndProject(client)
+      await client.query("SELECT set_config('app.current_role', '', true)")
+      const upd = await client.query(
+        `UPDATE payment_installments SET amount_cents = 999 WHERE id = $1`,
+        [a.installmentId],
+      )
+      expect(upd.rowCount).toBe(0)
+    })
+  })
+
+  it("DELETE affects 0 rows when app.current_role is unset (USING hides the row)", async () => {
+    await withRawClient(async (client) => {
+      const a = await seedOrgAndProject(client)
+      await client.query("SELECT set_config('app.current_role', '', true)")
+      const del = await client.query(`DELETE FROM payment_installments WHERE id = $1`, [
+        a.installmentId,
+      ])
+      expect(del.rowCount).toBe(0)
+    })
+  })
+
+  it("positive control: owner role with org set still reads the row", async () => {
+    // Ensures the fix didn't break legitimate access.
+    await withRawClient(async (client) => {
+      const a = await seedOrgAndProject(client)
+      // seedOrgAndProject leaves role=owner and org=orgId — no changes needed.
+      const r = await client.query(`SELECT id FROM payment_installments WHERE id = $1`, [
+        a.installmentId,
+      ])
+      expect(r.rows.length).toBe(1)
+    })
+  })
+})

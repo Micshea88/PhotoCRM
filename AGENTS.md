@@ -16,6 +16,67 @@ A Next.js 16 + Postgres + Vercel foundation that Sage will build the Pathway pro
 
 See `docs/pathway-design-system.md` §0 for the design-doc statement of this principle.
 
+## Standing design laws (LOCKED — apply to EVERY future push)
+
+These govern all UI / PM work. Check every relevant task against them, the same way every task is checked against the multi-tenant RLS rules (Hard rules §4/§10a).
+
+### LAW 1 — Persona separation (client-facing vs. internal)
+
+**No single screen serves both the client persona and the internal persona at once. A screen is either client-facing-minimal or internal-dense — never a blend.**
+
+- **Client-facing surfaces** (booking, smart docs, proposals, client portal — anything a CLIENT sees) stay **MINIMAL and linear**: friction-free, only what that client needs for the step they're on.
+- **Internal surfaces** (event tasks, pipeline/kanban, editing board, team workload, dashboards) carry the **DENSITY**.
+- This is the #1 UX failure that kills CRM+PM products: HoneyBook cannibalized the internal side; monday/ClickUp cannibalized the client side. Pathway does not repeat it.
+- **Every UI task is checked:** _which persona is this screen for, and does it stay in its lane?_ If a screen tries to serve both, **split it**. Surface the persona question in build-planning like any hybrid CRM/PM divergence.
+
+### LAW 2 — PM frontend performance (build fast from the start, do NOT retrofit)
+
+**Internal PM surfaces (kanban, task lists, dependency views, team workload, cross-client dashboards) MUST be built for real volume in their FIRST version.** Target: a studio with **40+ active events and several hundred tasks stays fast and responsive.**
+
+Required patterns, applied AT BUILD TIME (not retrofitted later):
+
+- **Optimistic UI** on high-frequency mutations (drag / status change / reorder) — never block the UI on a server round-trip.
+- **List virtualization** for large collections.
+- **Pagination / lazy-load** for large queries.
+- **Proper DB indexing** on the query paths those views hit.
+
+**Validation happens in PRODUCTION** (Mike builds + tests in prod — real data/network/query conditions local testing hides), NOT locally. When PM views ship: **SEED realistic volume into the production environment** (a script generating ~40 active events with full task trees / several hundred tasks), **validate board/list/timeline/workload views stay fast AT THAT VOLUME in production, then REMOVE the seed data.** Everything is fast with 5 records — the point is to prove real scale before external customers exist; fix any lag before deploying to others.
+
+This is a **"build it right" discipline, not a gamble**: the patterns are standard and well-understood; the failure mode is _neglecting_ them, not that they're hard. The seeded-production test is the PROOF, not a substitute for building it right.
+
+### LAW 3 — AI is a tool, not the owner
+
+**AI SURFACES; the human ACTS.** AI in Pathway surfaces suggestions, gaps, and opportunities for the human to act on. It **NEVER takes client-facing or business action on its own** — never auto-contacts a client, never auto-sends, never completes a suggested action, never invents or does anything it wasn't explicitly asked to do.
+
+- Anything AI surfaces (upsell opportunities, workflow drafts, insights) requires **explicit human approval before it does anything**.
+- The human is **always the gate** on anything client-facing and the **source of truth** on all approvals.
+- Why: this defuses the catastrophic failure mode of an automated upsell firing at a client in a sensitive situation — the photographer, who knows the human context, always decides.
+
+### LAW 4 — Tenant data is NEVER cross-referenced (CRITICAL — enforce like RLS)
+
+**A studio's data is ITS data.** It is never leaked, shared, pooled, or cross-referenced to any other company/studio in the system — for AI training, upsell suggestions, market insights, or ANY purpose. **AI learns ONLY from the individual tenant's own data.** No cross-tenant intelligence, no aggregated-market suggestions derived from other tenants' data, ever.
+
+- Build it exactly this way and safeguard against any possible error. A cross-tenant data leak would end Pathway and invite major lawsuits.
+- **Enforce with the same rigor as the multi-tenant RLS isolation** (Hard rules §4/§10a; `docs/multi-tenant-remediation-plan.md`). **Treat a cross-tenant AI leak with the same severity as an RLS breach.** Any AI feature that reads data to inform output must be provably scoped to the single CURRENT tenant **at every layer**.
+- **Concrete AI leak vectors to guard against (all forbidden):**
+  - **NO shared/pooled vector or embedding store across tenants** — embeddings are **per-tenant partitioned**; a retrieval can only ever return the current tenant's vectors.
+  - **NO prompt/response cache that can serve one tenant's content to another** — cache keys are tenant-scoped; a cache hit can never cross tenants.
+  - **NO model fine-tuning or training on pooled cross-tenant data.**
+  - Every layer scoped: query, retrieval, embeddings, cache, model context. If any layer could span tenants, it's a breach.
+- **DECISION (LOCKED): Pathway will NOT build any aggregate / cross-tenant "market insight" or benchmark feature.** Even anonymized/aggregated, the risk of pulling sensitive tenant data and cross-referencing it to another tenant is not worth it. **AI suggestions draw ONLY from the individual tenant's own data** — e.g. _"YOU usually sell albums by day 45,"_ _"YOUR similar events added an engagement session"_ — never _"studios like yours…"_. This is not a limitation; it's plenty useful and carries zero cross-tenant risk. **Do not add an aggregate/cross-tenant data source later without revisiting this law** (explicit owner decision required).
+
+### LAW 5 — Plain-English UI
+
+**Pathway is built by an everyday human for everyday humans** (non-technical event professionals) — NOT for developers, computers, or other AI. ALL UI language — labels, instructions, prompts, questions, AI-generated summaries of workflows — must be **simple, plain English a moderate English speaker easily understands.** No tech-speak, no code, no jargon.
+
+- Action item (pre-build research): benchmark the reading level of prompts/UI copy in leading CRMs and adopt a similarly accessible level.
+
+### Persona-law companion — client-presentation views are DEDICATED, opt-in
+
+To satisfy LAW 1 (persona separation) for live-consultation / client-facing display use cases, do NOT add a "hide internal data" toggle to an internal screen. Instead build a **dedicated client-facing view** (e.g. the day-of timeline) that **by design contains only client-safe data — nothing internal is wired into it, so nothing internal can leak.** Within that view, the user opts fields IN via toggles (show price, show 2nd shooter, show event details…). **Opt-in, not opt-out**, so unintended data can never be shown. (Feature detail: `docs/features-backlog.md`.)
+
+(Design-doc statement + wireframe checklist: `docs/pathway-design-system.md`.)
+
 ## Build-planning audits — STANDING PROCESS (every audit)
 
 Every build-planning / feature audit MUST research and reference best-in-class patterns from BOTH sides, and surface divergences as choices:
@@ -92,11 +153,29 @@ The fastest, safest path is to copy `src/modules/items/` and rename:
 4. **If the new module has soft-delete columns, add it to the per-module lists:**
    - `tests/e2e/helpers/reset-db.ts` → append the table to `TABLES_TO_TRUNCATE`
    - `app/api/jobs/cron/purge-deleted/route.ts` → add a delete loop modeled on the existing `items` / `files` blocks
-5. Run `pnpm db:generate`. Review the generated SQL in `src/db/migrations/`.
-6. Run `pnpm db:migrate` to apply locally.
-7. Add routes under `app/(app)/<your-feature>/`.
-8. Add an integration test at `tests/integration/<your-feature>.test.ts`.
-9. Run `pnpm verify --tier=2`. Fix anything red.
+5. **Declare RLS (MANDATORY — the CI guard will fail if you skip this):**
+
+   The new schema must carry the org-isolation RLS policy and FORCE. Confirm `items/schema.ts` is your copy source — it already has both. If for any reason they're missing, add:
+
+   ```ts
+   pgPolicy("<name>_org_isolation", {
+     as: "permissive",
+     for: "all",
+     using: sql`organization_id = current_setting('app.current_org', true)`,
+     withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+   }),
+   ```
+
+   and `.enableRLS()` on the table.
+
+6. Run `pnpm db:generate`. Review the generated SQL in `src/db/migrations/`.
+
+   **Hand-append** `ALTER TABLE "<name>" FORCE ROW LEVEL SECURITY;` to the new `.sql` file (per AGENTS.md §10a). Drizzle-kit emits `ENABLE` but not `FORCE`; without `FORCE` the BYPASSRLS owner role (neondb_owner in prod) silently bypasses RLS — the same bug class that caused the K&K / Shanzy contacts leak. The `scripts/check-rls-force.mjs` guard (run by `pnpm verify --tier=1`) fails the build if this is missing.
+
+7. Run `pnpm db:migrate` to apply locally.
+8. Add routes under `app/(app)/<your-feature>/`.
+9. Add an integration test at `tests/integration/<your-feature>.test.ts`.
+10. Run `pnpm verify --tier=2`. Fix anything red.
 
 The `/new-module <name>` slash command (defined in `.claude/commands/new-module.md`) walks through the same steps. The `add-module` skill (`.claude/skills/add-module/SKILL.md`) is the canonical source — the slash command delegates to it.
 

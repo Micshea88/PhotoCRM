@@ -117,6 +117,23 @@ describe("hotfix 0041 — runtime role switch enforces org isolation", () => {
     })
   })
 
+  it("orgA context via app_authenticated CANNOT write orgB rows (cross-org write denied — T2.1/2A)", async () => {
+    // The workflow-execute handleUpdateField hijack scenario: a system write path
+    // that now runs under SET LOCAL ROLE app_authenticated (T2A) must have its
+    // cross-org UPDATE blocked by RLS, even when it explicitly targets orgB.
+    await withAppAuthClient(async (client, { orgB }) => {
+      const upd = await client.query(
+        "UPDATE contacts SET first_name = 'hijacked' WHERE organization_id = $1",
+        [orgB],
+      )
+      // The RLS USING clause hides orgB rows from the orgA context → 0 updated.
+      expect(upd.rowCount).toBe(0)
+
+      const del = await client.query("DELETE FROM contacts WHERE organization_id = $1", [orgB])
+      expect(del.rowCount).toBe(0)
+    })
+  })
+
   it("SET LOCAL ROLE app_authenticated without app.current_org returns 0 rows from org-scoped tables", async () => {
     // applyGuc=false — same role switch as the runtime, but the
     // GUC is unset. The RLS policy `organization_id = current_setting(...)`

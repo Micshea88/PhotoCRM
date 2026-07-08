@@ -2,6 +2,10 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react"
 import { setUserPreference } from "@/modules/user-preferences/actions"
+import {
+  ReconnectBanner,
+  type ExpiredConnectionSummary,
+} from "@/modules/email-connections/ui/reconnect-banner"
 import { AppBottomNav } from "./app-bottom-nav"
 import { AppSidebarNav, type AppSidebarItem } from "./app-sidebar-nav"
 
@@ -37,11 +41,15 @@ export function ClientLayoutShell({
   sidebarItems,
   initialCollapsed,
   initialSettingsExpanded,
+  initialExpiredConnections,
   children,
 }: {
   sidebarItems: AppSidebarItem[]
   initialCollapsed: boolean
   initialSettingsExpanded: boolean
+  /** Expired email connections for the current user. Passed from the server
+   *  layout so no client fetch is needed on mount. */
+  initialExpiredConnections: ExpiredConnectionSummary[]
   children: ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed)
@@ -74,7 +82,10 @@ export function ClientLayoutShell({
           initialSettingsExpanded={initialSettingsExpanded}
         />
       </aside>
-      <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">{children}</main>
+      <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">
+        <ReconnectBanner expiredConnections={initialExpiredConnections} />
+        {children}
+      </main>
       <AppBottomNav className="lg:hidden" />
     </div>
   )

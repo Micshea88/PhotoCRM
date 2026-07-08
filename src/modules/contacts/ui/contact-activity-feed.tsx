@@ -136,6 +136,24 @@ export interface ActivityEntry {
         shareLinkToken?: string
       }[]
     | null
+  // Task 18 — delivery-status + open-tracking fields (outbound emails only).
+  // Optional so non-email kinds + inbound rows are unaffected.
+  /** "sent"|"delivered"|"bounced"|"failed"|"complained". Only present for
+   *  email entries; inbound emails default to "sent" but the chip gates on
+   *  `direction === "outbound"` so it never renders for received mail. */
+  deliveryStatus?: string | null
+  /** Human-readable bounce reason (filled by the delivery-event writer). */
+  bounceReason?: string | null
+  /** Timestamp of the first bounce event. */
+  bouncedAt?: Date | null
+  /** Timestamp of the first permanent-failure event. */
+  failedAt?: Date | null
+  /** Classified open counts (Task 13). */
+  openHumanCount?: number | null
+  openBotCount?: number | null
+  openUnknownCount?: number | null
+  openCount?: number | null
+  firstOpenedAt?: Date | null
 }
 
 /**
@@ -175,6 +193,114 @@ export function DispositionBadge({ disposition }: { disposition: string | null |
     >
       {dispositionDisplayLabel(disposition)}
     </span>
+  )
+}
+
+// Task 18 — Delivery-status chip for outbound emails.
+// Palette note: "delivered" uses hardcoded emerald (no --color-success token yet);
+// "bounced"/"failed"/"complained" use red (mirrors --color-destructive palette).
+// These should be migrated to semantic tokens when the theme layer lands.
+type EmailDeliveryStatus = "sent" | "delivered" | "bounced" | "failed" | "complained"
+
+const DELIVERY_CHIP_CLASSES: Record<EmailDeliveryStatus, string> = {
+  sent: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
+  // FLAG: hardcoded emerald — no --color-success token exists yet; migrate when theme layer lands.
+  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  bounced: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  complained: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+}
+
+const DELIVERY_CHIP_LABEL: Record<EmailDeliveryStatus, string> = {
+  sent: "Sent",
+  delivered: "Delivered",
+  bounced: "Bounced",
+  failed: "Failed",
+  complained: "Spam complaint",
+}
+
+function isKnownDeliveryStatus(value: string): value is EmailDeliveryStatus {
+  return value in DELIVERY_CHIP_CLASSES
+}
+
+/**
+ * Small status chip reflecting the outbound email delivery status.
+ * Bounced/failed show the bounceReason in the title (tooltip) when present.
+ * Exported for unit testing.
+ */
+export function DeliveryStatusChip({
+  status,
+  bounceReason,
+}: {
+  status: string | null | undefined
+  bounceReason?: string | null
+}) {
+  if (!status || !isKnownDeliveryStatus(status)) return null
+  const showReason =
+    (status === "bounced" || status === "failed" || status === "complained") && bounceReason
+  return (
+    <span
+      data-testid={`delivery-status-chip-${status}`}
+      title={showReason ? bounceReason : undefined}
+      className={cn(
+        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        DELIVERY_CHIP_CLASSES[status],
+      )}
+    >
+      {DELIVERY_CHIP_LABEL[status]}
+    </span>
+  )
+}
+
+/**
+ * "ⓘ Opens: N" affordance for outbound emails. Clicking expands a
+ * small popout with the human/bot/unknown split + required honesty copy.
+ * Only renders when openCount > 0. Exported for unit testing.
+ */
+export function OpensPopout({
+  openCount,
+  openHumanCount,
+  openBotCount,
+  openUnknownCount,
+}: {
+  openCount?: number | null
+  openHumanCount?: number | null
+  openBotCount?: number | null
+  openUnknownCount?: number | null
+}) {
+  if (!openCount || openCount <= 0) return null
+  return (
+    <Popover
+      align="start"
+      trigger={({ toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          data-testid="opens-popout-trigger"
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+        >
+          ⓘ Opens: {openCount}
+        </button>
+      )}
+    >
+      <div className="max-w-[320px] space-y-2 text-xs" data-testid="opens-popout-content">
+        <p
+          className="flex flex-wrap gap-x-2 gap-y-1 text-[var(--color-foreground)]"
+          data-testid="opens-split"
+        >
+          <span>Likely Human · {openHumanCount ?? 0}</span>
+          <span aria-hidden="true">|</span>
+          <span>Automated Open · {openBotCount ?? 0}</span>
+          <span aria-hidden="true">|</span>
+          <span>Unknown · {openUnknownCount ?? 0}</span>
+        </p>
+        <p className="text-[var(--color-muted-foreground)]" data-testid="opens-honesty-copy">
+          Opens are an estimate. <strong>Automated Open</strong> = opens by bots/mail scanners, not
+          the recipient. Apple Mail hides many real opens as <strong>Unknown</strong> (often the
+          largest bucket). Lean on clicks and replies for true engagement.
+        </p>
+      </div>
+    </Popover>
   )
 }
 
@@ -968,7 +1094,7 @@ function EmailAttachments({
  *      menu. The delete action prompts via the shared ConfirmModal
  *      (Item 1b — replaces window.confirm).
  */
-function ActivityCard({
+export function ActivityCard({
   entry,
   collapsedAll,
   eventOptions,
@@ -1088,6 +1214,19 @@ function ActivityCard({
         <span className="shrink-0">{kindIcon(entry.kind)}</span>
         <h3 className="flex-1 truncate text-sm font-medium">{entryTitleText(entry)}</h3>
         {entry.kind === "call" && <DispositionBadge disposition={entry.callDisposition} />}
+        {/* Task 18 — delivery chip + opens popout for OUTBOUND emails only.
+            Inbound (received/reply) email entries render neither. */}
+        {entry.kind === "email" && entry.direction === "outbound" && (
+          <>
+            <DeliveryStatusChip status={entry.deliveryStatus} bounceReason={entry.bounceReason} />
+            <OpensPopout
+              openCount={entry.openCount}
+              openHumanCount={entry.openHumanCount}
+              openBotCount={entry.openBotCount}
+              openUnknownCount={entry.openUnknownCount}
+            />
+          </>
+        )}
         <time className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
           {timeAgo(entry.timestamp)}
         </time>

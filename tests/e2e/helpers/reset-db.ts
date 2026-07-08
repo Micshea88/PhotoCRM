@@ -10,6 +10,7 @@ import { Pool } from "pg"
 const TABLES_TO_TRUNCATE = [
   "audit_log",
   "call_log",
+  "email_delivery_events",
   "email_log",
   "companies",
   "contact_company_associations",
@@ -44,6 +45,8 @@ const TABLES_TO_TRUNCATE = [
   "workflow_executions",
   "workflow_steps",
   "workflows",
+  "notification_preferences",
+  "notifications",
   "invitation",
   "member",
   "organization",

@@ -1,5 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client"
 import { createId } from "@paralleldrive/cuid2"
+import { sql } from "drizzle-orm"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { blob } from "@/lib/blob"
@@ -112,25 +113,35 @@ export async function POST(request: Request) {
           log.warn({ err, url: uploaded.url }, "blob upload: head() failed — recording size 0")
         }
         const id = createId()
-        await db.insert(files).values({
-          id,
-          organizationId: payload.organizationId,
-          pathname: uploaded.pathname,
-          url: uploaded.url,
-          contentType: uploaded.contentType,
-          sizeBytes,
-          uploadedBy: payload.userId ?? null,
-          // scanStatus defaults to "pending" — resolved by the scan below.
+        // Sessionless callback → the `files` + `audit_log` tables now have FORCE
+        // org-isolation RLS. Run the INSERT + audit in a transaction scoped to the
+        // org from the verified token payload (SET LOCAL ROLE app_authenticated +
+        // app.current_org) so both satisfy their WITH CHECK. The org comes from the
+        // signed token, so this cannot write into another tenant.
+        const orgId = payload.organizationId
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
+          await tx.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)
+          await tx.insert(files).values({
+            id,
+            organizationId: orgId,
+            pathname: uploaded.pathname,
+            url: uploaded.url,
+            contentType: uploaded.contentType,
+            sizeBytes,
+            uploadedBy: payload.userId ?? null,
+            // scanStatus defaults to "pending" — resolved by the scan below.
+          })
+          await audit(
+            {
+              db: tx,
+              organizationId: orgId,
+              actorUserId: payload.userId ?? null,
+            },
+            "files.uploaded",
+            { resourceType: "file", resourceId: id, metadata: { url: uploaded.url } },
+          )
         })
-        await audit(
-          {
-            db,
-            organizationId: payload.organizationId,
-            actorUserId: payload.userId ?? null,
-          },
-          "files.uploaded",
-          { resourceType: "file", resourceId: id, metadata: { url: uploaded.url } },
-        )
         // Malware scan (decision 15) — every upload, before the file is usable.
         // Runs here in the async upload-completed callback; the client polls
         // scanStatus. scanAndResolveFile never throws.

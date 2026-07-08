@@ -1,5 +1,5 @@
 import "server-only"
-import { and, desc, eq, lt, notExists, sql } from "drizzle-orm"
+import { and, desc, eq, exists, lt, notExists, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { invitation, member, organization, user } from "@/modules/auth/schema"
 import { invitationExtendedRole } from "@/modules/rbac/schema"
@@ -82,16 +82,14 @@ export async function getPendingInvitations(orgId: string) {
  *      shouldn't see their own row here)
  *   4. user.created_at < NOW() - 24h (protects mid-verification
  *      users from being swept by an over-eager admin click)
+ *   5. A pending invitation from THIS org (orgId) exists for this
+ *      user's email — org-scoping so cross-org orphan signups are
+ *      not exposed to unrelated admins. The invitation.status column
+ *      defaults to "pending"; we match that literal value.
  *
- * Returns the 50 most recent matching rows. The org-scoping
- * justification: these rows aren't bound to any organization
- * (the user never joined one), so showing them in *every* org
- * admin's view is the wrong shape — but for a single-tenant V1
- * (K&K only) this is acceptable. When multi-tenant lands,
- * gate this further (e.g. only show users created via an invite
- * for this org).
+ * Returns the 50 most recent matching rows, scoped to the given org.
  */
-export async function listIncompleteSignups(currentUserId: string) {
+export async function listIncompleteSignups(currentUserId: string, orgId: string) {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
   return db
     .select({
@@ -110,6 +108,18 @@ export async function listIncompleteSignups(currentUserId: string) {
             .select({ x: sql`1` })
             .from(member)
             .where(eq(member.userId, user.id)),
+        ),
+        exists(
+          db
+            .select({ x: sql`1` })
+            .from(invitation)
+            .where(
+              and(
+                eq(invitation.organizationId, orgId),
+                sql`LOWER(${invitation.email}) = LOWER(${user.email})`,
+                eq(invitation.status, "pending"),
+              ),
+            ),
         ),
       ),
     )

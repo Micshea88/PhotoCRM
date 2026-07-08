@@ -2,7 +2,8 @@ import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import type { ReactNode } from "react"
 import { auth } from "@/lib/auth"
-import { runWithOrgContext } from "@/lib/org-context"
+import { runWithOrgContext, withOrgContext } from "@/lib/org-context"
+import { resolveActiveOrg } from "@/lib/resolve-active-org"
 import { getSession } from "@/modules/auth/session"
 import { getCurrentMember, getUserOrganizations } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
@@ -14,6 +15,8 @@ import { getDialerBootstrap } from "@/modules/telephony/queries"
 import { DialerProvider, type DialerBootstrapClient } from "@/modules/telephony/ui/dialer-context"
 import { DockedDialer } from "@/modules/telephony/ui/docked-dialer"
 import { getUserPreference } from "@/modules/user-preferences/queries"
+import { unreadCount as getUnreadCount } from "@/modules/notifications/queries"
+import { listExpiredConnectionsForUser } from "@/modules/email-connections/queries"
 
 /**
  * Server-side bootstrap fetch for the inline dialer. Returns null on
@@ -46,24 +49,30 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!session?.user) redirect("/sign-in")
 
   const organizations = await getUserOrganizations(session.user.id)
-  let activeOrgId = session.session.activeOrganizationId
+  const sessionOrgId = session.session.activeOrganizationId ?? null
 
-  // After sign-out + sign-in, Better Auth doesn't restore the previous active
-  // organization. If the user is a member of one, auto-set it so we don't
-  // bounce them back to onboarding every login.
-  if (!activeOrgId && organizations.length > 0) {
-    const first = organizations[0]
-    if (first) {
-      await auth.api.setActiveOrganization({
-        headers: await headers(),
-        body: { organizationId: first.id },
-      })
-      activeOrgId = first.id
-    }
+  // Resolve the active org against the AUTHORITATIVE membership list. This
+  // handles three cases in one place:
+  //   - unset (fresh sign-in): Better Auth doesn't restore the previous active
+  //     org, so auto-pick the first membership.
+  //   - stale/revoked: the session still points at an org the user was removed
+  //     from (NOT in `organizations`) — repick the first membership, or clear.
+  //   - valid: keep it.
+  // SECURITY + LOOP FIX: resolveActiveOrg NEVER returns a revoked org, so a
+  // stale id can't establish org context. Persisting the result (null CLEARS
+  // it in the server-side session) is what stops the stale id from bouncing
+  // create-organization → dashboard (the ERR_TOO_MANY_REDIRECTS loop).
+  const activeOrgId = resolveActiveOrg(sessionOrgId, organizations)
+  if (activeOrgId !== sessionOrgId) {
+    await auth.api.setActiveOrganization({
+      headers: await headers(),
+      body: { organizationId: activeOrgId },
+    })
   }
 
   if (!activeOrgId) {
-    // No memberships — render shell-less so onboarding owns its UI.
+    // No memberships (or the only referenced org was revoked and cleared) —
+    // render shell-less so onboarding owns its UI. NEVER redirect into (app).
     return <>{children}</>
   }
 
@@ -72,8 +81,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // member_role for the assignment-scoped RLS overlay. Fall back to the
   // BA→extended mapping if member_role hasn't been seeded for this user
   // (documented Layer 2 fallback in rbac/README.md).
+  //
+  // SECURITY (defense-in-depth): fail CLOSED if the member row is missing.
+  // resolveActiveOrg already guarantees `activeOrgId` is a current membership,
+  // so this should always find the row. If it somehow doesn't, render
+  // shell-less — NEVER default the role to "member" (the original hole) and
+  // NEVER redirect into an (app) route (that was the loop). Rendering
+  // shell-less serves no org data and cannot loop.
   const memberRow = await getCurrentMember(activeOrgId, session.user.id)
-  const baRole = (memberRow?.role ?? "member") as BetterAuthRole
+  if (!memberRow) return <>{children}</>
+  const baRole = memberRow.role as BetterAuthRole
   const tentativeExtended = extendedFromBetterAuth(baRole)
 
   // First short-lived ALS scope: set context with the tentative extended
@@ -95,14 +112,23 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // propagate into async child server components — those render
   // outside the layout's frame. Resolve here, fully await, and pass
   // plain values to the client wrapper.
-  const { sidebarItems, navCollapsed, settingsExpanded, dialerBootstrap } = await runWithOrgContext(
+  const {
+    sidebarItems,
+    navCollapsed,
+    settingsExpanded,
+    dialerBootstrap,
+    initialUnreadCount,
+    initialExpiredConnections,
+  } = await runWithOrgContext(
     { orgId: activeOrgId, role: extendedRole, userId: session.user.id },
     async () => {
-      const [items, navPref, settingsPref, bootstrap] = await Promise.all([
+      const [items, navPref, settingsPref, bootstrap, unread, expiredConns] = await Promise.all([
         resolveSidebarItems(session.user.id, extendedRole),
         getUserPreference("nav_collapsed", null),
         getUserPreference("nav_settings_expanded", null),
         tryDialerBootstrap(activeOrgId, session.user.id),
+        withOrgContext((db) => getUnreadCount(db, activeOrgId, session.user.id)),
+        withOrgContext((db) => listExpiredConnectionsForUser(db, activeOrgId, session.user.id)),
       ])
       return {
         sidebarItems: items,
@@ -112,6 +138,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         navCollapsed: navPref === true,
         settingsExpanded: settingsPref === true,
         dialerBootstrap: bootstrap,
+        initialUnreadCount: unread,
+        // Slim projection: only id + email needed by the banner.
+        // Date columns are excluded to keep the client-boundary payload
+        // minimal and JSON-safe without conversion.
+        initialExpiredConnections: expiredConns.map((c) => ({ id: c.id, email: c.email })),
       }
     },
   )
@@ -123,12 +154,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         studioName={studioName}
         organizations={organizations.map((o) => ({ id: o.id, name: o.name, slug: o.slug }))}
         activeOrgId={activeOrgId}
+        initialUnreadCount={initialUnreadCount}
         className="border-b border-[var(--color-border)]"
       />
       <ClientLayoutShell
         sidebarItems={sidebarItems}
         initialCollapsed={navCollapsed}
         initialSettingsExpanded={settingsExpanded}
+        initialExpiredConnections={initialExpiredConnections}
       >
         <DialerProvider bootstrap={dialerBootstrap}>
           {children}

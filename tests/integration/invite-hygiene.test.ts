@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { and, eq, lt, isNull, notExists, sql } from "drizzle-orm"
+import { and, eq, exists, lt, isNull, notExists, sql } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { withTestDb, setOrgContext } from "../helpers/db"
 import { createUser } from "../helpers/factories"
@@ -86,10 +86,15 @@ async function makeInvitation(
  * Mirror of listIncompleteSignups + findStaleUserShellByEmail —
  * lifted into helpers so the test pins exactly the query body
  * that ships in src/modules/org/queries.ts.
+ *
+ * Updated for T2.3: requires orgId; adds exists(...) correlated
+ * subquery requiring a pending invitation from THIS org to the email.
+ * invitation.status defaults to "pending" — that is the literal we match.
  */
 async function listIncompleteSignupsLocal(
   db: Parameters<Parameters<typeof withTestDb>[0]>[0],
   currentUserId: string,
+  orgId: string,
 ) {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
   return db
@@ -105,6 +110,18 @@ async function listIncompleteSignupsLocal(
             .select({ x: sql`1` })
             .from(member)
             .where(eq(member.userId, user.id)),
+        ),
+        exists(
+          db
+            .select({ x: sql`1` })
+            .from(invitation)
+            .where(
+              and(
+                eq(invitation.organizationId, orgId),
+                sql`LOWER(${invitation.email}) = LOWER(${user.email})`,
+                eq(invitation.status, "pending"),
+              ),
+            ),
         ),
       ),
     )
@@ -325,33 +342,40 @@ describe("resendOrgInvitation pre-conditions (D10-D11)", () => {
 })
 
 describe("listIncompleteSignups query semantics (D12)", () => {
-  it("D12: excludes users created <24h ago", async () => {
+  it("D12: excludes users created <24h ago; includes org-invited old users", async () => {
     await withTestDb(async (db) => {
       const me = await createUser(db, { email: "me@example.com" })
-      // Two stranded users — one fresh, one old.
+      const orgId = await makeOrg(db, me)
+      // Two stranded users — one fresh (no invite needed, age filter rejects first),
+      // one old with a pending org invitation so it appears in results.
       await makeUserWithCreatedAt(db, "fresh@example.com", {
         verified: false,
-        createdMinutesAgo: 60, // 1 hour
+        createdMinutesAgo: 60, // 1 hour — age filter rejects
       })
       const oldId = await makeUserWithCreatedAt(db, "old@example.com", {
         verified: false,
         createdMinutesAgo: 60 * 25, // 25 hours
       })
-      const rows = await listIncompleteSignupsLocal(db, me)
+      // Pending invitation from this org to old@example.com — makes it visible.
+      await makeInvitation(db, orgId, me, "old@example.com")
+      const rows = await listIncompleteSignupsLocal(db, me, orgId)
       const ids = rows.map((r) => r.id)
       expect(ids).toContain(oldId)
       expect(rows.some((r) => r.email === "fresh@example.com")).toBe(false)
     })
   })
 
-  it("D12b: excludes verified users regardless of age", async () => {
+  it("D12b: excludes verified users regardless of age or invitation", async () => {
     await withTestDb(async (db) => {
       const me = await createUser(db, { email: "me@example.com" })
+      const orgId = await makeOrg(db, me)
       await makeUserWithCreatedAt(db, "verified-old@example.com", {
         verified: true,
         createdMinutesAgo: 60 * 30,
       })
-      const rows = await listIncompleteSignupsLocal(db, me)
+      // Invitation exists but user is verified — still excluded.
+      await makeInvitation(db, orgId, me, "verified-old@example.com")
+      const rows = await listIncompleteSignupsLocal(db, me, orgId)
       expect(rows.some((r) => r.email === "verified-old@example.com")).toBe(false)
     })
   })
@@ -359,12 +383,15 @@ describe("listIncompleteSignups query semantics (D12)", () => {
   it("D12c: excludes the current session's own user id", async () => {
     await withTestDb(async (db) => {
       const me = await createUser(db, { email: "me-old@example.com" })
+      const orgId = await makeOrg(db, me)
       // Backdate so age check passes
       await db
         .update(user)
         .set({ createdAt: new Date(Date.now() - 60 * 60 * 25 * 1000) })
         .where(eq(user.id, me))
-      const rows = await listIncompleteSignupsLocal(db, me)
+      // Even with a self-referencing invitation, id != currentUserId excludes it.
+      await makeInvitation(db, orgId, me, "me-old@example.com")
+      const rows = await listIncompleteSignupsLocal(db, me, orgId)
       expect(rows.some((r) => r.id === me)).toBe(false)
     })
   })
@@ -378,6 +405,8 @@ describe("listIncompleteSignups query semantics (D12)", () => {
         verified: false,
         createdMinutesAgo: 60 * 25,
       })
+      // Invitation exists but user has joined — notExists(member) rejects it.
+      await makeInvitation(db, orgId, inviter, "stranded-but-member@example.com")
       await db.insert(member).values({
         id: createId(),
         organizationId: orgId,
@@ -385,8 +414,44 @@ describe("listIncompleteSignups query semantics (D12)", () => {
         role: "member",
         createdAt: new Date(),
       })
-      const rows = await listIncompleteSignupsLocal(db, me)
+      const rows = await listIncompleteSignupsLocal(db, me, orgId)
       expect(rows.some((r) => r.id === memberId)).toBe(false)
+    })
+  })
+
+  it("D12e: org-scoping — org A admin does NOT see org B's invited incomplete signup", async () => {
+    await withTestDb(async (db) => {
+      // Seed two orgs, each with a distinct invited-but-unverified user.
+      const adminA = await createUser(db, { email: "admin-a@example.com" })
+      const adminB = await createUser(db, { email: "admin-b@example.com" })
+      const orgA = await makeOrg(db, adminA)
+      const orgB = await makeOrg(db, adminB)
+
+      // User invited ONLY by org A.
+      const userAId = await makeUserWithCreatedAt(db, "invited-a@example.com", {
+        verified: false,
+        createdMinutesAgo: 60 * 25,
+      })
+      await makeInvitation(db, orgA, adminA, "invited-a@example.com")
+
+      // User invited ONLY by org B.
+      const userBId = await makeUserWithCreatedAt(db, "invited-b@example.com", {
+        verified: false,
+        createdMinutesAgo: 60 * 25,
+      })
+      await makeInvitation(db, orgB, adminB, "invited-b@example.com")
+
+      // Admin A sees only their own invited user, NOT org B's.
+      const rowsA = await listIncompleteSignupsLocal(db, adminA, orgA)
+      const idsA = rowsA.map((r) => r.id)
+      expect(idsA).toContain(userAId)
+      expect(idsA).not.toContain(userBId)
+
+      // Admin B sees only their own invited user, NOT org A's.
+      const rowsB = await listIncompleteSignupsLocal(db, adminB, orgB)
+      const idsB = rowsB.map((r) => r.id)
+      expect(idsB).toContain(userBId)
+      expect(idsB).not.toContain(userAId)
     })
   })
 })

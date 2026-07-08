@@ -100,6 +100,22 @@ export const emailLog = pgTable(
     /** Open-tracking pixel id (Commit 3). Unique per outbound email; null for
      *  inbound + un-tracked rows. */
     trackingPixelId: text("tracking_pixel_id").unique(),
+    /** Denormalized delivery status — updated by the delivery-event writer (Task 4).
+     *  Allowed values: "sent" | "delivered" | "bounced" | "failed" | "complained".
+     *  Default "sent" so existing rows and new manual rows start in a valid state. */
+    deliveryStatus: text("delivery_status").notNull().default("sent"),
+    /** Timestamp of the first bounce event. NULL until a bounce is recorded. */
+    bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+    /** Human-readable bounce reason (filled by Task 4 writer). */
+    bounceReason: text("bounce_reason"),
+    /** Timestamp of the first permanent-failure event. NULL until a failure is recorded. */
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    /** Classified open counts (Task 13 fills these from email_delivery_events). */
+    openHumanCount: integer("open_human_count").notNull().default(0),
+    /** Bot / scanner opens — UI label is "Automated Open". */
+    openBotCount: integer("open_bot_count").notNull().default(0),
+    /** MPP / ambiguous opens. */
+    openUnknownCount: integer("open_unknown_count").notNull().default(0),
     openCount: integer("open_count").notNull().default(0),
     firstOpenedAt: timestamp("first_opened_at", { withTimezone: true }),
     lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),

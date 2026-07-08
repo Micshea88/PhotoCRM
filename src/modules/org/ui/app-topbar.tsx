@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { NotificationBell } from "@/modules/notifications/ui/notification-bell"
 import { OrgSwitcher } from "./org-switcher"
 import { ThemeToggle } from "./theme-toggle"
 import { UserMenu } from "./user-menu"
@@ -28,12 +29,14 @@ export function AppTopbar({
   studioName,
   organizations,
   activeOrgId,
+  initialUnreadCount = 0,
   className,
 }: {
   user: { name: string; email: string }
   studioName: string
   organizations: Org[]
   activeOrgId: string
+  initialUnreadCount?: number
   className?: string
 }) {
   return (
@@ -52,6 +55,7 @@ export function AppTopbar({
         >
           <Sparkles className="size-4" />
         </Button>
+        <NotificationBell initialUnreadCount={initialUnreadCount} />
         <ThemeToggle />
         <UserMenu userName={user.name} userEmail={user.email} />
       </div>

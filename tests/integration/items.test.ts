@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { and, eq, isNull } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
-import { withTestDb } from "../helpers/db"
+import { withTestDb, setOrgContext } from "../helpers/db"
 import { createOrganization, createUser } from "../helpers/factories"
 import { items } from "@/modules/items/schema"
 import { auditLog } from "@/modules/audit/schema"
@@ -10,6 +10,10 @@ import { audit } from "@/modules/audit/audit"
 // These tests exercise queries + the audit helper directly. The full safe-action
 // path (auth + org middleware) is covered by E2E in Phase 10 since it requires
 // session cookies and the route handlers to be live.
+//
+// `items` and `audit_log` carry FORCE org-isolation RLS (migration 0061), so
+// every write/read below sets `app.current_org` first via setOrgContext — the
+// same GUC the runtime sets. Without it the RLS WITH CHECK denies the inserts.
 
 describe("items module — db-level invariants", () => {
   it("scopes items to a single organization", async () => {
@@ -18,6 +22,7 @@ describe("items module — db-level invariants", () => {
       const orgA = await createOrganization(db, userId)
       const orgB = await createOrganization(db, userId)
 
+      await setOrgContext(db, orgA)
       await db.insert(items).values({
         id: createId(),
         organizationId: orgA,
@@ -25,6 +30,7 @@ describe("items module — db-level invariants", () => {
         createdBy: userId,
         updatedBy: userId,
       })
+      await setOrgContext(db, orgB)
       await db.insert(items).values({
         id: createId(),
         organizationId: orgB,
@@ -33,6 +39,7 @@ describe("items module — db-level invariants", () => {
         updatedBy: userId,
       })
 
+      await setOrgContext(db, orgA)
       const inA = await db
         .select()
         .from(items)
@@ -47,6 +54,7 @@ describe("items module — db-level invariants", () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
       const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId)
       const itemId = createId()
 
       await db.insert(items).values({
@@ -79,6 +87,7 @@ describe("items module — db-level invariants", () => {
     await withTestDb(async (db) => {
       const userId = await createUser(db)
       const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId)
 
       await audit(
         {

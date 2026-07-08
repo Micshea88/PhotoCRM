@@ -16,6 +16,7 @@ import { pgTable, text, integer, timestamp, index } from "drizzle-orm/pg-core"
  * columns — edits are attributed to "the system" / changelog at the
  * commit level, not to specific user accounts.
  */
+// GLOBAL content — no organization_id, intentionally NOT tenant-scoped / no RLS.
 export const faqEntries = pgTable(
   "faq_entries",
   {

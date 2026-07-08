@@ -135,7 +135,7 @@ function resendFallbackProvider(fromHeader: string): EmailProvider {
     async send(msg) {
       const fromDomain = env.RESEND_FROM_EMAIL.split("@")[1] ?? "mail.invalid"
       const messageId = `<${createId()}@${fromDomain}>`
-      await sendEmail({
+      const data = await sendEmail({
         to: msg.to,
         cc: msg.cc.length > 0 ? msg.cc : undefined,
         bcc: msg.bcc.length > 0 ? msg.bcc : undefined,
@@ -149,7 +149,7 @@ function resendFallbackProvider(fromHeader: string): EmailProvider {
         source: "resend",
         externalId: messageId,
         threadId: messageId,
-        externalMetadata: null,
+        externalMetadata: { resendEmailId: data.id },
       }
     },
   }

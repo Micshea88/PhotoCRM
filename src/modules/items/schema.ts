@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, index } from "drizzle-orm/pg-core"
+import { pgPolicy, pgTable, text, timestamp, index } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 
 export const items = pgTable(
@@ -22,8 +23,17 @@ export const items = pgTable(
   },
   (t) => [
     index("items_org_deleted_created_idx").on(t.organizationId, t.deletedAt, t.createdAt.desc()),
+    // Org-isolation RLS policy — mirrors email_log / contacts / etc.
+    // FORCE RLS is hand-appended to the generated migration SQL (drizzle-kit
+    // emits ENABLE, not FORCE) per AGENTS.md §10a.
+    pgPolicy("items_org_isolation", {
+      as: "permissive",
+      for: "all",
+      using: sql`organization_id = current_setting('app.current_org', true)`,
+      withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+    }),
   ],
-)
+).enableRLS()
 
 export type Item = typeof items.$inferSelect
 export type NewItem = typeof items.$inferInsert

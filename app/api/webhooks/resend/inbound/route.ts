@@ -1,29 +1,53 @@
 import { log } from "@/lib/log"
-import { ingestInboundEmail } from "@/modules/email-log/inbound"
+import { ingestInboundFromEvent, verifyResendWebhook } from "@/modules/email-log/inbound"
+import { ingestResendDeliveryEvent } from "@/modules/email-delivery/resend-delivery"
 
 /**
- * Resend inbound-email webhook receiver (Commit 3, Phase C).
+ * Resend webhook receiver (Task 6 Part 3 — branched handler).
  *
- * Resend signs webhooks with Svix (svix-id / svix-timestamp / svix-signature
- * headers over the RAW request body), so we read the body as text — NOT JSON —
- * and hand both to `ingestInboundEmail`, which verifies the signature, fetches
- * the full message from the Received-Emails API, and logs it to known contacts.
+ * Handles both inbound-email events (`email.received`) and outbound delivery
+ * events (`email.bounced`, `email.complained`, `email.delivered`) on the same
+ * endpoint. Resend signs ALL webhooks with Svix, so we verify ONCE here and
+ * branch by `event.type` — no double-verify:
  *
- * Like the RC webhook, this route does NO direct DB access (it delegates) and
- * ALWAYS acks 200 — even on failure — so Resend doesn't disable the endpoint
- * over a transient blip. An unverifiable/invalid event is silently dropped
- * inside the ingest (signature failure → no-op), not surfaced as a non-200.
+ *   - Delivery types  → `ingestResendDeliveryEvent` (Task 6 Part 3 / Task 4)
+ *   - Inbound type    → `ingestInboundFromEvent` (Task 3 / Commit 3 Phase C)
+ *   - Anything else   → no-op (ack 200, drop silently)
+ *
+ * ALWAYS acks 200 — even on error — so Resend does not disable the endpoint
+ * over a transient blip. Unverifiable events (bad signature / missing secret)
+ * are silently dropped inside `verifyResendWebhook`.
+ *
+ * Manual dashboard step (done by Mike after deployment): add the three
+ * delivery event types (`email.bounced`, `email.complained`, `email.delivered`)
+ * to the existing Resend webhook endpoint alongside `email.received`.
  */
+
+const DELIVERY_TYPES = new Set(["email.bounced", "email.complained", "email.delivered"])
+
 export async function POST(request: Request) {
   const rawBody = await request.text()
+  const svixId = request.headers.get("svix-id")
+  const headers = {
+    "svix-id": svixId,
+    "svix-timestamp": request.headers.get("svix-timestamp"),
+    "svix-signature": request.headers.get("svix-signature"),
+  }
+
   try {
-    await ingestInboundEmail(rawBody, {
-      "svix-id": request.headers.get("svix-id"),
-      "svix-timestamp": request.headers.get("svix-timestamp"),
-      "svix-signature": request.headers.get("svix-signature"),
-    })
+    const event = verifyResendWebhook(rawBody, headers)
+    if (!event) return Response.json({ ok: true })
+
+    const evt = event as { type?: string }
+
+    if (evt.type && DELIVERY_TYPES.has(evt.type)) {
+      await ingestResendDeliveryEvent(event, svixId)
+    } else {
+      await ingestInboundFromEvent(event)
+    }
   } catch (err) {
     log.error({ err }, "resend-inbound: route handler failed")
   }
+
   return Response.json({ ok: true })
 }

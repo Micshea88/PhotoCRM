@@ -1,13 +1,26 @@
-import { pgTable, text, integer, boolean, jsonb, timestamp, index } from "drizzle-orm/pg-core"
+import {
+  pgPolicy,
+  pgTable,
+  text,
+  integer,
+  boolean,
+  jsonb,
+  timestamp,
+  index,
+} from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 import { organization, user } from "@/modules/auth/schema"
 import { files } from "./schema"
 
 /**
  * Tokenized, expiring share links for "send as link" attachments (Commit 3,
- * Mike-locked 2026-06-24). One row per shared file per send. Read by the PUBLIC
- * download/verify routes via the unguessable `token` (the recipient has no
- * session), so — like the `files` table — this is NOT RLS-protected; org
- * scoping is enforced at the action/query layer. No triggers (memory #13).
+ * Mike-locked 2026-06-24). One row per shared file per send. Org-isolation RLS
+ * (mirrors email_log / contacts). The PUBLIC download/verify routes have no
+ * session: they resolve the org via a single unguessable-token lookup on the
+ * BYPASSRLS owner connection (getShareLinkByToken — documented there), then run
+ * every subsequent read/write under SET LOCAL ROLE app_authenticated +
+ * app.current_org = the link's org, so this policy enforces those. No triggers
+ * (memory #13).
  *
  * Forward-compatible Smart Documents columns (`versionId`, `contentHash`,
  * `requiresApproval`) are added now, nullable/defaulted, so that build needs no
@@ -50,8 +63,19 @@ export const fileShareLinks = pgTable(
     failedPasscodeAttempts: integer("failed_passcode_attempts").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
   },
-  (t) => [index("file_share_links_org_file_idx").on(t.organizationId, t.fileId)],
-)
+  (t) => [
+    index("file_share_links_org_file_idx").on(t.organizationId, t.fileId),
+    // Org-isolation RLS policy — mirrors email_log / contacts / etc.
+    // FORCE RLS is hand-appended to the generated migration SQL (drizzle-kit
+    // emits ENABLE, not FORCE) per AGENTS.md §10a.
+    pgPolicy("file_share_links_org_isolation", {
+      as: "permissive",
+      for: "all",
+      using: sql`organization_id = current_setting('app.current_org', true)`,
+      withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+    }),
+  ],
+).enableRLS()
 
 /** Audit/share log for a share link — drives the "Share log" table on the file
  *  detail page + click/open tracking tied to recipient identity (no IP/UA). */
@@ -74,8 +98,20 @@ export const fileShareLinkEvents = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("file_share_link_events_link_idx").on(t.shareLinkId, t.occurredAt)],
-)
+  (t) => [
+    index("file_share_link_events_link_idx").on(t.shareLinkId, t.occurredAt),
+    // Org-isolation RLS policy — mirrors email_log / contacts / etc.
+    // FORCE RLS is hand-appended to the generated migration SQL (drizzle-kit
+    // emits ENABLE, not FORCE) per AGENTS.md §10a. logShareEvent (public path)
+    // runs scoped under app.current_org = the link's org.
+    pgPolicy("file_share_link_events_org_isolation", {
+      as: "permissive",
+      for: "all",
+      using: sql`organization_id = current_setting('app.current_org', true)`,
+      withCheck: sql`organization_id = current_setting('app.current_org', true)`,
+    }),
+  ],
+).enableRLS()
 
 export type FileShareLink = typeof fileShareLinks.$inferSelect
 export type NewFileShareLink = typeof fileShareLinks.$inferInsert

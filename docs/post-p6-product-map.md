@@ -30,9 +30,23 @@ Status: forward-looking. Reconcile against locked decisions + V1 wireframe befor
 - EVERY FINANCE TABLE = RLS+FORCE, BULLETPROOF, ZERO GAPS. Highest-stakes application of the tenant-isolation laws; a finance leak is catastrophic. Enabled by the multi-tenant hardening being done now.
 - QB coexistence: build QB-Light native AND offer optional QuickBooks integration (sync) for those who use QB — never force ours-only.
 
+### 3a. SCOPE LINE (LOCKED — 2nd architecture review) — rich tracking + reporting, NOT an accounting engine
+
+Keep the competitive goal (rich financial tracking + strong reporting, better than HoneyBook, no separate data entry) — but draw a hard line to avoid the accounting-engine trap:
+
+- **IN — rich transaction tracking:** every payment, refund, partial refund, discount, expense, contractor payment, and tax-collected — each **categorized, dated, project-linked, with its tax breakdown AS RECORDED at the time** (per line item, service-tax vs product-tax).
+- **IN — refunds/reversals are FIRST-CLASS TRACKED EVENTS** that reference the original transaction (e.g. "refund of $X against invoice Y; $Z was the taxable album; tax reversal $W"). Recorded accurately as events.
+- **IN — reports compute from the transaction history** (P&L, revenue by source, tax collected by period, profit by project, margin) — strong, regularly-usable business-strategy reporting. A differentiator; keep it solid.
+- **OUT (do NOT build):** a self-balancing DOUBLE-ENTRY accrual ledger, formal chart-of-accounts reconciliation, depreciation, or any "books must balance to the penny across all accounts under every edge case" guarantee. That is the accountant's / QuickBooks' / Xero's job.
+- **HARD TAX-REVERSAL CASE:** when a partial refund with mixed taxable/exempt items occurs, **RECORD it and SURFACE the impact** to the user ("this refund affects your tax liability — here's the breakdown; review with your accountant") — do NOT silently auto-reconcile. (LAW 3: surface, human/accountant acts.)
+- **Clean CSV/export** optimized for QuickBooks/Xero; optional QB integration coexists (never force ours-only).
+- **LEGAL POSTURE (this scope line LOWERS legal risk vs. a full ledger):** user-entered tax rates (Pathway never computes/guarantees tax owed); prominent disclaimers on financial/report surfaces (_"Pathway helps you track and report your finances; it is not accounting or tax software and does not provide tax/accounting advice — consult a qualified accountant"_); the surface-don't-auto-reconcile design is itself a liability protection.
+- **⚠️ PRE-LAUNCH GATE (HARD):** a qualified **accountant AND a lawyer** review the financial features + disclaimer language **before any external customers use them.** Tracked pre-launch task.
+
 ## 4. REPORTS (comprehensive regardless of tier; depends on Finance depth)
 
 - 6–10 standard business reports (P&L, revenue by source, outstanding invoices aging, sales tax collected, 1099 totals, conversion by stage, avg project value, booking lead time, etc.) + a CUSTOM report builder (pick data, filters, views). Any report viewable as different chart/graph types easily. Reporting is comprehensive at every tier (don't cripple by tier).
+- **QUERY-ENGINE JSONB ISOLATION (LOCKED build requirement — 2nd architecture review):** when the custom-report builder / dynamic query engine over JSONB custom fields is built, it **MUST NEVER drop to raw SQL and NEVER run under a bypass role** — always `app_authenticated` + org GUC so table RLS stays enforced regardless of query shape. It requires its **OWN isolation test suite**: malformed JSONB paths, injection attempts, deep/edge path queries — proving they cannot escape org scope. Table RLS is the backstop, but the query engine must be **explicitly tested** for cross-tenant escape. (The `check-rls-force` CI guard tests table-level RLS; it does NOT exercise dynamic JSONB query paths — this requirement closes that gap for the report engine. Ties to `docs/multi-tenant-remediation-plan.md`.)
 
 ## 5. ASSET LIBRARY (creative media only — separate from Files/Docs)
 
@@ -48,6 +62,7 @@ Status: forward-looking. Reconcile against locked decisions + V1 wireframe befor
 ## 7. CLIENT PORTAL (V2/V3 — mapped now, built later)
 
 - A dedicated, BRANDED, client-facing space per project: Overview / Activity / Tasks / Files / Payments / Notes. Secure link access; optional auto-include portal link in project emails; customizable with a preview. Persona-separation law: client-facing = minimal/branded, nothing internal wired in. Cross-client data isolation is a hard requirement (a client never sees another client's data). Pairs with the dedicated client-presentation views (F6) and client-facing lifecycle views.
+- **PRESENTATION-VIEW SNAPSHOT MODEL (LOCKED — 2nd architecture review; refines F6):** the dedicated client-presentation view is a **deliberate STATIC SNAPSHOT, not a live real-time mirror** of the internal view. It loads a frozen compilation; the photographer controls exactly when the client sees changes via a manual **"Push updates to client screen"** button on the internal dashboard. (Avoids real-time state-mutation race conditions during live consultations AND is better UX — the client never watches mid-edit fumbling.)
 
 ## 8. INTEGRATIONS
 
@@ -83,3 +98,5 @@ Status: forward-looking. Reconcile against locked decisions + V1 wireframe befor
 ## 13. STRATEGIC MOAT (context)
 
 Competitive weapons, by defensibility: (1) real CRM+PM done well (nobody does), (2) native QB-Light books (attacks HoneyBook's weak bookkeeping; kills a QB subscription), (3) processor-agnostic payments (attacks HoneyBook's most-hated lock-in), (4) AI as the bonus layer (world is heading AI-heavy; build for it now). AI is upside, not the thesis — CRM+PM done well beats the field even if AI plateaus.
+
+**REJECTED (2nd architecture review) — do NOT add "constructive stickiness" / payment lock-in.** Pathway's no-lock-in / processor-agnostic stance is a deliberate FEATURE (it attacks HoneyBook's most-hated trait). Retention comes from **product quality + data/workflow/AI depth**, NOT hostage-style lock-in. Do not add artificial exit friction (e.g. payment lock-in, data-hostage downgrade). This is consistent with the graceful-downgrade Membership stance (§10) and the "don't hold data hostage" rule.

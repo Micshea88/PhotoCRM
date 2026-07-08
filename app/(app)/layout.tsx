@@ -3,6 +3,7 @@ import { headers } from "next/headers"
 import type { ReactNode } from "react"
 import { auth } from "@/lib/auth"
 import { runWithOrgContext, withOrgContext } from "@/lib/org-context"
+import { resolveActiveOrg } from "@/lib/resolve-active-org"
 import { getSession } from "@/modules/auth/session"
 import { getCurrentMember, getUserOrganizations } from "@/modules/org/queries"
 import { getExtendedMemberRole } from "@/modules/rbac/queries"
@@ -48,24 +49,30 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!session?.user) redirect("/sign-in")
 
   const organizations = await getUserOrganizations(session.user.id)
-  let activeOrgId = session.session.activeOrganizationId
+  const sessionOrgId = session.session.activeOrganizationId ?? null
 
-  // After sign-out + sign-in, Better Auth doesn't restore the previous active
-  // organization. If the user is a member of one, auto-set it so we don't
-  // bounce them back to onboarding every login.
-  if (!activeOrgId && organizations.length > 0) {
-    const first = organizations[0]
-    if (first) {
-      await auth.api.setActiveOrganization({
-        headers: await headers(),
-        body: { organizationId: first.id },
-      })
-      activeOrgId = first.id
-    }
+  // Resolve the active org against the AUTHORITATIVE membership list. This
+  // handles three cases in one place:
+  //   - unset (fresh sign-in): Better Auth doesn't restore the previous active
+  //     org, so auto-pick the first membership.
+  //   - stale/revoked: the session still points at an org the user was removed
+  //     from (NOT in `organizations`) — repick the first membership, or clear.
+  //   - valid: keep it.
+  // SECURITY + LOOP FIX: resolveActiveOrg NEVER returns a revoked org, so a
+  // stale id can't establish org context. Persisting the result (null CLEARS
+  // it in the server-side session) is what stops the stale id from bouncing
+  // create-organization → dashboard (the ERR_TOO_MANY_REDIRECTS loop).
+  const activeOrgId = resolveActiveOrg(sessionOrgId, organizations)
+  if (activeOrgId !== sessionOrgId) {
+    await auth.api.setActiveOrganization({
+      headers: await headers(),
+      body: { organizationId: activeOrgId },
+    })
   }
 
   if (!activeOrgId) {
-    // No memberships — render shell-less so onboarding owns its UI.
+    // No memberships (or the only referenced org was revoked and cleared) —
+    // render shell-less so onboarding owns its UI. NEVER redirect into (app).
     return <>{children}</>
   }
 
@@ -75,12 +82,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // BA→extended mapping if member_role hasn't been seeded for this user
   // (documented Layer 2 fallback in rbac/README.md).
   //
-  // SECURITY: fail CLOSED when the member row is missing (revoked membership).
-  // The session may still reference an org the user was removed from; defaulting
-  // to "member" would grant read access to that org's data without authorization.
-  // Redirect to onboarding instead — mirrors orgAction's FORBIDDEN throw.
+  // SECURITY (defense-in-depth): fail CLOSED if the member row is missing.
+  // resolveActiveOrg already guarantees `activeOrgId` is a current membership,
+  // so this should always find the row. If it somehow doesn't, render
+  // shell-less — NEVER default the role to "member" (the original hole) and
+  // NEVER redirect into an (app) route (that was the loop). Rendering
+  // shell-less serves no org data and cannot loop.
   const memberRow = await getCurrentMember(activeOrgId, session.user.id)
-  if (!memberRow) redirect("/onboarding/create-organization")
+  if (!memberRow) return <>{children}</>
   const baRole = memberRow.role as BetterAuthRole
   const tentativeExtended = extendedFromBetterAuth(baRole)
 

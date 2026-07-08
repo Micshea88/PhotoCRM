@@ -16,6 +16,36 @@ A Next.js 16 + Postgres + Vercel foundation that Sage will build the Pathway pro
 
 See `docs/pathway-design-system.md` §0 for the design-doc statement of this principle.
 
+## Standing design laws (LOCKED — apply to EVERY future push)
+
+These govern all UI / PM work. Check every relevant task against them, the same way every task is checked against the multi-tenant RLS rules (Hard rules §4/§10a).
+
+### LAW 1 — Persona separation (client-facing vs. internal)
+
+**No single screen serves both the client persona and the internal persona at once. A screen is either client-facing-minimal or internal-dense — never a blend.**
+
+- **Client-facing surfaces** (booking, smart docs, proposals, client portal — anything a CLIENT sees) stay **MINIMAL and linear**: friction-free, only what that client needs for the step they're on.
+- **Internal surfaces** (event tasks, pipeline/kanban, editing board, team workload, dashboards) carry the **DENSITY**.
+- This is the #1 UX failure that kills CRM+PM products: HoneyBook cannibalized the internal side; monday/ClickUp cannibalized the client side. Pathway does not repeat it.
+- **Every UI task is checked:** _which persona is this screen for, and does it stay in its lane?_ If a screen tries to serve both, **split it**. Surface the persona question in build-planning like any hybrid CRM/PM divergence.
+
+### LAW 2 — PM frontend performance (build fast from the start, do NOT retrofit)
+
+**Internal PM surfaces (kanban, task lists, dependency views, team workload, cross-client dashboards) MUST be built for real volume in their FIRST version.** Target: a studio with **40+ active events and several hundred tasks stays fast and responsive.**
+
+Required patterns, applied AT BUILD TIME (not retrofitted later):
+
+- **Optimistic UI** on high-frequency mutations (drag / status change / reorder) — never block the UI on a server round-trip.
+- **List virtualization** for large collections.
+- **Pagination / lazy-load** for large queries.
+- **Proper DB indexing** on the query paths those views hit.
+
+**Validation happens in PRODUCTION** (Mike builds + tests in prod — real data/network/query conditions local testing hides), NOT locally. When PM views ship: **SEED realistic volume into the production environment** (a script generating ~40 active events with full task trees / several hundred tasks), **validate board/list/timeline/workload views stay fast AT THAT VOLUME in production, then REMOVE the seed data.** Everything is fast with 5 records — the point is to prove real scale before external customers exist; fix any lag before deploying to others.
+
+This is a **"build it right" discipline, not a gamble**: the patterns are standard and well-understood; the failure mode is _neglecting_ them, not that they're hard. The seeded-production test is the PROOF, not a substitute for building it right.
+
+(Design-doc statement + wireframe checklist: `docs/pathway-design-system.md`.)
+
 ## Build-planning audits — STANDING PROCESS (every audit)
 
 Every build-planning / feature audit MUST research and reference best-in-class patterns from BOTH sides, and surface divergences as choices:

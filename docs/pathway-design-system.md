@@ -44,6 +44,31 @@ why, tracing back to this section.
 
 ---
 
+## 0a. Standing design laws (LOCKED — authoritative text in `AGENTS.md`)
+
+Two LOCKED laws govern every UI / PM push. Full statements + rationale
+live in `AGENTS.md` → "Standing design laws"; summarized here as the
+wireframe/UI checklist:
+
+- **LAW 1 — Persona separation.** No single screen serves both the
+  CLIENT persona and the INTERNAL persona at once. Client-facing
+  surfaces (booking, smart docs, proposals, portal) stay
+  **minimal + linear**; internal surfaces (kanban, task lists,
+  dependency views, workload, dashboards) carry the **density**. A
+  screen is one or the other — never a blend. Every UI task states
+  which persona it serves and stays in that lane; if it tries to serve
+  both, split it. (The #1 UX failure that kills CRM+PM products.)
+
+- **LAW 2 — PM frontend performance, built-in from v1.** Internal PM
+  surfaces are built for real volume (**40+ active events, several
+  hundred tasks, stays fast**) from their first version — optimistic UI
+  on drag/status/reorder, list virtualization, pagination/lazy-load,
+  proper indexing. Proven by **seeding realistic volume into
+  production, validating the views stay fast at that scale, then
+  removing the seed** — not a substitute for building it right.
+
+---
+
 ## 1. Inline edit + autosave UX contract
 
 **Every editable field in Pathway uses `InlineEditField` or

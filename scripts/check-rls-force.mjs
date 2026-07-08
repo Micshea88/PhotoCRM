@@ -1,25 +1,27 @@
 #!/usr/bin/env node
 /**
- * Static guard: every org-bearing table in src/modules/<name>/schema.ts MUST
- * have an ALTER TABLE "x" FORCE ROW LEVEL SECURITY statement in the migration
- * SQL. Without FORCE, the BYPASSRLS owner role (e.g. neondb_owner in prod)
- * silently ignores RLS — the bug that caused K&K Photography to see all of
- * Shanzy Studio's contacts (confirmed live, hotfix 0041).
+ * Static guard: every org-bearing table in src/modules/<name>/ MUST have an
+ * ALTER TABLE "x" FORCE ROW LEVEL SECURITY statement in the migration SQL.
+ * Without FORCE, the BYPASSRLS owner role (e.g. neondb_owner in prod) silently
+ * ignores RLS — the bug that caused K&K Photography to see all of Shanzy
+ * Studio's contacts (confirmed live, hotfix 0041).
  *
- * Org-bearing table = a pgTable(...) declaration in src/modules/<name>/schema.ts
- * whose column definition block contains "organization_id" as a SQL column
- * name. The check is intentionally conservative (text match) so it catches
- * the dominant pattern without a full TS AST parse.
+ * Org-bearing table = a pgTable(...) declaration in ANY .ts file under
+ * src/modules/<name>/ whose column definition block contains "organization_id"
+ * OR "org_id" as a SQL column name. The check is intentionally conservative
+ * (text match) so it catches the dominant patterns without a full TS AST parse.
+ *
+ * Coverage: ALL `.ts` files in each module directory are scanned, not just
+ * schema.ts — so tables declared in sibling schema files are covered too:
+ *   - file_share_links + file_share_link_events (files/share-link-schema.ts)
+ *   - file_scan_diagnostics (files/scan-diagnostics-schema.ts, column `org_id`)
+ * All three have FORCE (migration 0061) and now appear in this guard's output.
  *
  * EXEMPT tables (not checked):
  *   - Better-Auth managed: user, organization, member, session, account,
  *     verification, invitation — BA owns their schema; we don't add RLS.
  *   - Global content: faq_entries — intentionally unscoped, no org column,
  *     no RLS by design (confirmed in rls-tenant-tables.test.ts).
- *
- * Note: file_scan_diagnostics uses `org_id` (not `organization_id`) and is
- * not detected by this check; it has FORCE via migration 0061 and is covered
- * by the rls-tenant-tables integration test.
  *
  * Failure mode: exits 1 and lists every org table missing FORCE. A table
  * that only has ENABLE (not FORCE) will also fail — ENABLE alone does not
@@ -37,7 +39,7 @@
  *   1 — one or more org tables are missing FORCE
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 
 const REPO = process.cwd()
@@ -56,18 +58,16 @@ const BETTER_AUTH_EXEMPT = new Set([
 ])
 
 /**
- * Extract org-bearing table names from a schema.ts file.
+ * Extract org-bearing table names from a schema file's contents.
  *
  * Strategy: find each pgTable("name", { ... }) call, extract the SQL table
  * name, then check if the block between this pgTable and the next one (or EOF)
- * contains `"organization_id"` — the SQL column name for the org FK.
+ * contains `"organization_id"` OR `"org_id"` — the SQL column names used for
+ * the org FK.
  *
- * This covers the canonical pattern:
+ * This covers both patterns:
  *   organizationId: text("organization_id").notNull().references(...)
- *
- * It does NOT catch non-standard column names (e.g. `org_id` in
- * file_scan_diagnostics) — those are handled by separate migration-level
- * guards / integration tests.
+ *   orgId: text("org_id").references(...)                // file_scan_diagnostics
  */
 function extractOrgTables(content, filePath) {
   const tables = []
@@ -87,43 +87,66 @@ function extractOrgTables(content, filePath) {
     const end = i + 1 < positions.length ? positions[i + 1].index : content.length
     const block = content.slice(start, end)
 
-    // Does this table have an organization_id column?
-    if (block.includes('"organization_id"') || block.includes("'organization_id'")) {
-      if (!BETTER_AUTH_EXEMPT.has(name)) {
-        tables.push({ name, filePath })
-      }
+    // Does this table have an organization_id or org_id column?
+    const hasOrgColumn =
+      block.includes('"organization_id"') ||
+      block.includes("'organization_id'") ||
+      block.includes('"org_id"') ||
+      block.includes("'org_id'")
+    if (hasOrgColumn && !BETTER_AUTH_EXEMPT.has(name)) {
+      tables.push({ name, filePath })
     }
   }
 
   return tables
 }
 
-// ── 1. Walk src/modules/*/schema.ts files ────────────────────────────────
+/**
+ * Recursively collect every `.ts` file under a module directory. Schema files
+ * live at the module top level today (schema.ts, share-link-schema.ts,
+ * scan-diagnostics-schema.ts) but we recurse defensively so a nested schema
+ * file can never silently escape the guard.
+ */
+function collectTsFiles(dir) {
+  const out = []
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return out
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      out.push(...collectTsFiles(full))
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      out.push(full)
+    }
+  }
+  return out
+}
+
+// ── 1. Walk ALL .ts files under src/modules/*/ ───────────────────────────
 
 const orgTables = []
 
 let moduleDirs
 try {
-  moduleDirs = readdirSync(SCHEMA_GLOB_PATTERN)
+  moduleDirs = readdirSync(SCHEMA_GLOB_PATTERN, { withFileTypes: true })
 } catch {
   console.error(`[check-rls-force] cannot read modules directory: ${SCHEMA_GLOB_PATTERN}`)
   process.exit(1)
 }
 
 for (const mod of moduleDirs) {
-  const schemaPath = join(SCHEMA_GLOB_PATTERN, mod, "schema.ts")
-  let exists = false
-  try {
-    statSync(schemaPath)
-    exists = true
-  } catch {
-    // No schema.ts in this module directory — skip.
+  if (!mod.isDirectory()) continue
+  const tsFiles = collectTsFiles(join(SCHEMA_GLOB_PATTERN, mod.name))
+  for (const filePath of tsFiles) {
+    const content = readFileSync(filePath, "utf8")
+    // Cheap early-out: only parse files that actually declare a table.
+    if (!content.includes("pgTable")) continue
+    orgTables.push(...extractOrgTables(content, filePath))
   }
-  if (!exists) continue
-
-  const content = readFileSync(schemaPath, "utf8")
-  const found = extractOrgTables(content, schemaPath)
-  orgTables.push(...found)
 }
 
 if (orgTables.length === 0) {

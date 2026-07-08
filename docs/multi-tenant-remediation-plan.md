@@ -66,6 +66,8 @@ Has correct user-scoped policies (keyed on `app.current_user_id`) but only `ENAB
 - **Blocks merge:** YES (the CI guard is the durable fix).
 - **Test:** the guard fails on a deliberately-unforced table, passes on the fixed tree.
 
+**STATUS (2026-07-07): DONE.** T1.1 (migration 0061) added FORCE to 7 tables; T1.3 (migration 0062) added FORCE to `user_preferences`. The invariant claimed by 0041 is now **actually true**: every org-bearing table in `src/modules/<name>/schema.ts` (46 tables) has `FORCE ROW LEVEL SECURITY` in the migration SQL. The `scripts/check-rls-force.mjs` CI guard (wired into `pnpm verify --tier=1` next to `check-actions`) enforces this invariant permanently — it parses every `src/modules/<name>/schema.ts` for tables with an `organization_id` column and exits 1 if any lack a FORCE statement in the migrations. Adding a new module that skips FORCE will fail the pre-commit verify hook.
+
 ---
 
 ## TIER 2 — multi-tenant-activation write/routing holes (fix, do NOT defer)

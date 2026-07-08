@@ -155,8 +155,9 @@ Extends the shipped sub-project templates: users build and save their OWN reusab
 - When starting/adding to a project, the user picks a sub-project type from a **templated menu** → it drops in showing the **sub-project name with its standard tasks listed underneath.**
 - **Per-instance editing (does NOT alter the saved template):** a **(−)** control next to each task removes it for THIS instance; a **(+)** at the bottom adds a one-off task for this instance.
 - **Dependency wiring in plain language, as they build:** when adding a task, prompt inline — _"Does this task have dependencies, or is it the end of the chain for this sub-project?"_ (LAW 5 plain-English).
+- **Templates are editable/modifiable later and reusable across projects** (edit the saved template once → applies to future instances; the per-instance +/− edits above never touch the saved template).
 
-**Architecture tie:** generates into the **SAME task-tree / workflow schema** as the shipped templates AND the AI-import feature — the shared generation target (`docs/pm-lifecycle-vision-and-events-prep.md` §10.3; the schema Events/P6 must build to). **Relabelable per vertical** (verbiage-agnostic underbelly). **Module:** Events / PM + the task-tree/template system.
+**Architecture tie:** generates into the **SAME task-tree / workflow schema** as the shipped templates AND the AI-import feature — the shared generation target (`docs/pm-lifecycle-vision-and-events-prep.md` §10.3; the schema Events/P6 must build to). **Relabelable per vertical** (verbiage-agnostic underbelly; photographer → wedding planner, same engine). **Module:** Events / PM + the task-tree/template system. **Decision ref:** `docs/decisions-since-may-docs.md` §18.6.
 
 ## F8 — Soft-gate override confirmation (replaces the mandatory note)
 
@@ -169,6 +170,23 @@ When a user overrides a soft-gate / marks a blocked task done early, do NOT forc
 - **Scope note:** acceptable to ship the required-reasoning admin toggle as a **later add-on** if it's scope creep in v1 — but the **Yes/No + optional-free-text behavior is the baseline** (must be in the first version).
 
 **Module:** Events / PM soft-gate + override framework (`docs/pm-lifecycle-vision-and-events-prep.md` §2); admin toggle → org settings.
+
+## F9 — Timeline/Gantt view + dependency date-cascade (Events/PM — LOCKED 07-08)
+
+Locked decision `docs/decisions-since-may-docs.md` §18 (reverses the earlier "no Gantt / no critical-path" call).
+
+**Timeline/Gantt view (IN):** tasks render as **bars showing overlap + dependencies**, viewable at BOTH levels:
+
+- **Project level** — ALL sub-projects on one shared timeline, so cross-sub-project overlaps are visible (e.g. engagement editing finishing before the wedding; album work overlapping the tail of wedding editing).
+- **Sub-project level** — drill into one sub-project, every task on its own row.
+
+**Dependency DATE-CASCADE (the core value):** when a task/sub-project date moves, **dependent tasks auto-reschedule** relative to it. **Manual override of any individual date is allowed, and a manual override PINS that task (stops its cascade).** This kills the misery of manually re-dating every downstream task when a shoot/session date moves.
+
+**Deferred / lightweight-only:** full **critical-path bottleneck analysis** (longest-chain highlight + slack calc) is SKIP or very lightweight, later — enterprise bloat; the date-cascade is the value (§18.3).
+
+**Final task view set (LOCKED §18.4):** **List, Board, Timeline/Gantt.** Table CUT (too similar to List). Calendar stays SEPARATE (not a task-view tab).
+
+**Design direction:** the session-approved PM wireframes (linear-vs-branching tree, 3-view switcher, project-vs-sub-project timeline) are the working direction (§18.5). **Perf:** built to LAW 2 (40+ events / hundreds of tasks stay fast — virtualized bars, indexed date-range queries; the cascade recompute must stay responsive). **Module:** Events / PM views + task-tree/dependency engine.
 
 ---
 

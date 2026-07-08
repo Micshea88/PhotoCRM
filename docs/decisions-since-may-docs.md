@@ -280,4 +280,20 @@ New PIVOTS_LEDGER entries: RC transcript → user notes (06-14); disposition 6+7
 
 ---
 
+## Section 18 — Events/PM Views + Timeline/Dependency Decisions (07-08)
+
+18.1 **[LOCKED 07-08 — REVERSES the earlier "no Gantt / no critical-path" call]** **Timeline/Gantt view is IN.** Rationale: wedding tasks are interconnected, sub-projects overlap in time, and dates change often (esp. shoot/session dates) — manually re-dating every downstream task when a date moves is the misery to eliminate. Tasks render as bars showing overlap + dependencies, viewable at **BOTH levels**: **project level** (ALL sub-projects on one shared timeline, so cross-sub-project overlaps are visible — e.g. engagement editing finishing before the wedding, album work overlapping the tail of wedding editing) AND **sub-project level** (drill into one sub-project, every task on its own row).
+
+18.2 **[LOCKED 07-08 — the core value]** **Dependency DATE-CASCADE.** When a task/sub-project date moves, dependent tasks **auto-reschedule** relative to it. **Manual override of any individual date is still allowed, and a manual override STOPS cascading for that specific task (it becomes pinned).**
+
+18.3 **[LOCKED 07-08 — conscious skip]** Full **critical-path BOTTLENECK ANALYSIS** (auto-highlighting the longest chain + slack calculations) is **SKIP / lightweight-only, deferred.** The date-cascade is the value; the bottleneck-analysis layer is enterprise bloat — skip or keep very lightweight, later.
+
+18.4 **[LOCKED 07-08 — final task view set, trimmed to avoid bloat]** **KEEP: List, Board, Timeline/Gantt.** **CUT: Table** (too similar to List — List already does the job with phase grouping + gating; not worth the extra surface). **Calendar stays SEPARATE** (upcoming tasks + who's assigned), NOT a task-view tab. (Supersedes the `docs/pm-lifecycle-vision-and-events-prep.md` §2 "Board/List/Timeline/Table" view list.)
+
+18.5 **[APPROVED 07-08 — working design direction]** The interactive PM wireframes reviewed this session — **linear-vs-branching dependency tree, the 3-view switcher (List / Board / Gantt), and the project-level vs sub-project-level timeline** — are approved as the working design direction for the Events/PM views. **P6 references them.**
+
+18.6 **[Feature — tracked in `docs/features-backlog.md` F7]** User-created sub-project type templates (self-serve workflow building): users build/save/edit their own reusable sub-project types (tasks + dependencies), reusable across projects, generating into the SAME task-tree/workflow schema as the shipped templates + AI-import (shared generation target, `pm-lifecycle-vision-and-events-prep.md` §10.3). Relabelable per vertical.
+
+---
+
 **End of inventory.**

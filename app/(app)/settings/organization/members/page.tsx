@@ -36,7 +36,7 @@ export default async function OrgMembersPage() {
     // Push 2c.6.10 — incomplete-signups visible to admin/owner only.
     // The query enforces age + no-membership constraints; the UI
     // hides the section entirely for non-admins via the canManage flag.
-    canManage ? listIncompleteSignups(session.user.id) : Promise.resolve([]),
+    canManage ? listIncompleteSignups(session.user.id, orgId) : Promise.resolve([]),
   ])
 
   return (

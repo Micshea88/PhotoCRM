@@ -139,7 +139,12 @@ export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promi
     sentAt: msg.date,
   }
   try {
-    return await processInboundEmail(inbound, conn.sourceValue, { recipientUserIds: [conn.userId] })
+    // The receiving mailbox's org is AUTHORITATIVE — pass it so processInboundEmail
+    // routes to this tenant directly, never guessing cross-org (T2.2).
+    return await processInboundEmail(inbound, conn.sourceValue, {
+      recipientUserIds: [conn.userId],
+      organizationId: conn.organizationId,
+    })
   } catch (err) {
     log.error({ err }, "nylas-inbound: processing failed")
     return 0

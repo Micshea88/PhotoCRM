@@ -77,10 +77,14 @@ The canonical entry point for both Resend and Nylas inbound email. Called with:
 - `email: InboundEmail` — parsed message (from, to, cc, subject, body, messageId, inReplyTo, references, sentAt)
 - `source` — provider taxonomy: `"resend"` (default) or `"gmail"` / `"outlook"` / `"imap"` for Nylas-connected mailboxes
 - `opts.recipientUserIds` — Nylas lane supplies the mailbox owner explicitly; Resend lane omits this and falls back to a query of org owners + admins via `memberRole`
+- `opts.organizationId` — the **authoritative** receiving org for the Nylas connected-mailbox lane (`conn.organizationId`). When present it is used directly, with **no cross-org guessing**.
 
 **Steps:**
 
-1. **Contact match** — resolves `email.from` to a known contact across all orgs (case-insensitive, most-recently-updated on multi-match). Unknown senders are **dropped** — no log, no auto-create (Mike-locked: "log replies only").
+1. **Org resolution (T2.2 — security-critical).** The receiving org is resolved authoritatively, in priority order — this replaced the old `findContactAnyOrg` "sender, most-recently-updated, across all orgs" signal, which mis-routed replies to the wrong tenant:
+   1. **`opts.organizationId` (Nylas lane) — AUTHORITATIVE.** Used directly; no cross-org lookup.
+   2. **Reply ref-match (Resend/shared lane).** `In-Reply-To` + parsed `References` are matched against `email_log.external_id` cross-org (`findEmailLogOrgByExternalIdsAnyOrg`, an owner/no-GUC resolver). The matched row's `organization_id` is the org that sent the original message — the authoritative receiving org for the reply.
+   3. **Cold inbound, no ref match — FAIL CLOSED.** The distinct set of orgs where the sender is a contact is resolved (`findSenderOrgIdsAnyOrg`). Exactly **one** org → use it. **Multiple** orgs → **DROP** (log a warning, return 0 — never guess, never most-recent). **Zero** (unknown sender) → **DROP** (Mike-locked: "log replies only"). The sender contact row is then looked up **within** the resolved org (`findContactInOrg`); a sender with no contact in the resolved org is dropped.
 
 2. **Dedup** — skips if this `(orgId, source, messageId)` is already in `email_log`. The partial unique index is a backstop.
 

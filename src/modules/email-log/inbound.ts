@@ -138,18 +138,29 @@ interface ContactRow {
   lastName: string
 }
 
-/** Cross-org sender lookup (owner connection — the webhook has no org context;
- *  single-tenant V1 → effectively one org). Most-recent on multi-match. */
-async function findContactAnyOrg(email: string): Promise<ContactRow | null> {
+/**
+ * Cross-org resolver: the DISTINCT set of organizations that have a contact
+ * with this email address. Used ONLY by the shared-domain (Resend) lane when no
+ * authoritative org signal (Nylas connection or reply reference) is available —
+ * to decide fail-closed between "exactly one org" (safe to route) and "multiple
+ * orgs" (ambiguous → DROP, never guess).
+ *
+ * Owner/no-GUC cross-org read: a PLAIN db.select() with NO org GUC set. In
+ * production the base pool role (`neondb_owner`) has BYPASSRLS, so FORCE ROW
+ * LEVEL SECURITY does not apply and the query sees contacts across ALL orgs. In
+ * dev (`pathway_app`, NOBYPASSRLS) the base pool IS subject to FORCE RLS; a
+ * caller that needs the result in dev must set the GUC externally. Mirrors the
+ * documented `*AnyOrg` resolvers in `email-log/queries.ts`.
+ *
+ * NOTE: deliberately does NOT order by updated_at / pick most-recent — that was
+ * the mis-routing bug (T2.2). It returns the full org set so the caller can
+ * fail closed on ambiguity.
+ */
+async function findSenderOrgIdsAnyOrg(email: string): Promise<string[]> {
   const lowered = bareEmail(email)
-  if (!lowered) return null
-  const [row] = await db
-    .select({
-      id: contacts.id,
-      organizationId: contacts.organizationId,
-      firstName: contacts.firstName,
-      lastName: contacts.lastName,
-    })
+  if (!lowered) return []
+  const rows = await db
+    .select({ organizationId: contacts.organizationId })
     .from(contacts)
     .where(
       and(
@@ -160,9 +171,30 @@ async function findContactAnyOrg(email: string): Promise<ContactRow | null> {
         ),
       ),
     )
-    .orderBy(sql`${contacts.updatedAt} desc`)
+  return [...new Set(rows.map((r) => r.organizationId))]
+}
+
+/**
+ * Cross-org resolver: the organization that SENT one of the referenced
+ * messages. An inbound reply carries In-Reply-To / References pointing at the
+ * Message-ID(s) of the message being replied to; every sent message is stored
+ * in `email_log` with `external_id` = that Message-ID and `organization_id` =
+ * the sending org. Matching the reply's refs against `external_id` cross-org
+ * therefore yields the AUTHORITATIVE receiving org for the reply — the org
+ * whose conversation this reply belongs to.
+ *
+ * Owner/no-GUC cross-org read: same PLAIN db.select() / RLS-bypass semantics as
+ * the `*AnyOrg` resolvers in `email-log/queries.ts` (base pool bypasses RLS in
+ * prod; dev requires an external GUC). Returns the matched row's org, or null.
+ */
+async function findEmailLogOrgByExternalIdsAnyOrg(refIds: string[]): Promise<string | null> {
+  if (refIds.length === 0) return null
+  const [row] = await db
+    .select({ organizationId: emailLog.organizationId })
+    .from(emailLog)
+    .where(and(inArray(emailLog.externalId, refIds), isNull(emailLog.deletedAt)))
     .limit(1)
-  return row ?? null
+  return row?.organizationId ?? null
 }
 
 /** Known contact for an email WITHIN a specific org. */
@@ -205,18 +237,71 @@ async function findContactInOrg(orgId: string, email: string): Promise<ContactRo
  * `opts.recipientUserIds` — the mailbox owner(s) to notify on reply.  The
  * Nylas lane passes `[conn.userId]`; the Resend lane omits opts, causing a
  * fallback query to the org's owners + admins via memberRole.
+ *
+ * `opts.organizationId` — the AUTHORITATIVE receiving org, supplied by the
+ * Nylas connected-mailbox lane (`conn.organizationId`). When present it is used
+ * directly and NO cross-org guessing is performed. When absent (shared-domain /
+ * Resend lane) the org is resolved deterministically, in priority order (T2.2):
+ *   1. Reply reference match — the org that sent the message being replied to
+ *      (In-Reply-To / References → email_log.external_id, cross-org).
+ *   2. Cold inbound, no ref match — FAIL CLOSED: sender in exactly ONE org →
+ *      use it; sender in MULTIPLE orgs → DROP (never guess / never most-recent);
+ *      unknown sender → DROP.
+ * This replaces the old `findContactAnyOrg` "sender, most-recently-updated,
+ * across all orgs" signal, which mis-routed replies to the wrong tenant.
  */
 export async function processInboundEmail(
   email: InboundEmail,
   source = "resend",
-  opts?: { recipientUserIds?: string[] },
+  opts?: { recipientUserIds?: string[]; organizationId?: string },
 ): Promise<number> {
-  const sender = await findContactAnyOrg(email.from)
+  // Reply-threading references — computed once and reused for both the org
+  // ref-match (below) and the thread-inheritance lookup (further down).
+  const refIds = [email.inReplyTo, ...parseMessageIdList(email.references)].filter(
+    (v): v is string => !!v,
+  )
+
+  // ── Resolve the receiving org authoritatively (priority order) ──────────
+  let orgId: string
+  if (opts?.organizationId) {
+    // 1. Nylas connected-mailbox lane — AUTHORITATIVE. No cross-org guessing.
+    orgId = opts.organizationId
+  } else {
+    // Shared-domain / Resend lane — no per-mailbox org context.
+    // 2. Reply-to-a-known-message: the ref-matched org sent the original.
+    const refMatchOrg = await findEmailLogOrgByExternalIdsAnyOrg(refIds)
+    if (refMatchOrg) {
+      orgId = refMatchOrg
+    } else {
+      // 3. Cold inbound, no reference match → FAIL CLOSED on ambiguity.
+      const senderOrgs = await findSenderOrgIdsAnyOrg(email.from)
+      const soleOrg = senderOrgs.length === 1 ? senderOrgs[0] : undefined
+      if (soleOrg) {
+        orgId = soleOrg
+      } else if (senderOrgs.length > 1) {
+        // Sender is a contact in multiple orgs and we have no deterministic
+        // signal — routing to any of them risks a cross-org mis-route. DROP.
+        log.warn(
+          { orgCount: senderOrgs.length },
+          "inbound: ambiguous sender across multiple orgs — dropped (fail closed)",
+        )
+        return 0
+      } else {
+        // Unknown sender (no contact in any org) — dropped, unchanged.
+        log.info("resend-inbound: unknown sender — dropped")
+        return 0
+      }
+    }
+  }
+
+  // The sender contact row is looked up IN the resolved org. If the ref-matched
+  // org has no such contact the sender row is null → drop (we only log to known
+  // contacts). This is the same "log replies to a known contact" behavior.
+  const sender = await findContactInOrg(orgId, email.from)
   if (!sender) {
-    log.info("resend-inbound: unknown sender — dropped")
+    log.info("inbound: sender is not a contact in the resolved org — dropped")
     return 0
   }
-  const orgId = sender.organizationId
 
   // Dedup: skip if this Message-ID is already logged for the org.
   const [existing] = await db
@@ -233,9 +318,7 @@ export async function processInboundEmail(
   if (existing) return 0
 
   // Threading: inherit from any referenced Message-ID, else root at self.
-  const refIds = [email.inReplyTo, ...parseMessageIdList(email.references)].filter(
-    (v): v is string => !!v,
-  )
+  // (refIds was computed once at the top and reused here.)
   let inheritedThreadId: string | null = null
   if (refIds.length > 0) {
     const matches = await db

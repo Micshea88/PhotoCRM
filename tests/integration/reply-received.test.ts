@@ -187,7 +187,7 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
     const inbound = makeInbound()
     setupDb(
       [
-        [SENDER_CONTACT], // findContactAnyOrg
+        [SENDER_CONTACT], // findContactInOrg (sender, Nylas lane)
         [], // dedup check → no existing
         [{ threadId: "thread_existing_abc" }], // thread lookup (inReplyTo set)
         [], // findContactInOrg for to[0]
@@ -197,6 +197,7 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
 
     const result = await processInboundEmail(inbound, "gmail", {
       recipientUserIds: [TEST_OWNER_ID],
+      organizationId: TEST_ORG_ID,
     })
 
     expect(result).toBeGreaterThan(0)
@@ -228,7 +229,7 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
       references: "<prior-ref@studio.com>",
     })
     setupDb([
-      [SENDER_CONTACT], // findContactAnyOrg
+      [SENDER_CONTACT], // findContactInOrg (sender, Nylas lane)
       [], // dedup check
       [{ threadId: "thread_via_refs_xyz" }], // thread lookup via References
       [], // findContactInOrg for to[0]
@@ -236,6 +237,7 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
 
     const result = await processInboundEmail(inbound, "gmail", {
       recipientUserIds: [TEST_OWNER_ID],
+      organizationId: TEST_ORG_ID,
     })
 
     expect(result).toBeGreaterThan(0)
@@ -253,7 +255,7 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
     })
     // No References → refIds empty → no thread lookup query
     setupDb([
-      [SENDER_CONTACT], // findContactAnyOrg
+      [SENDER_CONTACT], // findContactInOrg (sender, Nylas lane)
       [], // dedup check
       // No thread-lookup call since refIds is empty
       [], // findContactInOrg for to[0]
@@ -261,6 +263,7 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
 
     const result = await processInboundEmail(inbound, "gmail", {
       recipientUserIds: [TEST_OWNER_ID],
+      organizationId: TEST_ORG_ID,
     })
 
     expect(result).toBeGreaterThan(0)
@@ -272,12 +275,13 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
   it("dedup: returns 0 and does NOT emit notification when message already logged", async () => {
     const inbound = makeInbound()
     setupDb([
-      [SENDER_CONTACT], // findContactAnyOrg
+      [SENDER_CONTACT], // findContactInOrg (sender, Nylas lane)
       [{ id: "already_logged" }], // dedup check → existing row → early return
     ])
 
     const result = await processInboundEmail(inbound, "gmail", {
       recipientUserIds: [TEST_OWNER_ID],
+      organizationId: TEST_ORG_ID,
     })
 
     expect(result).toBe(0)
@@ -291,7 +295,8 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
     const inbound = makeInbound()
     setupDb(
       [
-        [SENDER_CONTACT], // findContactAnyOrg
+        [{ organizationId: TEST_ORG_ID }], // ref-match: inReplyTo → sending org
+        [SENDER_CONTACT], // findContactInOrg (sender, in resolved org)
         [], // dedup check
         [{ threadId: "thread_resend_123" }], // thread lookup
         [], // findContactInOrg for to[0]
@@ -301,7 +306,8 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
       emailLogId,
     )
 
-    // No opts → falls back to memberRole query for org owner+admins
+    // No opts/org → shared-domain (Resend) lane: reply ref-match resolves the
+    // org, then memberRole fallback supplies owner+admin notification recipients.
     const result = await processInboundEmail(inbound, "resend")
 
     expect(result).toBeGreaterThan(0)
@@ -316,11 +322,12 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
   it("unknown sender: returns 0 and does NOT emit notification", async () => {
     const inbound = makeInbound()
     setupDb([
-      [], // findContactAnyOrg → no match
+      [], // findContactInOrg → no match (unknown sender in resolved org)
     ])
 
     const result = await processInboundEmail(inbound, "gmail", {
       recipientUserIds: [TEST_OWNER_ID],
+      organizationId: TEST_ORG_ID,
     })
 
     expect(result).toBe(0)
@@ -333,7 +340,10 @@ describe("processInboundEmail — email.reply_received notification (Task 12)", 
     const blankNameContact = { ...SENDER_CONTACT, firstName: "", lastName: "" }
     setupDb([[blankNameContact], [], [{ threadId: "thread_blankname" }], []])
 
-    await processInboundEmail(makeInbound(), "gmail", { recipientUserIds: [TEST_OWNER_ID] })
+    await processInboundEmail(makeInbound(), "gmail", {
+      recipientUserIds: [TEST_OWNER_ID],
+      organizationId: TEST_ORG_ID,
+    })
 
     const call = mockEmitNotification.mock.calls[0]?.[0] as EmitNotificationInput | undefined
     expect(call).toBeDefined()

@@ -442,6 +442,13 @@
       "when": 1783468032989,
       "tag": "0062_dizzy_madame_web",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1783518686415,
+      "tag": "0063_payment_installments_role_gate_fail_closed",
+      "breakpoints": true
     }
   ]
 }

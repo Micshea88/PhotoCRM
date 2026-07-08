@@ -10,6 +10,10 @@
 
 ---
 
+## TIER 1 — ✅ COMPLETE + REVIEWED (2026-07-07)
+
+Commits `8e5c3c9`→`5d339b5` on `fix/multi-tenant-isolation`. All 5 items done; review found a Critical (redirect loop in the T1.4 fix) + Important (guard coverage) + Minor — ALL fixed (`092b4a9`/`c1cbb25`/`5d339b5`) and re-verified. `check-rls-force` now confirms **all 50 org-bearing tables have FORCE RLS**. tier-2 green (1199 tests). Awaiting Mike's Tier-1 sign-off before Tier 2.
+
 ## TIER 1 — BLOCKS MERGE (defense-in-depth gaps + a live read-staleness hole)
 
 ### T1.1 — 7 org-scoped tables have NO RLS at all — HIGH

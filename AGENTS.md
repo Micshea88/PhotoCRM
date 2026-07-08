@@ -57,7 +57,13 @@ This is a **"build it right" discipline, not a gamble**: the patterns are standa
 **A studio's data is ITS data.** It is never leaked, shared, pooled, or cross-referenced to any other company/studio in the system — for AI training, upsell suggestions, market insights, or ANY purpose. **AI learns ONLY from the individual tenant's own data.** No cross-tenant intelligence, no aggregated-market suggestions derived from other tenants' data, ever.
 
 - Build it exactly this way and safeguard against any possible error. A cross-tenant data leak would end Pathway and invite major lawsuits.
-- **Enforce with the same rigor as the multi-tenant RLS isolation** (Hard rules §4/§10a; `docs/multi-tenant-remediation-plan.md`). Any AI feature that reads data to inform a suggestion must be provably scoped to the single tenant — no query, embedding store, cache, or model context may span tenants.
+- **Enforce with the same rigor as the multi-tenant RLS isolation** (Hard rules §4/§10a; `docs/multi-tenant-remediation-plan.md`). **Treat a cross-tenant AI leak with the same severity as an RLS breach.** Any AI feature that reads data to inform output must be provably scoped to the single CURRENT tenant **at every layer**.
+- **Concrete AI leak vectors to guard against (all forbidden):**
+  - **NO shared/pooled vector or embedding store across tenants** — embeddings are **per-tenant partitioned**; a retrieval can only ever return the current tenant's vectors.
+  - **NO prompt/response cache that can serve one tenant's content to another** — cache keys are tenant-scoped; a cache hit can never cross tenants.
+  - **NO model fine-tuning or training on pooled cross-tenant data.**
+  - Every layer scoped: query, retrieval, embeddings, cache, model context. If any layer could span tenants, it's a breach.
+- **DECISION (LOCKED): Pathway will NOT build any aggregate / cross-tenant "market insight" or benchmark feature.** Even anonymized/aggregated, the risk of pulling sensitive tenant data and cross-referencing it to another tenant is not worth it. **AI suggestions draw ONLY from the individual tenant's own data** — e.g. _"YOU usually sell albums by day 45,"_ _"YOUR similar events added an engagement session"_ — never _"studios like yours…"_. This is not a limitation; it's plenty useful and carries zero cross-tenant risk. **Do not add an aggregate/cross-tenant data source later without revisiting this law** (explicit owner decision required).
 
 ### LAW 5 — Plain-English UI
 

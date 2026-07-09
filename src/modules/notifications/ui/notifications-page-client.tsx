@@ -13,6 +13,7 @@ import {
   EMPTY_NOTIFICATION_FILTER,
   filterStateToApiParams,
   type NotificationFilterState,
+  type NotificationContactOption,
 } from "./notification-filter-strip"
 import { groupByDate } from "./group-by-date"
 
@@ -28,6 +29,7 @@ const TABS: { value: NotificationTab; label: string }[] = [
 interface NotificationsApiResponse {
   notifications: NotificationWithContact[]
   unreadCount: number
+  notificationContacts?: NotificationContactOption[]
 }
 
 function buildFetchUrl(tab: NotificationTab, filter: NotificationFilterState): string {
@@ -35,6 +37,8 @@ function buildFetchUrl(tab: NotificationTab, filter: NotificationFilterState): s
   const extra = filterStateToApiParams(filter)
   for (const [k, v] of Object.entries(extra)) params.set(k, v)
   params.set("limit", "100")
+  // Include distinct notification contacts so the contact picker stays fresh.
+  params.set("includeContacts", "1")
   return `/api/notifications?${params.toString()}`
 }
 
@@ -50,6 +54,8 @@ export function NotificationsPageClient() {
   const [filter, setFilter] = useState<NotificationFilterState>(EMPTY_NOTIFICATION_FILTER)
   // null = initial loading (show skeleton)
   const [items, setItems] = useState<NotificationWithContact[] | null>(null)
+  // Distinct contacts from live notifications — used to populate the contact picker.
+  const [contactOptions, setContactOptions] = useState<NotificationContactOption[]>([])
   const [, startTransition] = useTransition()
 
   const doFetch = useCallback((t: NotificationTab, f: NotificationFilterState) => {
@@ -61,6 +67,9 @@ export function NotificationsPageClient() {
       )
       .then((data) => {
         setItems(data.notifications)
+        if (data.notificationContacts) {
+          setContactOptions(data.notificationContacts)
+        }
       })
       .catch(() => {
         setItems([])
@@ -128,7 +137,12 @@ export function NotificationsPageClient() {
       </div>
 
       {/* Filter strip */}
-      <NotificationFilterStrip state={filter} onChange={setFilter} />
+      <NotificationFilterStrip
+        state={filter}
+        onChange={setFilter}
+        contactOptions={contactOptions}
+        showSearch={true}
+      />
 
       {/* List */}
       <div className="rounded-md border border-[var(--color-border)]">

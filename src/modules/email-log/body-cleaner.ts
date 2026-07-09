@@ -8,11 +8,21 @@
 
 // Matches our own tracking-pixel img tag (echoed back in replied HTML).
 // src="/api/email/track/<id>.png" or "https://…/api/email/track/…png".
-const TRACKING_PIXEL_RE = /<img\b[^>]*\bsrc="[^"]*\/api\/email\/track\/[^"]*"[^>]*\/?>/gi
+// Accepts both double-quoted and single-quoted src attributes.
+const TRACKING_PIXEL_RE =
+  /<img\b[^>]*\bsrc=(?:"[^"]*\/api\/email\/track\/[^"]*"|'[^']*\/api\/email\/track\/[^']*')[^>]*\/?>/gi
 
 // Detects the "On <date>, <name> wrote:" line that email clients insert before
 // the quoted original. Strip-HTML is applied to each line before this check so
 // it matches both plain-text and HTML (div-wrapped) quote headers.
+//
+// SILENT-TRUNCATION RISK: any legitimate line that happens to start with "on"
+// and end with "wrote:" (e.g. a sentence such as "on this topic, the client
+// wrote:") will cause cleanEmailBody to discard everything from that line
+// onward with no warning or log.  This is intentional (the vast majority of
+// such lines are reply-chain headers), but reviewers should be aware that
+// false-positive truncations are possible.  This is a hot ingest path so no
+// log is emitted here — the comment is the documentation.
 const ON_WROTE_RE = /^on\s.+wrote:\s*$/i
 
 /**

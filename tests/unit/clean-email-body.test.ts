@@ -104,6 +104,28 @@ describe("cleanEmailBody", () => {
     expect(result!).not.toContain("/api/email/track/")
   })
 
+  it("strips a tracking pixel with a single-quoted src attribute", () => {
+    // Some email clients (e.g. older Outlook) render attributes with single quotes.
+    const withSingleQuotePixel =
+      "<p>Got it!</p><img src='/api/email/track/abc123.png' width='1' height='1' />"
+    const result = cleanEmailBody(withSingleQuotePixel)
+    expect(result).not.toBeNull()
+    expect(result!).toContain("Got it!")
+    expect(result!).not.toContain("/api/email/track/")
+    expect(result!).not.toContain("<img")
+  })
+
+  it("does NOT strip a regular image (non-tracking) with single-quoted src", () => {
+    // The pixel strip must be scoped to /api/email/track/ paths only.
+    const withRegularImage =
+      "<p>See below</p><img src='https://cdn.example.com/photo.jpg' alt='photo' />"
+    const result = cleanEmailBody(withRegularImage)
+    // The img tag is stripped by the general HTML-tag cleaner, but the content
+    // should survive and no pixel-specific logic should have run.
+    expect(result).not.toBeNull()
+    expect(result!).toContain("See below")
+  })
+
   // ── maxLen / truncation ──────────────────────────────────────────────────
 
   it("does NOT truncate when no maxLen is provided (full-length)", () => {

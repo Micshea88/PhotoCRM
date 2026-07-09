@@ -76,3 +76,57 @@ describe("detectUrls", () => {
     expect(segments[0]!.type).toBe("text")
   })
 })
+
+// ── Trailing-punctuation stripping ───────────────────────────────────────────
+//
+// URLs at the end of a sentence or wrapped in punctuation must NOT include the
+// punctuation in the href, but the punctuation MUST still appear as visible
+// text in the surrounding segment.
+
+describe("detectUrls — trailing punctuation stripping", () => {
+  it("strips a trailing period from a sentence-ending URL", () => {
+    // "Visit https://example.com." — the period ends the sentence, not the URL.
+    const segments = detectUrls("Visit https://example.com.")
+    const url = segments.find((s) => s.type === "url")
+    const text = segments.filter((s) => s.type === "text")
+    expect(url?.value).toBe("https://example.com")
+    // The period must still be visible (part of a text segment)
+    const allText = text.map((s) => s.value).join("")
+    expect(allText).toContain(".")
+  })
+
+  it("strips a trailing exclamation mark", () => {
+    // "https://studio.com/gallery!" — the bang punctuates the sentence.
+    const segments = detectUrls("Check out https://studio.com/gallery!")
+    const url = segments.find((s) => s.type === "url")
+    const text = segments.filter((s) => s.type === "text")
+    expect(url?.value).toBe("https://studio.com/gallery")
+    expect(text.map((s) => s.value).join("")).toContain("!")
+  })
+
+  it("strips a trailing closing paren when URL is wrapped in parentheses", () => {
+    // "(https://example.com)" — closing paren must not be in the href.
+    const segments = detectUrls("(https://example.com)")
+    const url = segments.find((s) => s.type === "url")
+    const text = segments.filter((s) => s.type === "text")
+    expect(url?.value).toBe("https://example.com")
+    // Both opening and closing parens must appear as visible text
+    const allText = text.map((s) => s.value).join("")
+    expect(allText).toContain("(")
+    expect(allText).toContain(")")
+  })
+
+  it("does NOT strip a mid-path dot (e.g. https://x.com/a.b)", () => {
+    // The dot is interior to the path — must not be trimmed.
+    const segments = detectUrls("See https://x.com/a.b for details")
+    const url = segments.find((s) => s.type === "url")
+    expect(url?.value).toBe("https://x.com/a.b")
+  })
+
+  it("preserves a trailing slash (https://x.com/path/)", () => {
+    // A trailing slash is a valid URL component and must not be stripped.
+    const segments = detectUrls("See https://x.com/path/ for details")
+    const url = segments.find((s) => s.type === "url")
+    expect(url?.value).toBe("https://x.com/path/")
+  })
+})

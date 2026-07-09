@@ -1,13 +1,27 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition } from "react"
-import { Settings } from "lucide-react"
+import { Settings, Clock, CalendarDays } from "lucide-react"
 import Link from "next/link"
+import * as RadixPopover from "@radix-ui/react-popover"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { markAllNotificationsRead, unsnoozeNotification } from "@/modules/notifications/actions"
+import {
+  markAllNotificationsRead,
+  unsnoozeNotification,
+  markNotificationsReadBulk,
+  markNotificationsUnreadBulk,
+  snoozeNotificationsBulk,
+  archiveNotificationsBulk,
+} from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
-import { NotificationRow } from "./notification-row"
+import {
+  NotificationRow,
+  SNOOZE_OPTIONS,
+  formatSnoozeDate,
+  toLocalDatetimeValue,
+  type SnoozeOption,
+} from "./notification-row"
 import {
   NotificationFilterStrip,
   EMPTY_NOTIFICATION_FILTER,
@@ -46,6 +60,205 @@ function buildFetchUrl(tab: NotificationTab, filter: NotificationFilterState): s
   return `/api/notifications?${params.toString()}`
 }
 
+// ---------------------------------------------------------------------------
+// BulkSnoozeMenu — portaled Radix popover with 4 presets + custom picker
+// ---------------------------------------------------------------------------
+
+interface BulkSnoozeMenuProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSnooze: (until: Date) => void
+}
+
+function BulkSnoozeMenu({ open, onOpenChange, onSnooze }: BulkSnoozeMenuProps) {
+  const [customValue, setCustomValue] = useState("")
+  const now = new Date()
+  const presets = SNOOZE_OPTIONS.map((opt) => ({ opt, until: opt.computeUntil(now) }))
+
+  function handlePreset(opt: SnoozeOption) {
+    onSnooze(opt.computeUntil(new Date()))
+    onOpenChange(false)
+  }
+
+  function handleCustom() {
+    if (!customValue) return
+    const until = new Date(customValue)
+    if (isNaN(until.getTime())) return
+    onSnooze(until)
+    onOpenChange(false)
+  }
+
+  return (
+    <RadixPopover.Root open={open} onOpenChange={onOpenChange}>
+      <RadixPopover.Trigger asChild>
+        <button
+          type="button"
+          className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          aria-label="Snooze selected"
+          data-testid="bulk-action-snooze"
+        >
+          <Clock className="size-3.5" />
+          Snooze
+        </button>
+      </RadixPopover.Trigger>
+
+      <RadixPopover.Portal>
+        <RadixPopover.Content
+          align="start"
+          side="bottom"
+          collisionPadding={8}
+          sideOffset={4}
+          className="z-50 min-w-[220px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 shadow-lg"
+          data-testid="bulk-snooze-menu"
+          onCloseAutoFocus={(e) => {
+            e.preventDefault()
+          }}
+        >
+          {/* 4 presets */}
+          <ul className="space-y-0.5" data-testid="bulk-snooze-presets">
+            {presets.map(({ opt, until }) => (
+              <li key={opt.label}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handlePreset(opt)
+                  }}
+                  className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                  data-testid={`bulk-snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <span className="font-medium">{opt.label}</span>
+                  <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">
+                    {formatSnoozeDate(until, now)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* Divider before custom picker */}
+          <div className="my-1 border-t border-[var(--color-border)]" />
+
+          {/* Custom date + time picker */}
+          <div
+            className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
+            data-testid="bulk-snooze-custom-row"
+          >
+            <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+            <div className="flex flex-1 flex-col gap-0.5">
+              <span className="text-sm font-medium">Pick date &amp; time&hellip;</span>
+              <input
+                type="datetime-local"
+                value={customValue}
+                onChange={(e) => {
+                  setCustomValue(e.target.value)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCustom()
+                }}
+                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 text-xs text-[var(--color-foreground)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
+                data-testid="bulk-snooze-custom-input"
+                aria-label="Pick snooze date and time"
+                min={toLocalDatetimeValue(new Date())}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleCustom}
+              disabled={!customValue}
+              className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+              data-testid="bulk-snooze-custom-confirm"
+            >
+              Set
+            </button>
+          </div>
+        </RadixPopover.Content>
+      </RadixPopover.Portal>
+    </RadixPopover.Root>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// BulkActionBar — shown when ≥1 row is selected
+// ---------------------------------------------------------------------------
+
+interface BulkActionBarProps {
+  count: number
+  onMarkRead: () => void
+  onMarkUnread: () => void
+  onSnooze: (until: Date) => void
+  onArchive: () => void
+  onClear: () => void
+}
+
+function BulkActionBar({
+  count,
+  onMarkRead,
+  onMarkUnread,
+  onSnooze,
+  onArchive,
+  onClear,
+}: BulkActionBarProps) {
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 px-4 py-2"
+      data-testid="bulk-action-bar"
+    >
+      <span
+        className="min-w-[6ch] text-sm font-medium text-[var(--color-primary)]"
+        data-testid="bulk-selected-count"
+      >
+        {count} selected
+      </span>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onMarkRead}
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          data-testid="bulk-action-mark-read"
+        >
+          Mark read
+        </button>
+
+        <button
+          type="button"
+          onClick={onMarkUnread}
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          data-testid="bulk-action-mark-unread"
+        >
+          Mark unread
+        </button>
+
+        <BulkSnoozeMenu open={snoozeOpen} onOpenChange={setSnoozeOpen} onSnooze={onSnooze} />
+
+        <button
+          type="button"
+          onClick={onArchive}
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          data-testid="bulk-action-archive"
+        >
+          Archive
+        </button>
+
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+          data-testid="bulk-action-clear"
+        >
+          Clear selection
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// NotificationsPageClient
+// ---------------------------------------------------------------------------
+
 /**
  * Full-page notifications client component. Mirrors the dropdown but is
  * full-width and URL-param-aware per tab/filter state.
@@ -60,6 +273,8 @@ export function NotificationsPageClient() {
   const [items, setItems] = useState<NotificationWithContact[] | null>(null)
   // Distinct contacts from live notifications — used to populate the contact picker.
   const [contactOptions, setContactOptions] = useState<NotificationContactOption[]>([])
+  // Section E3 — multi-select state: Set of selected notification IDs
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [, startTransition] = useTransition()
 
   const doFetch = useCallback((t: NotificationTab, f: NotificationFilterState) => {
@@ -92,6 +307,74 @@ export function NotificationsPageClient() {
     })
   }
 
+  // ── selection helpers ───────────────────────────────────────────────────────
+
+  function handleToggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
+
+  // ── bulk action handlers ────────────────────────────────────────────────────
+
+  function handleBulkMarkRead() {
+    const ids = [...selectedIds]
+    startTransition(() => {
+      void markNotificationsReadBulk({ ids }).then((res) => {
+        if (!res.serverError) {
+          clearSelection()
+          doFetch(tab, filter)
+        }
+      })
+    })
+  }
+
+  function handleBulkMarkUnread() {
+    const ids = [...selectedIds]
+    startTransition(() => {
+      void markNotificationsUnreadBulk({ ids }).then((res) => {
+        if (!res.serverError) {
+          clearSelection()
+          doFetch(tab, filter)
+        }
+      })
+    })
+  }
+
+  function handleBulkSnooze(until: Date) {
+    const ids = [...selectedIds]
+    startTransition(() => {
+      void snoozeNotificationsBulk({ ids, until }).then((res) => {
+        if (!res.serverError) {
+          clearSelection()
+          doFetch(tab, filter)
+        }
+      })
+    })
+  }
+
+  function handleBulkArchive() {
+    const ids = [...selectedIds]
+    startTransition(() => {
+      void archiveNotificationsBulk({ ids }).then((res) => {
+        if (!res.serverError) {
+          clearSelection()
+          doFetch(tab, filter)
+        }
+      })
+    })
+  }
+
   const groups = items ? groupByDate(items) : []
   const loading = items === null
 
@@ -117,6 +400,8 @@ export function NotificationsPageClient() {
               onClick={() => {
                 setTab(t.value)
                 setFilter(EMPTY_NOTIFICATION_FILTER)
+                // Selection always resets on tab switch
+                clearSelection()
                 // Archive and Snoozed don't include a contact filter — clear
                 // the picker and any active contactId so no stale pill lingers.
                 if (t.value === "archive" || t.value === "snoozed") {
@@ -157,6 +442,18 @@ export function NotificationsPageClient() {
         showSearch={true}
         showSort={true}
       />
+
+      {/* Bulk action bar — shown when ≥1 row is selected */}
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          onMarkRead={handleBulkMarkRead}
+          onMarkUnread={handleBulkMarkUnread}
+          onSnooze={handleBulkSnooze}
+          onArchive={handleBulkArchive}
+          onClear={clearSelection}
+        />
+      )}
 
       {/* List */}
       <div className="rounded-md border border-[var(--color-border)]">
@@ -204,6 +501,9 @@ export function NotificationsPageClient() {
                           }
                         : undefined
                     }
+                    selectable={true}
+                    selected={selectedIds.has(n.id)}
+                    onToggleSelect={handleToggleSelect}
                   />
                 ))}
               </div>

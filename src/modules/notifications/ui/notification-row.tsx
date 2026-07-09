@@ -121,6 +121,17 @@ export interface NotificationRowProps {
   onRefresh: () => void
   /** When provided, shows a "Wake now" button + the snoozedUntil time on the row. */
   onUnsnooze?: () => void
+  /**
+   * Page-mode selection props — only the /notifications page passes these.
+   * The bell dropdown does NOT pass them, so no checkboxes appear there.
+   *
+   * `selectable` enables the leading checkbox.
+   * `selected`   reflects whether this row is currently checked.
+   * `onToggleSelect` is called with the notification id when the checkbox changes.
+   */
+  selectable?: boolean
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }
 
 /**
@@ -130,7 +141,14 @@ export interface NotificationRowProps {
  * The snooze menu uses @radix-ui/react-popover (portaled) so it escapes the
  * dropdown's overflow-y-auto container and is never clipped.
  */
-export function NotificationRow({ notification: n, onRefresh, onUnsnooze }: NotificationRowProps) {
+export function NotificationRow({
+  notification: n,
+  onRefresh,
+  onUnsnooze,
+  selectable,
+  selected,
+  onToggleSelect,
+}: NotificationRowProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -242,6 +260,27 @@ export function NotificationRow({ notification: n, onRefresh, onUnsnooze }: Noti
       data-unread={!isRead ? "true" : "false"}
       onClick={handleRowClick}
     >
+      {/* Per-row selection checkbox — page-mode only; hidden in the bell dropdown */}
+      {selectable && (
+        <div
+          className="flex shrink-0 items-center self-stretch pr-1"
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            onChange={() => {
+              onToggleSelect?.(n.id)
+            }}
+            aria-label={`Select notification: ${n.title}`}
+            data-testid="notification-select-checkbox"
+            className="size-4 cursor-pointer rounded border-[var(--color-border)] accent-[var(--color-primary)]"
+          />
+        </div>
+      )}
+
       {/* Read / unread indicator dot — only rendered when unread */}
       {!isRead && (
         <div className="mt-1.5 shrink-0">

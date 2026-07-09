@@ -276,11 +276,18 @@ async function findContactInOrg(orgId: string, email: string): Promise<ContactRo
  *      unknown sender → DROP.
  * This replaces the old `findContactAnyOrg` "sender, most-recently-updated,
  * across all orgs" signal, which mis-routed replies to the wrong tenant.
+ *
+ * `opts.ownMailboxAddress` — the connected mailbox's own email address
+ * (Nylas lane: `conn.email`). When set, any To/Cc recipient matching this
+ * address (case-insensitive, via `bareEmail` normalization) is EXCLUDED from
+ * the participant fan-out.  This prevents a reply TO our studio mailbox from
+ * creating an email_log row on the studio mailbox's own contact record.
+ * The sender row (Row A) is unaffected by this exclusion.
  */
 export async function processInboundEmail(
   email: InboundEmail,
   source = "resend",
-  opts?: { recipientUserIds?: string[]; organizationId?: string },
+  opts?: { recipientUserIds?: string[]; organizationId?: string; ownMailboxAddress?: string },
 ): Promise<number> {
   // Reply-threading references — computed once and reused for both the org
   // ref-match (below) and the thread-inheritance lookup (further down).
@@ -359,8 +366,12 @@ export async function processInboundEmail(
 
   // Participants: sender (always) + known To/Cc contacts (never Bcc — not in
   // inbound headers anyway). Dedup by contact id.
+  // The connection's own mailbox address is excluded so that a reply addressed
+  // TO our studio mailbox doesn't create an email_log row on our own contact.
+  const ownMailboxBare = opts?.ownMailboxAddress ? bareEmail(opts.ownMailboxAddress) : null
   const recipientContacts: ContactRow[] = []
   for (const addr of [...email.to, ...email.cc]) {
+    if (ownMailboxBare && bareEmail(addr) === ownMailboxBare) continue
     const c = await findContactInOrg(orgId, addr)
     if (c) recipientContacts.push(c)
   }

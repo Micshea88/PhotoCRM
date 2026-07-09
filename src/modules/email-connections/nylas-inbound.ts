@@ -145,9 +145,13 @@ export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promi
   try {
     // The receiving mailbox's org is AUTHORITATIVE — pass it so processInboundEmail
     // routes to this tenant directly, never guessing cross-org (T2.2).
+    // ownMailboxAddress excludes the studio's own mailbox from the To/Cc fan-out
+    // so a reply addressed TO the studio does not create a participant row on the
+    // studio's own contact record.
     return await processInboundEmail(inbound, conn.sourceValue, {
       recipientUserIds: [conn.userId],
       organizationId: conn.organizationId,
+      ownMailboxAddress: conn.email,
     })
   } catch (err) {
     log.error({ err }, "nylas-inbound: processing failed")

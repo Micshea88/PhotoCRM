@@ -243,3 +243,137 @@ describe("processInboundEmail — org routing resolution (T2.2)", () => {
     expect(mockEmitNotification).not.toHaveBeenCalled()
   })
 })
+
+// ─── Section B: own-mailbox exclusion ─────────────────────────────────────────
+// An inbound reply whose To == the connected mailbox MUST NOT create a
+// participant email_log row for the studio's own contact record.
+// The sender row (Row A) MUST still be created.
+
+describe("processInboundEmail — own-mailbox exclusion (Section B)", () => {
+  const STUDIO_MAILBOX = "studio@kandkphotography.com"
+  // A contact row for the studio address — would be written if the exclusion
+  // were absent. Its id is distinct from CONTACT_A.
+  const CONTACT_STUDIO = {
+    id: "contact_studio",
+    organizationId: ORG_A,
+    firstName: "Studio",
+    lastName: "Mailbox",
+  }
+
+  beforeEach(() => {
+    mockEmitNotification.mockReset()
+    mockEmitNotification.mockResolvedValue({ created: 1 })
+    dbMockState.selectQueue = []
+    dbMockState.insertedValues = []
+    dbMockState.txInsertCount = 0
+  })
+
+  it("does NOT write a participant row when To == ownMailboxAddress", async () => {
+    // Setup: the inbound message is FROM alice (CONTACT_A) TO the studio mailbox.
+    // Without the exclusion, processInboundEmail would call findContactInOrg for
+    // the studio address and — if found — write a second email_log row.
+    // With the exclusion, that address is skipped BEFORE the DB lookup.
+    setupDb([
+      [CONTACT_A], // findContactInOrg(ORG_A, from) → sender
+      [], // dedup
+      [{ threadId: "thread_a" }], // thread lookup (reply)
+      // NOTE: findContactInOrg for the studio mailbox is NOT called (skipped by
+      // ownMailboxAddress exclusion), so no select queue entry is needed for it.
+    ])
+
+    const result = await processInboundEmail(
+      makeInbound({
+        from: "alice@example.com",
+        to: [STUDIO_MAILBOX],
+        cc: [],
+        inReplyTo: "<original@studio.com>",
+      }),
+      "gmail",
+      {
+        recipientUserIds: [OWNER_A],
+        organizationId: ORG_A,
+        ownMailboxAddress: STUDIO_MAILBOX,
+      },
+    )
+
+    // The sender row IS written.
+    expect(result).toBeGreaterThan(0)
+    expect(dbMockState.insertedValues).toHaveLength(1)
+    expect(dbMockState.insertedValues[0]!.contactId).toBe(CONTACT_A.id)
+
+    // The studio mailbox contact row is NOT written (exclusion in effect).
+    const studioRow = dbMockState.insertedValues.find((v) => v.contactId === CONTACT_STUDIO.id)
+    expect(studioRow).toBeUndefined()
+  })
+
+  it("is case-insensitive: excludes To address even if casing differs", async () => {
+    setupDb([
+      [CONTACT_A], // findContactInOrg(ORG_A, from) → sender
+      [], // dedup
+      [], // thread lookup
+    ])
+
+    const result = await processInboundEmail(
+      makeInbound({
+        from: "alice@example.com",
+        // Upper-cased version — bareEmail normalization must match conn.email
+        to: ["Studio@KandKPhotography.com"],
+        cc: [],
+        inReplyTo: null,
+        references: null,
+      }),
+      "gmail",
+      {
+        recipientUserIds: [OWNER_A],
+        organizationId: ORG_A,
+        // Lower-cased as stored in email_connections.email
+        ownMailboxAddress: STUDIO_MAILBOX,
+      },
+    )
+
+    // Only the sender row is written.
+    expect(result).toBeGreaterThan(0)
+    expect(dbMockState.insertedValues).toHaveLength(1)
+    expect(dbMockState.insertedValues[0]!.contactId).toBe(CONTACT_A.id)
+  })
+
+  it("still writes a participant row for a different To address (not the own mailbox)", async () => {
+    const THIRD_PARTY = "thirdparty@example.com"
+    const CONTACT_THIRD = {
+      id: "contact_third",
+      organizationId: ORG_A,
+      firstName: "Third",
+      lastName: "Party",
+    }
+
+    // No thread lookup fires when refIds is empty (no inReplyTo / references).
+    setupDb([
+      [CONTACT_A], // findContactInOrg(ORG_A, from) → sender
+      [], // dedup
+      [CONTACT_THIRD], // findContactInOrg(ORG_A, thirdparty) → participant
+    ])
+
+    const result = await processInboundEmail(
+      makeInbound({
+        from: "alice@example.com",
+        to: [STUDIO_MAILBOX, THIRD_PARTY],
+        cc: [],
+        inReplyTo: null,
+        references: null,
+      }),
+      "gmail",
+      {
+        recipientUserIds: [OWNER_A],
+        organizationId: ORG_A,
+        ownMailboxAddress: STUDIO_MAILBOX,
+      },
+    )
+
+    // Sender + one participant (third party only; studio skipped).
+    expect(result).toBe(2)
+    const ids = dbMockState.insertedValues.map((v) => v.contactId)
+    expect(ids).toContain(CONTACT_A.id)
+    expect(ids).toContain(CONTACT_THIRD.id)
+    expect(ids).not.toContain(CONTACT_STUDIO.id)
+  })
+})

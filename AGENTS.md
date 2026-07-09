@@ -77,6 +77,16 @@ To satisfy LAW 1 (persona separation) for live-consultation / client-facing disp
 
 (Design-doc statement + wireframe checklist: `docs/pathway-design-system.md`.)
 
+### LAW 6 — Responsive content width (no fixed-width islands)
+
+**Page content is FLUID and scales with the viewport.** It fills the available width with consistent horizontal padding, up to a sensible readable max-width — it is **NEVER pinned to a single fixed size, and never sits as a narrow island surrounded by large dead margins on wide screens.**
+
+- **Every page uses the SHARED page-shell / content-container.** Pages do NOT hand-roll their own width and padding. If no shared container exists, **build one** — a per-page width constraint is the exact bug this rule exists to prevent (the failure mode is a scatter of `max-w-2xl` / `max-w-3xl` / `max-w-4xl` across pages with no single source of truth).
+- **No doubled gutters:** the parent container's padding and a child's `max-width` must not both apply. One layer owns the horizontal constraint.
+- **Every new screen is checked at NARROW, MEDIUM, and WIDE viewports before it's considered done:** no giant dead margins when wide, no cramped edges when narrow.
+- **Applies to ALL screens.** The failure mode is fixing one page and repeating the defect on the next — so the constraint lives in the shared container, not in each page.
+- **Trigger:** violated on the /notifications page (a fixed-width `mx-auto max-w-2xl` content island with excessive left/right whitespace on wide screens), 2026-07-09.
+
 ## Build-planning audits — STANDING PROCESS (every audit)
 
 Every build-planning / feature audit MUST research and reference best-in-class patterns from BOTH sides, and surface divergences as choices:

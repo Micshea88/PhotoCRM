@@ -8,6 +8,7 @@ import {
   BellRing,
   Archive,
   ArchiveRestore,
+  Check,
   CheckSquare,
   Clock,
   CalendarDays,
@@ -176,6 +177,19 @@ export function NotificationRow({
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [customValue, setCustomValue] = useState("")
   const isRead = n.readAt !== null
+
+  function handleMarkRead() {
+    setError(null)
+    startTransition(() => {
+      void markNotificationRead({ id: n.id }).then((res) => {
+        if (res.serverError) {
+          setError(res.serverError)
+        } else {
+          onRefresh()
+        }
+      })
+    })
+  }
 
   function handleMarkUnread() {
     setError(null)
@@ -404,18 +418,32 @@ export function NotificationRow({
           </Tooltip>
         )}
 
-        {/* Mark unread */}
-        <Tooltip label="Mark unread">
-          <button
-            type="button"
-            onClick={handleMarkUnread}
-            className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-            aria-label="Mark unread"
-            data-testid="action-mark-unread"
-          >
-            <BellOff className="size-3.5" />
-          </button>
-        </Tooltip>
+        {/* Mark read / Mark unread — state-dependent */}
+        {!isRead ? (
+          <Tooltip label="Mark as read">
+            <button
+              type="button"
+              onClick={handleMarkRead}
+              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+              aria-label="Mark as read"
+              data-testid="action-mark-read"
+            >
+              <Check className="size-3.5" />
+            </button>
+          </Tooltip>
+        ) : (
+          <Tooltip label="Mark as unread">
+            <button
+              type="button"
+              onClick={handleMarkUnread}
+              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+              aria-label="Mark as unread"
+              data-testid="action-mark-unread"
+            >
+              <BellOff className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
 
         {/* Snooze — portaled so it isn't clipped by the dropdown's overflow */}
         <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>

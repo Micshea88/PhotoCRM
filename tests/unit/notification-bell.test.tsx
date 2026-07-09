@@ -492,14 +492,42 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
-  it("clicking a hover action button does NOT navigate (stopPropagation)", async () => {
+  it("clicking a hover action button does NOT navigate the row (stopPropagation)", async () => {
     vi.mocked(markNotificationRead).mockClear()
     const user = userEvent.setup()
     const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    await user.click(screen.getByTestId("action-mark-unread"))
+    // The hover cluster stops propagation: clicking an action fires its own
+    // handler but never triggers the row's navigation.
+    await user.click(screen.getByTestId("action-mark-read"))
     expect(mockRouterPush).not.toHaveBeenCalled()
-    expect(markNotificationRead).not.toHaveBeenCalled()
+  })
+
+  // E7 — explicit state-dependent mark-read / mark-unread hover action
+  it("E7: an unread row shows 'Mark as read' (not 'Mark as unread')", () => {
+    const n = makeNotification({ readAt: null })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-mark-read")).toBeInTheDocument()
+    expect(screen.queryByTestId("action-mark-unread")).toBeNull()
+  })
+
+  it("E7: a read row shows 'Mark as unread' (not 'Mark as read')", () => {
+    const n = makeNotification({ readAt: new Date() })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-mark-unread")).toBeInTheDocument()
+    expect(screen.queryByTestId("action-mark-read")).toBeNull()
+  })
+
+  it("E7: clicking 'Mark as read' calls markNotificationRead and does not navigate", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-mark-read"))
+    await waitFor(() => {
+      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
+    })
+    expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
   it("mark-as-unread: after marking unread, re-rendering with readAt=null shows blue dot", async () => {

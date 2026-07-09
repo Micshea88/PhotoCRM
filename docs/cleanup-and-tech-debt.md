@@ -167,6 +167,19 @@ Full detail + fixes + effort + tests: **`docs/multi-tenant-remediation-plan.md`*
 - **Fix (someday, low priority):** add the `pgPolicy` + `.enableRLS()` declarations to `rbac/schema.ts` to match the SQL, bringing it into the TS-tracked pattern (like the Tier-1 tables). Snapshot-neutral if the SQL already matches.
 - **Severity:** internal (cosmetic schema/SQL drift; enforcement is correct + tested). **Status:** Open (follow-up). Surfaced by the final whole-branch review (2026-07-08).
 
+### A.20 — Notification filter strip reuses shared PRIMITIVES, not the whole ActivityFilterStrip (deliberate; full extraction deferred)
+
+- **Context:** Task 15 required the /notifications filter strip to "reuse the Contacts filter strip." An E1 feasibility assessment (2026-07-09) found the whole `ActivityFilterStrip` + `activity-filter.ts` engine **cannot be cleanly reused** for notifications. Specific coupling points:
+  1. **"Type" is structurally incompatible** — in the activity strip, type IS the tab (`ActivityTab = all|note|call|email|sms|meeting`, mutually exclusive); notifications need a **multi-select** of 15+ notification-type keys. Different models; can't map one onto the other.
+  2. `ActivityFilterState` carries `events`/`owners`/`directions`/`outcomes`/`thread` — none have a notification equivalent.
+  3. The component requires activity-specific props (`eventOptions`, `memberOptions`) → passing empties yields misleading dropdowns.
+  4. Unconditional module-level imports from calls/meetings (`RECORDED_CALL_DISPOSITIONS`, `MEETING_OUTCOMES`, …) → bundle-couples the notifications page to those modules.
+  5. URL-param keys are hardwired + activity-specific (`atab/aevent/aowner/adir/aoutcome/athread`); the notifications page is state-driven.
+  6. The `FilterPills` pill-type union has no notification-type or contact pill.
+- **DECISION (Mike, 2026-07-09):** satisfy the reuse rule at the **PRIMITIVE level** — `NotificationFilterStrip` reuses the shared `MultiSelectMenu` / `FilterPills` / `DebouncedSearchInput` (adding a contact picker + free-text search), **not** the activity-specific wrapper. **Do NOT** refactor `ActivityFilterStrip` into a generic strip now: that's a multi-session refactor of a working, memory-locked component with only **two** consumers, and the correct abstraction isn't knowable yet.
+- **Rule of thumb (revisit trigger):** extract a shared `GenericFilterStrip` primitive **only once a THIRD consumer exists** (e.g. a Tasks or Events filter page) and the correct shape is obvious rather than guessed. Until then, primitive-level reuse is the standard — this is a deliberate deferral, **not** a violation of the reuse rule.
+- **Severity:** internal / design-record. **Status:** Decided + implemented at primitive level (E1, Section E of `feat/notifications-inbound-fixes`).
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

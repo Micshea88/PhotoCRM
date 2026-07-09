@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Bell, BellOff, Archive, CheckSquare, Clock } from "lucide-react"
+import { useRef, useState, useTransition } from "react"
+import { Bell, BellOff, Archive, CheckSquare, Clock, CalendarDays } from "lucide-react"
+import * as RadixPopover from "@radix-ui/react-popover"
 import { Tooltip } from "@/components/ui/tooltip"
-import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import {
   markNotificationRead,
@@ -57,25 +57,34 @@ function categoryDotClass(category: string, tier: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Snooze options
+// Snooze options — 4 presets with resolved datetime labels
 // ---------------------------------------------------------------------------
 
-interface SnoozeOption {
+export interface SnoozeOption {
   label: string
   computeUntil: (now: Date) => Date
 }
 
 export const SNOOZE_OPTIONS: SnoozeOption[] = [
   {
-    label: "1 hour",
-    computeUntil: (now) => new Date(now.getTime() + 60 * 60 * 1000),
+    label: "Later today",
+    computeUntil: (now) => new Date(now.getTime() + 3 * 60 * 60 * 1000),
   },
   {
     label: "Tomorrow",
     computeUntil: (now) => {
       const d = new Date(now)
       d.setDate(d.getDate() + 1)
-      d.setHours(9, 0, 0, 0)
+      d.setHours(8, 0, 0, 0)
+      return d
+    },
+  },
+  {
+    label: "In 2 days",
+    computeUntil: (now) => {
+      const d = new Date(now)
+      d.setDate(d.getDate() + 2)
+      d.setHours(8, 0, 0, 0)
       return d
     },
   },
@@ -83,13 +92,32 @@ export const SNOOZE_OPTIONS: SnoozeOption[] = [
     label: "Next week",
     computeUntil: (now) => {
       const d = new Date(now)
+      // Always advance to the next Monday (even if today IS Monday)
       const daysUntilMonday = (8 - d.getDay()) % 7 || 7
       d.setDate(d.getDate() + daysUntilMonday)
-      d.setHours(9, 0, 0, 0)
+      d.setHours(8, 0, 0, 0)
       return d
     },
   },
 ]
+
+/**
+ * Format a snooze target date for display next to the preset label.
+ * "Later today" shows only the time (same day); others show weekday + date + time.
+ */
+export function formatSnoozeDate(date: Date, now: Date = new Date()): string {
+  const isToday = date.toDateString() === now.toDateString()
+  if (isToday) {
+    return date.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" })
+  }
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -103,10 +131,16 @@ export interface NotificationRowProps {
 /**
  * 3-layer notification row (headline / detail / anchor + relative time).
  * Hover reveals 4 action buttons: mark unread, snooze, create task, archive.
+ *
+ * The snooze menu uses @radix-ui/react-popover (portaled) so it escapes the
+ * dropdown's overflow-y-auto container and is never clipped.
  */
 export function NotificationRow({ notification: n, onRefresh }: NotificationRowProps) {
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
+  const [customValue, setCustomValue] = useState("")
+  const customInputRef = useRef<HTMLInputElement | null>(null)
   const isRead = n.readAt !== null
 
   function handleMarkUnread() {
@@ -149,9 +183,27 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
     })
   }
 
-  function handleSnooze(option: SnoozeOption) {
+  function handleSnoozePreset(option: SnoozeOption) {
     const until = option.computeUntil(new Date())
     setError(null)
+    setSnoozeOpen(false)
+    startTransition(() => {
+      void snoozeNotification({ id: n.id, until }).then((res) => {
+        if (res.serverError) {
+          setError(res.serverError)
+        } else {
+          onRefresh()
+        }
+      })
+    })
+  }
+
+  function handleSnoozeCustom() {
+    if (!customValue) return
+    const until = new Date(customValue)
+    if (isNaN(until.getTime())) return
+    setError(null)
+    setSnoozeOpen(false)
     startTransition(() => {
       void snoozeNotification({ id: n.id, until }).then((res) => {
         if (res.serverError) {
@@ -177,6 +229,10 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
   // Safe lookup that handles unknown type keys (category can be any string from DB)
   const typeLabel =
     (NOTIFICATION_TYPES as Record<string, { label: string } | undefined>)[n.type]?.label ?? n.type
+
+  // Compute preset dates once per render so JSX stays readable
+  const now = new Date()
+  const presets = SNOOZE_OPTIONS.map((opt) => ({ opt, until: opt.computeUntil(now) }))
 
   return (
     <div
@@ -269,43 +325,94 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
           </button>
         </Tooltip>
 
-        {/* Snooze */}
-        <Popover
-          align="end"
-          className="p-1"
-          trigger={({ toggle }) => (
-            <Tooltip label="Snooze">
+        {/* Snooze — portaled so it isn't clipped by the dropdown's overflow */}
+        <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+          <Tooltip label="Snooze">
+            <RadixPopover.Trigger asChild>
               <button
                 type="button"
-                onClick={toggle}
                 className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
                 aria-label="Snooze"
                 data-testid="action-snooze"
               >
                 <Clock className="size-3.5" />
               </button>
-            </Tooltip>
-          )}
-        >
-          {({ close }) => (
-            <ul className="space-y-0.5">
-              {SNOOZE_OPTIONS.map((opt) => (
-                <li key={opt.label}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSnooze(opt)
-                      close()
+            </RadixPopover.Trigger>
+          </Tooltip>
+
+          <RadixPopover.Portal>
+            <RadixPopover.Content
+              align="end"
+              side="bottom"
+              collisionPadding={8}
+              sideOffset={4}
+              className="z-50 min-w-[220px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 shadow-lg"
+              data-testid="snooze-menu"
+              onCloseAutoFocus={(e) => {
+                e.preventDefault()
+              }}
+            >
+              {/* 4 presets */}
+              <ul className="space-y-0.5" data-testid="snooze-presets">
+                {presets.map(({ opt, until }) => (
+                  <li key={opt.label}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSnoozePreset(opt)
+                      }}
+                      className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                      data-testid={`snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <span className="font-medium">{opt.label}</span>
+                      <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">
+                        {formatSnoozeDate(until, now)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Divider before custom picker */}
+              <div className="my-1 border-t border-[var(--color-border)]" />
+
+              {/* Custom date + time picker */}
+              <div
+                className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
+                data-testid="snooze-custom-row"
+              >
+                <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+                <div className="flex flex-1 flex-col gap-0.5">
+                  <span className="text-sm font-medium">Pick date &amp; time&hellip;</span>
+                  <input
+                    ref={customInputRef}
+                    type="datetime-local"
+                    value={customValue}
+                    onChange={(e) => {
+                      setCustomValue(e.target.value)
                     }}
-                    className="flex w-full rounded px-3 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40"
-                  >
-                    {opt.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Popover>
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSnoozeCustom()
+                    }}
+                    className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 text-xs text-[var(--color-foreground)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
+                    data-testid="snooze-custom-input"
+                    aria-label="Pick snooze date and time"
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSnoozeCustom}
+                  disabled={!customValue}
+                  className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+                  data-testid="snooze-custom-confirm"
+                >
+                  Set
+                </button>
+              </div>
+            </RadixPopover.Content>
+          </RadixPopover.Portal>
+        </RadixPopover.Root>
 
         {/* Create task */}
         <Tooltip label={n.contactId ? "Create task" : "No linked contact"}>

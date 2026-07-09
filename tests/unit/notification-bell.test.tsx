@@ -1,11 +1,12 @@
 /**
- * Unit tests for the notification bell + row components (Task 15).
+ * Unit tests for the notification bell + row components (Task 15 / Section C).
  * Tests: bell badge shows/hides per count; row renders 3 layers + relative
  * time; create-task is disabled when contactId is null; snooze options
- * compute future `until` dates.
+ * compute future `until` dates; snooze menu renders all presets + custom row;
+ * choosing a preset calls snoozeNotification with the right `until`.
  */
-import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 // ---------------------------------------------------------------------------
@@ -48,12 +49,36 @@ vi.stubGlobal(
   }),
 )
 
+// Radix Popover requires pointer-event APIs that jsdom doesn't fully implement.
+// Shim them so Radix's pointer-capture guard doesn't trip.
+beforeEach(() => {
+  if (typeof window === "undefined") return
+  Object.defineProperty(Element.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: () => false,
+  })
+  Object.defineProperty(Element.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  })
+  Object.defineProperty(Element.prototype, "setPointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  })
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => undefined,
+  })
+})
+
 import { NotificationBell } from "@/modules/notifications/ui/notification-bell"
 import {
   NotificationRow,
   relativeTime,
   SNOOZE_OPTIONS,
+  formatSnoozeDate,
 } from "@/modules/notifications/ui/notification-row"
+import { snoozeNotification } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 
 // ---------------------------------------------------------------------------
@@ -234,36 +259,172 @@ describe("relativeTime", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Snooze — future `until` computation (calls production SNOOZE_OPTIONS)
+// Snooze option `computeUntil` — 4 new presets with fixed clock injection
 // ---------------------------------------------------------------------------
 
-describe("Snooze option `until` computation", () => {
+describe("SNOOZE_OPTIONS computeUntil (fixed now = Tuesday 2026-07-07T10:00:00 UTC)", () => {
   // Fixed reference point: 2026-07-07T10:00:00Z, a Tuesday
   const fixedNow = new Date("2026-07-07T10:00:00Z")
 
-  it("SNOOZE_OPTIONS[0] '1 hour' computes a date exactly 60 min in the future", () => {
-     
+  it("[0] 'Later today' produces exactly now + 3 hours", () => {
     const until = SNOOZE_OPTIONS[0]!.computeUntil(fixedNow)
-    expect(until.getTime() - fixedNow.getTime()).toBe(3_600_000)
-    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
+    expect(until.getTime() - fixedNow.getTime()).toBe(3 * 60 * 60 * 1000)
   })
 
-  it("SNOOZE_OPTIONS[1] 'Tomorrow' produces next-calendar-day at 09:00 local time", () => {
-     
+  it("[1] 'Tomorrow' is the next calendar day at 08:00 local time", () => {
     const until = SNOOZE_OPTIONS[1]!.computeUntil(fixedNow)
     expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
-    expect(until.getHours()).toBe(9)
+    // Should be one calendar day later
+    const expectedDate = new Date(fixedNow)
+    expectedDate.setDate(expectedDate.getDate() + 1)
+    expect(until.getDate()).toBe(expectedDate.getDate())
+    expect(until.getHours()).toBe(8)
     expect(until.getMinutes()).toBe(0)
     expect(until.getSeconds()).toBe(0)
   })
 
-  it("SNOOZE_OPTIONS[2] 'Next week' computes the coming Monday at 09:00 local time", () => {
-    // July 7, 2026 is a Tuesday (getDay() === 2), so next Monday is July 13
-     
+  it("[2] 'In 2 days' is 2 calendar days later at 08:00 local time", () => {
     const until = SNOOZE_OPTIONS[2]!.computeUntil(fixedNow)
     expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
-    expect(until.getDay()).toBe(1) // 1 === Monday
-    expect(until.getHours()).toBe(9)
+    const expectedDate = new Date(fixedNow)
+    expectedDate.setDate(expectedDate.getDate() + 2)
+    expect(until.getDate()).toBe(expectedDate.getDate())
+    expect(until.getHours()).toBe(8)
     expect(until.getMinutes()).toBe(0)
+    expect(until.getSeconds()).toBe(0)
+  })
+
+  it("[3] 'Next week' is the next Monday at 08:00 local time (Tuesday → next Mon in 6 days)", () => {
+    // July 7, 2026 is a Tuesday (getDay() === 2), so next Monday is July 13
+    const until = SNOOZE_OPTIONS[3]!.computeUntil(fixedNow)
+    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
+    expect(until.getDay()).toBe(1) // 1 === Monday
+    expect(until.getHours()).toBe(8)
+    expect(until.getMinutes()).toBe(0)
+    expect(until.getSeconds()).toBe(0)
+  })
+
+  it("[3] 'Next week' always skips to next Monday even when today is Monday", () => {
+    // Monday 2026-07-06T10:00:00Z
+    const monday = new Date("2026-07-06T10:00:00Z")
+    const until = SNOOZE_OPTIONS[3]!.computeUntil(monday)
+    // Should be next Monday (+7 days), not today
+    expect(until.getDay()).toBe(1)
+    expect(until.getTime()).toBeGreaterThan(monday.getTime() + 6 * 24 * 60 * 60 * 1000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// formatSnoozeDate helper
+// ---------------------------------------------------------------------------
+
+describe("formatSnoozeDate", () => {
+  it("returns only time when the target date is today", () => {
+    const now = new Date("2026-07-08T14:00:00")
+    const sameDay = new Date("2026-07-08T17:00:00")
+    const result = formatSnoozeDate(sameDay, now)
+    // Should NOT contain a weekday or month name — just a time
+    expect(result).not.toMatch(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+    // Should contain some time-like output (hour)
+    expect(result).toBeTruthy()
+  })
+
+  it("returns weekday + date when target is a different day", () => {
+    const now = new Date("2026-07-08T14:00:00")
+    const tomorrow = new Date("2026-07-09T08:00:00")
+    const result = formatSnoozeDate(tomorrow, now)
+    // The result should contain a weekday abbreviation
+    expect(result).toMatch(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Snooze menu component test (jsdom) — all 4 presets + custom row rendered;
+// clicking a preset calls snoozeNotification with the expected until
+// ---------------------------------------------------------------------------
+
+describe("NotificationRow — snooze menu", () => {
+  it("renders the snooze trigger button", () => {
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-snooze")).toBeInTheDocument()
+  })
+
+  it("opens the snooze menu with all 4 presets + custom row on trigger click", async () => {
+    const user = userEvent.setup()
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+
+    await user.click(screen.getByTestId("action-snooze"))
+
+    // Radix Portal renders to document.body — check body or use findBy*
+    const menu = await screen.findByTestId("snooze-menu")
+    expect(menu).toBeInTheDocument()
+
+    // All 4 presets
+    expect(screen.getByTestId("snooze-preset-later-today")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-preset-tomorrow")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-preset-in-2-days")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-preset-next-week")).toBeInTheDocument()
+
+    // Custom row
+    expect(screen.getByTestId("snooze-custom-row")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-custom-input")).toBeInTheDocument()
+  })
+
+  it("each preset button shows its label text", async () => {
+    const user = userEvent.setup()
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-snooze"))
+    await screen.findByTestId("snooze-menu")
+
+    expect(screen.getByTestId("snooze-preset-later-today").textContent).toContain("Later today")
+    expect(screen.getByTestId("snooze-preset-tomorrow").textContent).toContain("Tomorrow")
+    expect(screen.getByTestId("snooze-preset-in-2-days").textContent).toContain("In 2 days")
+    expect(screen.getByTestId("snooze-preset-next-week").textContent).toContain("Next week")
+  })
+
+  it("clicking 'Later today' preset calls snoozeNotification with until ~3h from now", async () => {
+    vi.mocked(snoozeNotification).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification()
+    const before = Date.now()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-snooze"))
+    await screen.findByTestId("snooze-menu")
+
+    await user.click(screen.getByTestId("snooze-preset-later-today"))
+
+    await waitFor(() => {
+      expect(snoozeNotification).toHaveBeenCalledOnce()
+    })
+    const call = vi.mocked(snoozeNotification).mock.calls[0]![0] as { id: string; until: Date }
+    expect(call.id).toBe("n1")
+    const diffMs = call.until.getTime() - before
+    // Should be ~3h: 3h ± 5s tolerance
+    expect(diffMs).toBeGreaterThanOrEqual(3 * 60 * 60 * 1000 - 5_000)
+    expect(diffMs).toBeLessThanOrEqual(3 * 60 * 60 * 1000 + 5_000)
+  })
+
+  it("clicking 'Tomorrow' preset calls snoozeNotification with until at 08:00 next day", async () => {
+    vi.mocked(snoozeNotification).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-snooze"))
+    await screen.findByTestId("snooze-menu")
+
+    await user.click(screen.getByTestId("snooze-preset-tomorrow"))
+
+    await waitFor(() => {
+      expect(snoozeNotification).toHaveBeenCalledOnce()
+    })
+    const call = vi.mocked(snoozeNotification).mock.calls[0]![0] as { id: string; until: Date }
+    expect(call.until.getHours()).toBe(8)
+    expect(call.until.getMinutes()).toBe(0)
+    expect(call.until.getSeconds()).toBe(0)
+    // Must be in the future
+    expect(call.until.getTime()).toBeGreaterThan(Date.now())
   })
 })

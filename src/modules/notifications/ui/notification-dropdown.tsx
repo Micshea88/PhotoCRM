@@ -185,7 +185,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
       </div>
 
       {/* ── Notification list ── */}
-      <div className="max-h-[480px] overflow-y-auto" role="list">
+      <div className="max-h-[85vh] overflow-y-auto" role="list">
         {loading ? (
           <NotificationSkeleton />
         ) : items.length === 0 ? (

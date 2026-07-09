@@ -5,6 +5,7 @@ import {
   count,
   desc,
   eq,
+  gt,
   gte,
   ilike,
   inArray,
@@ -258,6 +259,63 @@ export async function listArchivedNotifications(
       ),
     )
     .orderBy(desc(notifications.archivedAt))
+    .limit(limit)
+    .offset(offset)
+}
+
+/**
+ * List currently-snoozed notifications for the given user
+ * (archivedAt IS NULL AND snoozedUntil IS NOT NULL AND snoozedUntil > now()).
+ * Rows whose snooze has already elapsed are NOT included (they're live again).
+ * Ordered by snoozedUntil ASC (soonest-to-wake first). For the Snoozed tab.
+ */
+export async function listSnoozedNotifications(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<NotificationWithContact[]> {
+  const { limit = 50, offset = 0 } = opts
+  return db
+    .select({
+      id: notifications.id,
+      organizationId: notifications.organizationId,
+      recipientUserId: notifications.recipientUserId,
+      type: notifications.type,
+      category: notifications.category,
+      tier: notifications.tier,
+      title: notifications.title,
+      body: notifications.body,
+      linkPath: notifications.linkPath,
+      contactId: notifications.contactId,
+      payload: notifications.payload,
+      sourceModule: notifications.sourceModule,
+      readAt: notifications.readAt,
+      archivedAt: notifications.archivedAt,
+      snoozedUntil: notifications.snoozedUntil,
+      scheduledFor: notifications.scheduledFor,
+      emailSentAt: notifications.emailSentAt,
+      createdAt: notifications.createdAt,
+      updatedAt: notifications.updatedAt,
+      contactName: sql<string | null>`
+        CASE WHEN ${contacts.id} IS NOT NULL
+          THEN trim(${contacts.firstName} || ' ' || ${contacts.lastName})
+          ELSE NULL
+        END
+      `.as("contact_name"),
+    })
+    .from(notifications)
+    .leftJoin(contacts, eq(notifications.contactId, contacts.id))
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        isNull(notifications.archivedAt),
+        isNotNull(notifications.snoozedUntil),
+        gt(notifications.snoozedUntil, sql`now()`),
+      ),
+    )
+    .orderBy(asc(notifications.snoozedUntil))
     .limit(limit)
     .offset(offset)
 }

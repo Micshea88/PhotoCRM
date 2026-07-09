@@ -42,6 +42,7 @@ vi.mock("@/modules/notifications/actions", () => ({
   markNotificationUnread: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   archiveNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   snoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
+  unsnoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   createTaskFromNotification: vi.fn().mockResolvedValue({ data: { taskId: "t1" } }),
   markAllNotificationsRead: vi.fn().mockResolvedValue({ data: { count: 0 } }),
   markAllNotificationsUnread: vi.fn().mockResolvedValue({ data: { count: 0 } }),

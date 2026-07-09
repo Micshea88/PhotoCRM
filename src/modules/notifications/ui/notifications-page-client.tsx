@@ -5,7 +5,7 @@ import { Settings } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { markAllNotificationsRead } from "@/modules/notifications/actions"
+import { markAllNotificationsRead, unsnoozeNotification } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 import { NotificationRow } from "./notification-row"
 import {
@@ -17,13 +17,14 @@ import {
 } from "./notification-filter-strip"
 import { groupByDate } from "./group-by-date"
 
-type NotificationTab = "all" | "unread" | "needs_attention" | "archive"
+type NotificationTab = "all" | "unread" | "needs_attention" | "archive" | "snoozed"
 
 const TABS: { value: NotificationTab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "unread", label: "Unread" },
   { value: "needs_attention", label: "Needs attention" },
   { value: "archive", label: "Archive" },
+  { value: "snoozed", label: "Snoozed" },
 ]
 
 interface NotificationsApiResponse {
@@ -37,9 +38,9 @@ function buildFetchUrl(tab: NotificationTab, filter: NotificationFilterState): s
   const extra = filterStateToApiParams(filter)
   for (const [k, v] of Object.entries(extra)) params.set(k, v)
   params.set("limit", "100")
-  // Archive doesn't surface a contact filter (listArchivedNotifications ignores
-  // contactId), so we skip the contacts fetch for that tab.
-  if (tab !== "archive") {
+  // Archive and Snoozed don't surface a contact filter, so we skip the
+  // contacts fetch for those tabs.
+  if (tab !== "archive" && tab !== "snoozed") {
     params.set("includeContacts", "1")
   }
   return `/api/notifications?${params.toString()}`
@@ -116,9 +117,9 @@ export function NotificationsPageClient() {
               onClick={() => {
                 setTab(t.value)
                 setFilter(EMPTY_NOTIFICATION_FILTER)
-                // Archive doesn't include a contact filter — clear the picker
-                // and any active contactId so no stale pill lingers.
-                if (t.value === "archive") {
+                // Archive and Snoozed don't include a contact filter — clear
+                // the picker and any active contactId so no stale pill lingers.
+                if (t.value === "archive" || t.value === "snoozed") {
                   setContactOptions([])
                 }
               }}
@@ -192,6 +193,17 @@ export function NotificationsPageClient() {
                     onRefresh={() => {
                       doFetch(tab, filter)
                     }}
+                    onUnsnooze={
+                      tab === "snoozed"
+                        ? () => {
+                            startTransition(() => {
+                              void unsnoozeNotification({ id: n.id }).then((res) => {
+                                if (!res.serverError) doFetch(tab, filter)
+                              })
+                            })
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </div>

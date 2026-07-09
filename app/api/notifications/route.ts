@@ -9,6 +9,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import {
   listNotifications,
   listArchivedNotifications,
+  listSnoozedNotifications,
   listNotificationContactsForUser,
   unreadCount,
 } from "@/modules/notifications/queries"
@@ -87,6 +88,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (tab === "archive") {
           const [notifs, cnt] = await Promise.all([
             listArchivedNotifications(db, orgId, userId, { limit, offset }),
+            unreadCount(db, orgId, userId),
+          ])
+          return { notifications: notifs, unreadCount: cnt, notificationContacts: undefined }
+        }
+
+        if (tab === "snoozed") {
+          const [notifs, cnt] = await Promise.all([
+            listSnoozedNotifications(db, orgId, userId, { limit, offset }),
             unreadCount(db, orgId, userId),
           ])
           return { notifications: notifs, unreadCount: cnt, notificationContacts: undefined }

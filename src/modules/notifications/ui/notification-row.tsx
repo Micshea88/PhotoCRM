@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, BellOff, Archive, CheckSquare, Clock, CalendarDays } from "lucide-react"
+import { Bell, BellOff, BellRing, Archive, CheckSquare, Clock, CalendarDays } from "lucide-react"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { Tooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -119,6 +119,8 @@ export function formatSnoozeDate(date: Date, now: Date = new Date()): string {
 export interface NotificationRowProps {
   notification: NotificationWithContact
   onRefresh: () => void
+  /** When provided, shows a "Wake now" button + the snoozedUntil time on the row. */
+  onUnsnooze?: () => void
 }
 
 /**
@@ -128,7 +130,7 @@ export interface NotificationRowProps {
  * The snooze menu uses @radix-ui/react-popover (portaled) so it escapes the
  * dropdown's overflow-y-auto container and is never clipped.
  */
-export function NotificationRow({ notification: n, onRefresh }: NotificationRowProps) {
+export function NotificationRow({ notification: n, onRefresh, onUnsnooze }: NotificationRowProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -290,6 +292,17 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
             {relativeTime(new Date(n.createdAt))}
           </span>
         </div>
+
+        {/* Snoozed-until indicator — only shown on the Snoozed tab */}
+        {onUnsnooze && n.snoozedUntil && (
+          <div
+            className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+            data-testid="notification-snooze-until"
+          >
+            <Clock className="size-3 shrink-0" />
+            <span>Wakes {formatSnoozeDate(new Date(n.snoozedUntil), now)}</span>
+          </div>
+        )}
       </div>
 
       {/* Hover action buttons */}
@@ -300,6 +313,21 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
           e.stopPropagation()
         }}
       >
+        {/* Wake now (unsnooze) — only shown on the Snoozed tab */}
+        {onUnsnooze && (
+          <Tooltip label="Wake now">
+            <button
+              type="button"
+              onClick={onUnsnooze}
+              className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+              aria-label="Wake now"
+              data-testid="action-unsnooze"
+            >
+              <BellRing className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
+
         {/* Mark unread */}
         <Tooltip label="Mark unread">
           <button

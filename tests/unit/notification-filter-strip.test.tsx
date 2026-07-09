@@ -25,6 +25,7 @@ vi.mock("@/modules/notifications/actions", () => ({
   markNotificationUnread: vi.fn().mockResolvedValue({}),
   archiveNotification: vi.fn().mockResolvedValue({}),
   snoozeNotification: vi.fn().mockResolvedValue({}),
+  unsnoozeNotification: vi.fn().mockResolvedValue({}),
   createTaskFromNotification: vi.fn().mockResolvedValue({}),
 }))
 
@@ -446,6 +447,62 @@ describe("NotificationsPageClient — archive tab clears contact filter", () => 
     await user.click(screen.getByTestId("page-tab-archive"))
 
     // Contact picker must disappear immediately (contactOptions cleared on tab click)
+    await waitFor(() => {
+      expect(screen.queryByTestId("notification-filter-contact")).toBeNull()
+    })
+
+    vi.unstubAllGlobals()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// NotificationsPageClient — Snoozed tab (E2)
+// ---------------------------------------------------------------------------
+
+describe("NotificationsPageClient — Snoozed tab renders", () => {
+  it("renders the Snoozed tab button", () => {
+    const emptyResponse = { notifications: [], unreadCount: 0 }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(emptyResponse) }),
+    )
+
+    render(<NotificationsPageClient />)
+
+    expect(screen.getByTestId("page-tab-snoozed")).toBeInTheDocument()
+    expect(screen.getByTestId("page-tab-snoozed").textContent).toContain("Snoozed")
+
+    vi.unstubAllGlobals()
+  })
+
+  it("switching to Snoozed clears the contact picker (mirrors archive handling)", async () => {
+    const user = userEvent.setup()
+
+    const allResponse = {
+      notifications: [],
+      unreadCount: 0,
+      notificationContacts: [{ id: "c1", name: "Alice Smith" }],
+    }
+    const snoozedResponse = { notifications: [], unreadCount: 0 }
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(allResponse) })
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve(snoozedResponse) })
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<NotificationsPageClient />)
+
+    // Wait for initial fetch — contact picker should appear
+    await waitFor(() => {
+      expect(screen.getByTestId("notification-filter-contact")).toBeInTheDocument()
+    })
+
+    // Switch to Snoozed tab
+    await user.click(screen.getByTestId("page-tab-snoozed"))
+
+    // Contact picker must disappear (contactOptions cleared on tab switch)
     await waitFor(() => {
       expect(screen.queryByTestId("notification-filter-contact")).toBeNull()
     })

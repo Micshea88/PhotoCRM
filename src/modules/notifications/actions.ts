@@ -228,6 +228,43 @@ export const snoozeNotification = orgAction
   })
 
 // ---------------------------------------------------------------------------
+// unsnoozeNotification
+// ---------------------------------------------------------------------------
+
+export const unsnoozeNotification = orgAction
+  .metadata({ actionName: "notifications.unsnooze" })
+  .inputSchema(z.object({ id: z.string().min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ snoozedUntil: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(notifications.id, parsedInput.id),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    if (!result[0]) {
+      throw new ActionError("NOT_FOUND", "Notification not found")
+    }
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.unsnoozed",
+      { resourceType: "notification", resourceId: parsedInput.id },
+    )
+    revalidatePath("/notifications")
+    return { id: parsedInput.id }
+  })
+
+// ---------------------------------------------------------------------------
 // archiveNotification
 // ---------------------------------------------------------------------------
 

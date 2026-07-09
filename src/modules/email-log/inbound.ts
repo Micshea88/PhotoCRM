@@ -10,6 +10,10 @@ import { emailLog } from "./schema"
 import { deriveThreadId, parseMessageIdList } from "./threading"
 import { emitNotification } from "@/modules/notifications/dispatch"
 import { memberRole } from "@/modules/rbac/schema"
+import { cleanEmailBody, buildBodyPreview } from "./body-cleaner"
+
+// Re-export so existing callers (tests, notifications) keep their import paths.
+export { cleanEmailBody, buildBodyPreview } from "./body-cleaner"
 
 /**
  * Resend inbound-email ingest (Commit 3, Phase C). The webhook is metadata-only
@@ -47,7 +51,15 @@ export interface InboundEmail {
   to: string[]
   cc: string[]
   subject: string | null
+  /** The body as received from the provider. For Nylas this is HTML; for
+   *  Resend this is the plain-text version (preferred) or HTML fallback.
+   *  `processInboundEmail` runs `cleanEmailBody` on this before storing it
+   *  in the `body` column; the raw HTML goes into `bodyHtml`. */
   body: string | null
+  /** Raw HTML body from the provider, when available. Nylas always supplies
+   *  HTML. Resend supplies it when the message has an HTML part; plain-text-
+   *  only messages leave this null. */
+  bodyHtml?: string | null
   inReplyTo: string | null
   references: string | null
   sentAt: Date
@@ -117,7 +129,10 @@ async function fetchReceivedEmail(emailId: string): Promise<InboundEmail | null>
       to: arr(d.to),
       cc: arr(d.cc),
       subject: typeof d.subject === "string" ? d.subject : null,
+      // Prefer plain text; fall back to HTML. The raw HTML is carried
+      // separately in bodyHtml so processInboundEmail can store both.
       body: typeof d.text === "string" ? d.text : typeof d.html === "string" ? d.html : null,
+      bodyHtml: typeof d.html === "string" ? d.html : null,
       inReplyTo: headers["in-reply-to"] ?? headers["In-Reply-To"] ?? null,
       references: headers.references ?? headers.References ?? null,
       sentAt: new Date(),
@@ -356,6 +371,12 @@ export async function processInboundEmail(
     await tx.execute(sql`SELECT set_config('app.current_org', ${orgId}, true)`)
     await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
 
+    // Clean the body once for the whole ingest: strip HTML, quoted history,
+    // and the tracking pixel echo that appears in replied HTML. The raw HTML
+    // is preserved separately so nothing is lost.
+    const cleanedBody = cleanEmailBody(email.body)
+    const rawHtml = email.bodyHtml ?? null
+
     // Sender row carries the Message-ID (dedup key + threading anchor).
     logged.add(sender.id)
     const inserted = await tx
@@ -366,7 +387,8 @@ export async function processInboundEmail(
         contactId: sender.id,
         direction: "inbound",
         subject: email.subject,
-        body: email.body,
+        body: cleanedBody,
+        bodyHtml: rawHtml,
         sentAt: email.sentAt,
         source,
         externalId: email.messageId,
@@ -388,7 +410,8 @@ export async function processInboundEmail(
         contactId: c.id,
         direction: "inbound",
         subject: email.subject,
-        body: email.body,
+        body: cleanedBody,
+        bodyHtml: rawHtml,
         sentAt: email.sentAt,
         source,
         externalId: null,
@@ -462,32 +485,6 @@ export async function processInboundEmail(
   }
 
   return written
-}
-
-/**
- * Strip HTML tags and quoted-reply lines from an email body, then trim to
- * `maxLen` characters.  Used to build the reply-received notification body
- * preview.  Pure — no side effects, exported for unit testing.
- *
- * Order matters: split on newlines first (to detect > quoted lines), then
- * strip HTML tags from the remaining lines so that HTML attributes containing
- * ">" are not mistakenly treated as quoted-reply markers.
- */
-export function buildBodyPreview(body: string | null, maxLen = 140): string | null {
-  if (!body) return null
-  // Split on newlines BEFORE stripping HTML so that quoted-reply lines
-  // ("> Some quoted text") can be reliably detected by their leading ">".
-  const withoutQuotes = body
-    .split("\n")
-    .filter((line) => !line.trim().startsWith(">"))
-    .join(" ")
-  // Strip HTML tags from the remaining text, then collapse whitespace.
-  const stripped = withoutQuotes
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-  if (!stripped) return null
-  return stripped.length > maxLen ? stripped.slice(0, maxLen - 1) + "…" : stripped
 }
 
 /**

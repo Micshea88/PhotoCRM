@@ -133,7 +133,11 @@ export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promi
     to: msg.to,
     cc: msg.cc,
     subject: msg.subject,
+    // Nylas always returns an HTML body. Store it in both fields:
+    // `body` will be cleaned by processInboundEmail; `bodyHtml` preserves
+    // the raw source for the activity feed's HTML column.
     body: msg.body,
+    bodyHtml: msg.body,
     inReplyTo: msg.inReplyTo,
     references: msg.references,
     sentAt: msg.date,

@@ -82,3 +82,32 @@ The list to sweep. Grows as later tasks add debt.
 ## 6. Open collaborative step (before ANY code)
 
 Design the actual **cream/olive `oklch` values** into the token slots together — surfaces (cream), primary/accent (olive), state hues (warning/success/info), category hues — then execute the migration. This doc defines the slots; that session fills the values.
+
+## 7. Layout system — responsive content width (LAW 6), built in THIS reskin pass
+
+**Why it belongs here (record the rationale):** the layout container is the **layout equivalent of the design tokens — one source of truth for page width + gutters.** The reskin already touches every page's styling; layout constraints belong in the **same coordinated pass** (retrofitting width in a separate migration means touching every page twice). This is the **industry-standard pattern, not a bespoke invention** — Supabase's `PageContainer` / `PageHeader` / `PageSection`; Brad Frost's layout-container ("the layout container caps the width so content doesn't go full-bleed, and controls the gutter padding"); shadcn/SaaS app-shell blocks. Consistent page width also serves **Jakob's Law** — users transfer expectations from other apps, and inconsistent per-page widths break that.
+
+**Trigger:** the /notifications fixed-width island (`mx-auto max-w-2xl`) — interim-unblocked full-width (commit `5358d1b`) pending this system. Governed by **AGENTS.md LAW 6**.
+
+### 7.1 BUILD (invisible layout components — pages COMPOSE, never improvise width)
+
+- **`PageContainer`** — the SINGLE owner of page width + horizontal gutters. Variants so the container encodes _intent_ rather than pages guessing:
+  - `default` — fluid with consistent gutters, up to a readable max-width (dashboards, settings, detail pages).
+  - `full` — edge-to-edge fluid (tables, kanban, timeline, **list pages** — Contacts, Notifications, Events).
+  - `narrow` — tighter max-width (forms, focused single-column flows).
+- **`PageHeader`** — consistent title / description / actions block.
+- **`PageSection`** — grouped content blocks with consistent spacing.
+- **Rule:** pages COMPOSE these and **NEVER set their own `max-w-*` or horizontal padding.** One layer (PageContainer) owns the horizontal constraint — no doubled gutters (LAW 6).
+
+### 7.2 MIGRATE (same pass — eliminate the per-page scatter)
+
+Retrofit **ALL** pages in `app/(app)` to `PageContainer`, removing the current hand-rolled scatter (audit 2026-07-09): `max-w-2xl ×10`, `max-w-3xl ×6`, `max-w-4xl ×3`, `max-w-md ×1`, `max-w-7xl ×1`, plus no-max-width list pages (Contacts). Each page picks a **variant**; none hand-rolls width or padding.
+
+- Notifications + Contacts (and other list/table pages) → `full`.
+- Settings / detail / dashboard pages → `default`.
+- Forms / single-column flows → `narrow`.
+- **Verify every migrated page at NARROW / MEDIUM / WIDE viewports** (LAW 6): no giant dead margins wide, no cramped edges narrow.
+
+### 7.3 Effort
+
+Small-to-moderate: ~3 tiny components + a mechanical per-page wrap. Bundle into the reskin's page-by-page pass so each page is touched once (styling + layout together).

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import { Bell, BellOff, Archive, CheckSquare, Clock, CalendarDays } from "lucide-react"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { Tooltip } from "@/components/ui/tooltip"
@@ -21,6 +21,20 @@ export { Bell }
 // ---------------------------------------------------------------------------
 // Relative time helper
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Local datetime-input helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a "YYYY-MM-DDTHH:mm" string in LOCAL time — the format required by
+ * <input type="datetime-local"> min/value props.  toISOString() is UTC and
+ * would set the min attribute hours into the future in negative-offset zones.
+ */
+export function toLocalDatetimeValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 export function relativeTime(date: Date, now: Date = new Date()): string {
   const diffMs = now.getTime() - date.getTime()
@@ -140,7 +154,6 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
   const [error, setError] = useState<string | null>(null)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [customValue, setCustomValue] = useState("")
-  const customInputRef = useRef<HTMLInputElement | null>(null)
   const isRead = n.readAt !== null
 
   function handleMarkUnread() {
@@ -385,7 +398,6 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
                 <div className="flex flex-1 flex-col gap-0.5">
                   <span className="text-sm font-medium">Pick date &amp; time&hellip;</span>
                   <input
-                    ref={customInputRef}
                     type="datetime-local"
                     value={customValue}
                     onChange={(e) => {
@@ -397,7 +409,7 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
                     className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 text-xs text-[var(--color-foreground)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
                     data-testid="snooze-custom-input"
                     aria-label="Pick snooze date and time"
-                    min={new Date().toISOString().slice(0, 16)}
+                    min={toLocalDatetimeValue(new Date())}
                   />
                 </div>
                 <button

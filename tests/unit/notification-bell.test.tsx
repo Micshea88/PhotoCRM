@@ -77,6 +77,7 @@ import {
   relativeTime,
   SNOOZE_OPTIONS,
   formatSnoozeDate,
+  toLocalDatetimeValue,
 } from "@/modules/notifications/ui/notification-row"
 import { snoozeNotification } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
@@ -305,8 +306,8 @@ describe("SNOOZE_OPTIONS computeUntil (fixed now = Tuesday 2026-07-07T10:00:00 U
   })
 
   it("[3] 'Next week' always skips to next Monday even when today is Monday", () => {
-    // Monday 2026-07-06T10:00:00Z
-    const monday = new Date("2026-07-06T10:00:00Z")
+    // Monday 2026-07-06 10:00 local time (month is 0-indexed, so 6 = July)
+    const monday = new Date(2026, 6, 6, 10, 0, 0)
     const until = SNOOZE_OPTIONS[3]!.computeUntil(monday)
     // Should be next Monday (+7 days), not today
     expect(until.getDay()).toBe(1)
@@ -335,6 +336,23 @@ describe("formatSnoozeDate", () => {
     const result = formatSnoozeDate(tomorrow, now)
     // The result should contain a weekday abbreviation
     expect(result).toMatch(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// toLocalDatetimeValue helper
+// ---------------------------------------------------------------------------
+
+describe("toLocalDatetimeValue", () => {
+  it("formats a local Date as YYYY-MM-DDTHH:mm without UTC conversion", () => {
+    // Construct with local-time arguments so the result is deterministic regardless of TZ
+    const d = new Date(2026, 6, 15, 9, 5, 0) // July 15 2026 09:05:00 local
+    expect(toLocalDatetimeValue(d)).toBe("2026-07-15T09:05")
+  })
+
+  it("zero-pads month, day, hour, and minute", () => {
+    const d = new Date(2026, 0, 3, 8, 4, 0) // Jan 3 2026 08:04:00 local
+    expect(toLocalDatetimeValue(d)).toBe("2026-01-03T08:04")
   })
 })
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 import { Settings, Clock, CalendarDays } from "lucide-react"
 import Link from "next/link"
 import * as RadixPopover from "@radix-ui/react-popover"
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import {
   markAllNotificationsRead,
   unsnoozeNotification,
+  unarchiveNotification,
+  unarchiveNotificationsBulk,
   markNotificationsReadBulk,
   markNotificationsUnreadBulk,
   snoozeNotificationsBulk,
@@ -58,6 +60,50 @@ function buildFetchUrl(tab: NotificationTab, filter: NotificationFilterState): s
     params.set("includeContacts", "1")
   }
   return `/api/notifications?${params.toString()}`
+}
+
+// ---------------------------------------------------------------------------
+// UndoSnackbar — fixed-position bottom-center notification with Undo action
+// ---------------------------------------------------------------------------
+
+const UNDO_TIMEOUT_MS = 6_000
+
+interface UndoSnackbarProps {
+  ids: string[]
+  onUndo: () => void
+  onDismiss: () => void
+}
+
+function UndoSnackbar({ ids, onUndo, onDismiss }: UndoSnackbarProps) {
+  const label =
+    ids.length === 1 ? "Archived 1 notification" : `Archived ${String(ids.length)} notifications`
+  return (
+    <div
+      className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-2.5 shadow-lg"
+      role="status"
+      aria-live="polite"
+      data-testid="undo-snackbar"
+    >
+      <span className="text-sm text-[var(--color-foreground)]">{label}</span>
+      <button
+        type="button"
+        onClick={onUndo}
+        className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
+        data-testid="undo-snackbar-btn"
+      >
+        Undo
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="ml-1 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+        aria-label="Dismiss"
+        data-testid="undo-snackbar-dismiss"
+      >
+        ✕
+      </button>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +321,9 @@ export function NotificationsPageClient() {
   const [contactOptions, setContactOptions] = useState<NotificationContactOption[]>([])
   // Section E3 — multi-select state: Set of selected notification IDs
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // Section E5 — undo state: ids of the most recently archived notifications
+  const [undoIds, setUndoIds] = useState<string[] | null>(null)
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [, startTransition] = useTransition()
 
   const doFetch = useCallback((t: NotificationTab, f: NotificationFilterState) => {
@@ -298,6 +347,53 @@ export function NotificationsPageClient() {
   useEffect(() => {
     doFetch(tab, filter)
   }, [tab, filter, doFetch])
+
+  // ── undo snackbar helpers ───────────────────────────────────────────────────
+
+  /** Show the undo snackbar for the given archived ids, resetting the 6s timer. */
+  function showUndoSnackbar(ids: string[]) {
+    // Clear any existing timer so a new archive resets the window
+    if (undoTimerRef.current !== null) {
+      clearTimeout(undoTimerRef.current)
+    }
+    setUndoIds(ids)
+    undoTimerRef.current = setTimeout(() => {
+      setUndoIds(null)
+      undoTimerRef.current = null
+    }, UNDO_TIMEOUT_MS)
+  }
+
+  function dismissUndoSnackbar() {
+    if (undoTimerRef.current !== null) {
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+    setUndoIds(null)
+  }
+
+  function handleUndo() {
+    if (!undoIds) return
+    const ids = undoIds
+    dismissUndoSnackbar()
+    startTransition(() => {
+      const action =
+        ids.length === 1 && ids[0] !== undefined
+          ? unarchiveNotification({ id: ids[0] })
+          : unarchiveNotificationsBulk({ ids })
+      void action.then((res) => {
+        if (!res.serverError) doFetch(tab, filter)
+      })
+    })
+  }
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current !== null) {
+        clearTimeout(undoTimerRef.current)
+      }
+    }
+  }, [])
 
   function handleMarkAllRead() {
     startTransition(() => {
@@ -369,6 +465,7 @@ export function NotificationsPageClient() {
       void archiveNotificationsBulk({ ids }).then((res) => {
         if (!res.serverError) {
           clearSelection()
+          showUndoSnackbar(ids)
           doFetch(tab, filter)
         }
       })
@@ -455,6 +552,11 @@ export function NotificationsPageClient() {
         />
       )}
 
+      {/* Section E5 — undo snackbar (fixed-position, appears after archive) */}
+      {undoIds && (
+        <UndoSnackbar ids={undoIds} onUndo={handleUndo} onDismiss={dismissUndoSnackbar} />
+      )}
+
       {/* List */}
       <div className="rounded-md border border-[var(--color-border)]">
         {loading ? (
@@ -501,6 +603,18 @@ export function NotificationsPageClient() {
                           }
                         : undefined
                     }
+                    onUnarchive={
+                      tab === "archive"
+                        ? () => {
+                            startTransition(() => {
+                              void unarchiveNotification({ id: n.id }).then((res) => {
+                                if (!res.serverError) doFetch(tab, filter)
+                              })
+                            })
+                          }
+                        : undefined
+                    }
+                    onArchived={showUndoSnackbar}
                     selectable={true}
                     selected={selectedIds.has(n.id)}
                     onToggleSelect={handleToggleSelect}

@@ -2,7 +2,16 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, BellOff, BellRing, Archive, CheckSquare, Clock, CalendarDays } from "lucide-react"
+import {
+  Bell,
+  BellOff,
+  BellRing,
+  Archive,
+  ArchiveRestore,
+  CheckSquare,
+  Clock,
+  CalendarDays,
+} from "lucide-react"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { Tooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -122,6 +131,16 @@ export interface NotificationRowProps {
   /** When provided, shows a "Wake now" button + the snoozedUntil time on the row. */
   onUnsnooze?: () => void
   /**
+   * When provided, shows an "Unarchive" / "Restore" button on the row.
+   * Gate to the Archive tab by only passing this prop when tab === "archive".
+   */
+  onUnarchive?: () => void
+  /**
+   * Called after a successful single-row archive with the archived notification id.
+   * Used by the page to show the undo snackbar.
+   */
+  onArchived?: (ids: string[]) => void
+  /**
    * Page-mode selection props — only the /notifications page passes these.
    * The bell dropdown does NOT pass them, so no checkboxes appear there.
    *
@@ -145,6 +164,8 @@ export function NotificationRow({
   notification: n,
   onRefresh,
   onUnsnooze,
+  onUnarchive,
+  onArchived,
   selectable,
   selected,
   onToggleSelect,
@@ -176,6 +197,7 @@ export function NotificationRow({
         if (res.serverError) {
           setError(res.serverError)
         } else {
+          onArchived?.([n.id])
           onRefresh()
         }
       })
@@ -363,6 +385,21 @@ export function NotificationRow({
               data-testid="action-unsnooze"
             >
               <BellRing className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
+
+        {/* Unarchive (restore) — only shown on the Archive tab */}
+        {onUnarchive && (
+          <Tooltip label="Unarchive">
+            <button
+              type="button"
+              onClick={onUnarchive}
+              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+              aria-label="Unarchive"
+              data-testid="action-unarchive"
+            >
+              <ArchiveRestore className="size-3.5" />
             </button>
           </Tooltip>
         )}

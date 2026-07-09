@@ -92,7 +92,11 @@ export function NotificationsPageClient() {
   const loading = items === null
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    // LAW 6: fluid full-width (matches the Contacts list). The former
+    // `mx-auto max-w-2xl` pinned this to a 672px centered island with large
+    // dead margins on wide screens. Interim per-page fix; the shared
+    // PageContainer (see docs/theme-token-layer-plan.md) replaces this in the reskin.
+    <div className="space-y-4">
       {/* Tabs + header actions */}
       <div className="flex items-center justify-between gap-4">
         <div

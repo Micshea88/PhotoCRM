@@ -203,6 +203,30 @@ export async function listArchivedNotifications(
 }
 
 /**
+ * Mark all live read notifications as unread for the given user in the given org.
+ * Targets only live rows (same predicate as markAllNotificationsRead).
+ * Returns the IDs of affected rows. Caller must set up RLS context before calling.
+ */
+export async function markAllNotificationsUnreadForUser(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+): Promise<{ id: string }[]> {
+  return db
+    .update(notifications)
+    .set({ readAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        isNotNull(notifications.readAt),
+        livePredicate(),
+      ),
+    )
+    .returning({ id: notifications.id })
+}
+
+/**
  * Task 15F — Return all stored notification preferences for the given user.
  * Includes the `mobile` column added in Task 15F part 3. Rows not present in
  * this result have no override — callers should fall back to the registry

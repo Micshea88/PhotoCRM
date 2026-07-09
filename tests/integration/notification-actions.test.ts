@@ -35,6 +35,7 @@ import {
   unreadCount,
   listNotifications,
   listArchivedNotifications,
+  markAllNotificationsUnreadForUser,
 } from "@/modules/notifications/queries"
 
 type Db = Parameters<typeof setOrgContext>[0]
@@ -631,6 +632,67 @@ describe("RLS isolation — user B cannot modify user A's notifications", () => 
 
       const rows = await listNotifications(db, orgId, userB)
       expect(rows).toHaveLength(0)
+    })
+  })
+})
+
+// ── markAllNotificationsUnread behavior (D3) ──────────────────────────────────
+
+describe("markAllNotificationsUnread (DB behavior)", () => {
+  it("sets readAt=null for all live read notifications for the recipient", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      // 2 read, 1 already unread
+      await seedNotification(db, orgId, userId, { readAt: new Date() })
+      await seedNotification(db, orgId, userId, { readAt: new Date() })
+      await seedNotification(db, orgId, userId) // already unread
+
+      // Baseline: 1 unread
+      expect(await unreadCount(db, orgId, userId)).toBe(1)
+
+      const result = await markAllNotificationsUnreadForUser(db, orgId, userId)
+
+      // 2 rows were updated (only the read ones)
+      expect(result).toHaveLength(2)
+      // All 3 are now unread
+      expect(await unreadCount(db, orgId, userId)).toBe(3)
+    })
+  })
+
+  it("is idempotent: 0 rows updated when all are already unread", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      await seedNotification(db, orgId, userId) // unread
+      await seedNotification(db, orgId, userId) // unread
+
+      const result = await markAllNotificationsUnreadForUser(db, orgId, userId)
+
+      // 0 rows — all were already unread
+      expect(result).toHaveLength(0)
+      expect(await unreadCount(db, orgId, userId)).toBe(2)
+    })
+  })
+
+  it("does not unread archived or future-snoozed rows", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      const future = new Date(Date.now() + 60_000)
+      await seedNotification(db, orgId, userId, { readAt: new Date(), archivedAt: new Date() })
+      await seedNotification(db, orgId, userId, { readAt: new Date(), snoozedUntil: future })
+
+      const result = await markAllNotificationsUnreadForUser(db, orgId, userId)
+
+      // Neither archived nor snoozed row is touched
+      expect(result).toHaveLength(0)
     })
   })
 })

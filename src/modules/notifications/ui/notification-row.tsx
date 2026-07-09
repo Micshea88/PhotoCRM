@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { Bell, BellOff, Archive, CheckSquare, Clock, CalendarDays } from "lucide-react"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { Tooltip } from "@/components/ui/tooltip"
@@ -13,7 +14,7 @@ import {
   createTaskFromNotification,
 } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
-import { NOTIFICATION_TYPES, type NotificationCategory } from "@/modules/notifications/types"
+import { NOTIFICATION_TYPES } from "@/modules/notifications/types"
 
 // Export Bell so the import is not unused (it's re-exported for use elsewhere)
 export { Bell }
@@ -46,28 +47,6 @@ export function relativeTime(date: Date, now: Date = new Date()): string {
   const diffD = Math.floor(diffH / 24)
   if (diffD < 7) return `${String(diffD)}d ago`
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-}
-
-// ---------------------------------------------------------------------------
-// Category → dot color
-// ---------------------------------------------------------------------------
-
-// Using Partial so TypeScript allows unknown category strings from the DB
-const CATEGORY_DOT_CLASS: Partial<Record<NotificationCategory, string>> = {
-  messages_email: "bg-blue-500",
-  payments: "bg-green-500",
-  documents: "bg-orange-500",
-  leads: "bg-purple-500",
-  scheduling: "bg-teal-500",
-  system: "bg-[var(--color-muted-foreground)]",
-}
-
-function categoryDotClass(category: string, tier: string): string {
-  if (tier === "critical") return "bg-red-500"
-  return (
-    (CATEGORY_DOT_CLASS as Record<string, string | undefined>)[category] ??
-    "bg-[var(--color-muted-foreground)]"
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +129,7 @@ export interface NotificationRowProps {
  * dropdown's overflow-y-auto container and is never clipped.
  */
 export function NotificationRow({ notification: n, onRefresh }: NotificationRowProps) {
+  const router = useRouter()
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
@@ -236,9 +216,11 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
         })
       })
     }
+    if (n.linkPath) {
+      router.push(n.linkPath)
+    }
   }
 
-  const dotClass = categoryDotClass(n.category, n.tier)
   // Safe lookup that handles unknown type keys (category can be any string from DB)
   const typeLabel =
     (NOTIFICATION_TYPES as Record<string, { label: string } | undefined>)[n.type]?.label ?? n.type
@@ -258,17 +240,16 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
       data-unread={!isRead ? "true" : "false"}
       onClick={handleRowClick}
     >
-      {/* Read / unread indicator dot */}
-      <div className="mt-1.5 shrink-0">
-        <div
-          className={cn(
-            "size-2 rounded-full",
-            isRead ? "ring-1 ring-[var(--color-border)]" : dotClass,
-          )}
-          data-testid="notification-read-dot"
-          aria-label={isRead ? "Read" : "Unread"}
-        />
-      </div>
+      {/* Read / unread indicator dot — only rendered when unread */}
+      {!isRead && (
+        <div className="mt-1.5 shrink-0">
+          <div
+            className="size-2 rounded-full bg-blue-500"
+            data-testid="notification-read-dot"
+            aria-label="Unread"
+          />
+        </div>
+      )}
 
       {/* Main content */}
       <div className="min-w-0 flex-1 space-y-0.5">
@@ -277,12 +258,6 @@ export function NotificationRow({ notification: n, onRefresh }: NotificationRowP
           className={cn("truncate text-sm leading-snug", !isRead && "font-medium")}
           data-testid="notification-title"
         >
-          <span
-            className={cn(
-              "mr-1.5 inline-block size-2 shrink-0 rounded-full align-middle",
-              dotClass,
-            )}
-          />
           {n.title}
         </p>
 

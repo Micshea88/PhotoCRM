@@ -8,6 +8,7 @@ import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { tasks } from "@/modules/tasks/schema"
 import { notifications, notificationPreferences } from "./schema"
+import { markAllNotificationsUnreadForUser } from "./queries"
 import { NOTIFICATION_TYPES } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -144,6 +145,34 @@ export const markAllNotificationsRead = orgAction
         userAgent: ctx.userAgent,
       },
       "notifications.mark_all_read",
+      { resourceType: "notification", metadata: { count: result.length } },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
+  })
+
+// ---------------------------------------------------------------------------
+// markAllNotificationsUnread
+// ---------------------------------------------------------------------------
+
+export const markAllNotificationsUnread = orgAction
+  .metadata({ actionName: "notifications.mark_all_unread" })
+  .inputSchema(z.object({}))
+  .action(async ({ ctx }) => {
+    const result = await markAllNotificationsUnreadForUser(
+      ctx.db,
+      ctx.activeOrg.id,
+      ctx.session.user.id,
+    )
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.mark_all_unread",
       { resourceType: "notification", metadata: { count: result.length } },
     )
     revalidatePath("/notifications")

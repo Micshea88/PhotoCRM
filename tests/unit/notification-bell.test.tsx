@@ -30,6 +30,12 @@ vi.mock("next/link", () => ({
   ),
 }))
 
+// Mock next/navigation — useRouter().push is captured for assertions
+let mockRouterPush: ReturnType<typeof vi.fn>
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}))
+
 // Mock the server actions so they don't try to run in jsdom
 vi.mock("@/modules/notifications/actions", () => ({
   markNotificationRead: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
@@ -38,6 +44,7 @@ vi.mock("@/modules/notifications/actions", () => ({
   snoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   createTaskFromNotification: vi.fn().mockResolvedValue({ data: { taskId: "t1" } }),
   markAllNotificationsRead: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+  markAllNotificationsUnread: vi.fn().mockResolvedValue({ data: { count: 0 } }),
 }))
 
 // Stub fetch for the dropdown/bell
@@ -52,6 +59,9 @@ vi.stubGlobal(
 // Radix Popover requires pointer-event APIs that jsdom doesn't fully implement.
 // Shim them so Radix's pointer-capture guard doesn't trip.
 beforeEach(() => {
+  // Reset the router push mock for each test
+  mockRouterPush = vi.fn()
+
   if (typeof window === "undefined") return
   Object.defineProperty(Element.prototype, "hasPointerCapture", {
     configurable: true,
@@ -79,7 +89,12 @@ import {
   formatSnoozeDate,
   toLocalDatetimeValue,
 } from "@/modules/notifications/ui/notification-row"
-import { snoozeNotification } from "@/modules/notifications/actions"
+import {
+  markNotificationRead,
+  markNotificationUnread,
+  markAllNotificationsUnread,
+  snoozeNotification,
+} from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 
 // ---------------------------------------------------------------------------
@@ -192,18 +207,18 @@ describe("NotificationRow", () => {
     expect(timeEl.textContent).not.toBe("")
   })
 
-  it("shows unread dot when readAt is null", () => {
+  it("shows a blue dot when readAt is null (unread)", () => {
     const n = makeNotification({ readAt: null })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
     const dot = screen.getByTestId("notification-read-dot")
     expect(dot).toBeInTheDocument()
-    expect(dot.getAttribute("aria-label")).toBe("Unread")
+    expect(dot.classList.contains("bg-blue-500")).toBe(true)
   })
 
-  it("shows read indicator when readAt is set", () => {
+  it("renders NO dot element when readAt is set (read)", () => {
     const n = makeNotification({ readAt: new Date() })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    expect(screen.getByTestId("notification-read-dot").getAttribute("aria-label")).toBe("Read")
+    expect(screen.queryByTestId("notification-read-dot")).toBeNull()
   })
 })
 
@@ -444,5 +459,95 @@ describe("NotificationRow — snooze menu", () => {
     expect(call.until.getSeconds()).toBe(0)
     // Must be in the future
     expect(call.until.getTime()).toBeGreaterThan(Date.now())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D2 — Row click navigation
+// ---------------------------------------------------------------------------
+
+describe("NotificationRow — row click navigation (D2)", () => {
+  it("clicking the row calls markNotificationRead and router.push(linkPath) when unread + linkPath set", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("notification-row"))
+    await waitFor(() => {
+      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
+    })
+    expect(mockRouterPush).toHaveBeenCalledWith("/contacts/c1")
+  })
+
+  it("clicking the row marks read but does NOT push when linkPath is null", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: null })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("notification-row"))
+    await waitFor(() => {
+      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
+    })
+    expect(mockRouterPush).not.toHaveBeenCalled()
+  })
+
+  it("clicking a hover action button does NOT navigate (stopPropagation)", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-mark-unread"))
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(markNotificationRead).not.toHaveBeenCalled()
+  })
+
+  it("mark-as-unread: after marking unread, re-rendering with readAt=null shows blue dot", async () => {
+    vi.mocked(markNotificationUnread).mockClear()
+    const user = userEvent.setup()
+    const readNotif = makeNotification({ readAt: new Date() })
+    const unreadNotif = makeNotification({ readAt: null })
+    const { rerender } = render(<NotificationRow notification={readNotif} onRefresh={vi.fn()} />)
+
+    // Read row: no dot in the DOM
+    expect(screen.queryByTestId("notification-read-dot")).toBeNull()
+
+    // Click mark-as-unread
+    await user.click(screen.getByTestId("action-mark-unread"))
+    await waitFor(() => {
+      expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
+    })
+
+    // Rerender with readAt=null (simulates parent refreshing state after onRefresh())
+    rerender(<NotificationRow notification={unreadNotif} onRefresh={vi.fn()} />)
+
+    // Blue dot reappears
+    const dot = screen.getByTestId("notification-read-dot")
+    expect(dot).toBeInTheDocument()
+    expect(dot.classList.contains("bg-blue-500")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D3 — Dropdown "Mark all as unread" control
+// ---------------------------------------------------------------------------
+
+describe("NotificationDropdown — mark all as unread (D3)", () => {
+  it("renders both 'Mark all read' and 'Mark all as unread' controls", async () => {
+    const user = userEvent.setup()
+    render(<NotificationBell initialUnreadCount={1} />)
+    await user.click(screen.getByTestId("notification-bell"))
+    expect(screen.getByTestId("mark-all-read")).toBeInTheDocument()
+    expect(screen.getByTestId("mark-all-unread")).toBeInTheDocument()
+  })
+
+  it("clicking 'Mark all as unread' invokes markAllNotificationsUnread", async () => {
+    vi.mocked(markAllNotificationsUnread).mockClear()
+    const user = userEvent.setup()
+    render(<NotificationBell initialUnreadCount={2} />)
+    await user.click(screen.getByTestId("notification-bell"))
+    await user.click(screen.getByTestId("mark-all-unread"))
+    await waitFor(() => {
+      expect(markAllNotificationsUnread).toHaveBeenCalledWith({})
+    })
   })
 })

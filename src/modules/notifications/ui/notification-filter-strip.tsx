@@ -130,26 +130,29 @@ export function hasActiveNotificationFilters(state: NotificationFilterState): bo
 /**
  * Filter strip for the notification center — Type (multi-select) + Time
  * (date-preset popover) + optional Contact (multi-select, single-pick) +
- * optional free-text Search. Modeled on ActivityFilterStrip at the primitive
- * level (MultiSelectMenu + FilterPills + DebouncedSearchInput).
+ * optional free-text Search + optional Sort order.
  *
  * `contactOptions` — when non-empty, a Contact picker is rendered. Pass the
  *   distinct contacts from the current user's live notifications (page-only).
  * `showSearch` — when true, the DebouncedSearchInput is rendered (page-only).
+ * `showSort`   — when true, the Sort order control is rendered (page-only).
  *
- * Neither prop is set by the bell dropdown, so it continues to show only
- * Type + Time (graceful degradation).
+ * The bell dropdown passes none of these props, so it continues to show only
+ * Type + Time (graceful degradation). The /notifications page passes
+ * `showSearch` and `showSort` to expose the full control set.
  */
 export function NotificationFilterStrip({
   state,
   onChange,
   contactOptions = [],
   showSearch = false,
+  showSort = false,
 }: {
   state: NotificationFilterState
   onChange: (next: NotificationFilterState) => void
   contactOptions?: NotificationContactOption[]
   showSearch?: boolean
+  showSort?: boolean
 }) {
   const anyActive = hasActiveNotificationFilters(state)
 
@@ -234,18 +237,20 @@ export function NotificationFilterStrip({
             testId="notification-search"
           />
         )}
-        <span className="ml-auto">
-          <MultiSelectMenu
-            label={state.sort === "oldest" ? "Oldest first" : "Newest first"}
-            options={SORT_OPTIONS}
-            values={[state.sort]}
-            onChange={(v) => {
-              const next = v[0] === "oldest" ? "oldest" : "newest"
-              onChange({ ...state, sort: next })
-            }}
-            testId="notification-sort"
-          />
-        </span>
+        {showSort && (
+          <span className="ml-auto">
+            <MultiSelectMenu
+              label={state.sort === "oldest" ? "Oldest first" : "Newest first"}
+              options={SORT_OPTIONS}
+              values={[state.sort]}
+              onChange={(v) => {
+                const next = v[0] === "oldest" ? "oldest" : "newest"
+                onChange({ ...state, sort: next })
+              }}
+              testId="notification-sort"
+            />
+          </span>
+        )}
       </div>
       {/* Pills row */}
       {anyActive && (

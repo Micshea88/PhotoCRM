@@ -37,8 +37,11 @@ function buildFetchUrl(tab: NotificationTab, filter: NotificationFilterState): s
   const extra = filterStateToApiParams(filter)
   for (const [k, v] of Object.entries(extra)) params.set(k, v)
   params.set("limit", "100")
-  // Include distinct notification contacts so the contact picker stays fresh.
-  params.set("includeContacts", "1")
+  // Archive doesn't surface a contact filter (listArchivedNotifications ignores
+  // contactId), so we skip the contacts fetch for that tab.
+  if (tab !== "archive") {
+    params.set("includeContacts", "1")
+  }
   return `/api/notifications?${params.toString()}`
 }
 
@@ -113,6 +116,11 @@ export function NotificationsPageClient() {
               onClick={() => {
                 setTab(t.value)
                 setFilter(EMPTY_NOTIFICATION_FILTER)
+                // Archive doesn't include a contact filter — clear the picker
+                // and any active contactId so no stale pill lingers.
+                if (t.value === "archive") {
+                  setContactOptions([])
+                }
               }}
               className={cn(
                 "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
@@ -146,6 +154,7 @@ export function NotificationsPageClient() {
         onChange={setFilter}
         contactOptions={contactOptions}
         showSearch={true}
+        showSort={true}
       />
 
       {/* List */}

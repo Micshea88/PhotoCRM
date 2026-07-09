@@ -1,14 +1,54 @@
 /**
- * Unit tests for Section E1 additions to NotificationFilterStrip:
+ * Unit tests for Section E1 additions to NotificationFilterStrip and
+ * NotificationsPageClient archive-tab behaviour:
  *
  *   - filterStateToApiParams: includes q + contactId; omits empty/whitespace
  *   - hasActiveNotificationFilters: detects search + contactId
- *   - NotificationFilterStrip: renders type + time + contact + search controls
+ *   - NotificationFilterStrip: renders type + time controls; sort gated behind showSort
  *   - FilterPills: pills reflect active search + contact + type + time
+ *   - NotificationsPageClient: switching to Archive hides contact picker + clears contactId
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+
+// ---------------------------------------------------------------------------
+// Module mocks (hoisted — must be before any imports that transitively pull
+// in server-only modules or Next.js navigation)
+// ---------------------------------------------------------------------------
+
+// Stub server actions so jsdom doesn't try to evaluate @/lib/db / server-only
+vi.mock("@/modules/notifications/actions", () => ({
+  markAllNotificationsRead: vi.fn().mockResolvedValue({}),
+  markAllNotificationsUnread: vi.fn().mockResolvedValue({}),
+  markNotificationRead: vi.fn().mockResolvedValue({}),
+  markNotificationUnread: vi.fn().mockResolvedValue({}),
+  archiveNotification: vi.fn().mockResolvedValue({}),
+  snoozeNotification: vi.fn().mockResolvedValue({}),
+  createTaskFromNotification: vi.fn().mockResolvedValue({}),
+}))
+
+// next/link: render as plain <a> in jsdom
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string
+    children: React.ReactNode
+    [k: string]: unknown
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}))
+
+// next/navigation: notification-row uses useRouter().refresh()
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+}))
 
 // ---------------------------------------------------------------------------
 // Radix / jsdom shims
@@ -41,6 +81,7 @@ import {
   NotificationFilterStrip,
   type NotificationFilterState,
 } from "@/modules/notifications/ui/notification-filter-strip"
+import { NotificationsPageClient } from "@/modules/notifications/ui/notifications-page-client"
 
 // ---------------------------------------------------------------------------
 // filterStateToApiParams
@@ -174,22 +215,46 @@ const CONTACT_OPTIONS = [
 ]
 
 describe("NotificationFilterStrip — rendering", () => {
-  it("renders the Type, Time, and Sort controls", () => {
+  it("renders Type and Time controls by default; does NOT render sort without showSort", () => {
     render(<NotificationFilterStrip state={EMPTY_NOTIFICATION_FILTER} onChange={vi.fn()} />)
     expect(screen.getByTestId("notification-filter-strip")).toBeInTheDocument()
     expect(screen.getByTestId("notification-filter-type")).toBeInTheDocument()
     expect(screen.getByTestId("notification-filter-time")).toBeInTheDocument()
+    // Sort is gated behind showSort — the bell dropdown omits this prop
+    expect(screen.queryByTestId("notification-sort")).toBeNull()
+  })
+
+  // E1 fix 1: sort gating — dropdown shows no sort; page shows sort
+  it("does NOT render sort control when showSort is false (bell dropdown scenario)", () => {
+    render(<NotificationFilterStrip state={EMPTY_NOTIFICATION_FILTER} onChange={vi.fn()} />)
+    expect(screen.queryByTestId("notification-sort")).toBeNull()
+  })
+
+  it("renders sort control when showSort is true (full-page scenario)", () => {
+    render(
+      <NotificationFilterStrip
+        state={EMPTY_NOTIFICATION_FILTER}
+        onChange={vi.fn()}
+        showSort={true}
+      />,
+    )
     expect(screen.getByTestId("notification-sort")).toBeInTheDocument()
   })
 
   it("sort control shows 'Newest first' by default", () => {
-    render(<NotificationFilterStrip state={EMPTY_NOTIFICATION_FILTER} onChange={vi.fn()} />)
+    render(
+      <NotificationFilterStrip
+        state={EMPTY_NOTIFICATION_FILTER}
+        onChange={vi.fn()}
+        showSort={true}
+      />,
+    )
     expect(screen.getByTestId("notification-sort").textContent).toContain("Newest first")
   })
 
   it("sort control shows 'Oldest first' when sort=oldest", () => {
     const state: NotificationFilterState = { ...EMPTY_NOTIFICATION_FILTER, sort: "oldest" }
-    render(<NotificationFilterStrip state={state} onChange={vi.fn()} />)
+    render(<NotificationFilterStrip state={state} onChange={vi.fn()} showSort={true} />)
     expect(screen.getByTestId("notification-sort").textContent).toContain("Oldest first")
   })
 
@@ -225,19 +290,21 @@ describe("NotificationFilterStrip — rendering", () => {
     expect(screen.getByTestId("notification-search")).toBeInTheDocument()
   })
 
-  it("renders Type + Time + Contact + Search together on the full-page configuration", () => {
+  it("renders Type + Time + Contact + Search + Sort together on the full-page configuration", () => {
     render(
       <NotificationFilterStrip
         state={EMPTY_NOTIFICATION_FILTER}
         onChange={vi.fn()}
         contactOptions={CONTACT_OPTIONS}
         showSearch={true}
+        showSort={true}
       />,
     )
     expect(screen.getByTestId("notification-filter-type")).toBeInTheDocument()
     expect(screen.getByTestId("notification-filter-time")).toBeInTheDocument()
     expect(screen.getByTestId("notification-filter-contact")).toBeInTheDocument()
     expect(screen.getByTestId("notification-search")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-sort")).toBeInTheDocument()
   })
 })
 
@@ -332,5 +399,57 @@ describe("NotificationFilterStrip — active filter pills", () => {
         }),
       )
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// NotificationsPageClient — archive tab clears contact filter (E1 fix 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The full-page client fetches notificationContacts for live tabs and uses
+ * them to populate the contact picker.  When the user switches to Archive, the
+ * picker must disappear (contactOptions cleared) and any active contactId must
+ * be dropped so no stale pill lingers.
+ */
+describe("NotificationsPageClient — archive tab clears contact filter", () => {
+  it("switching to Archive hides the contact picker and clears any active contactId", async () => {
+    const user = userEvent.setup()
+
+    // First fetch: "all" tab — returns a contact so the picker appears.
+    // Second fetch: "archive" tab — no notificationContacts (archive doesn't include them).
+    const allResponse = {
+      notifications: [],
+      unreadCount: 0,
+      notificationContacts: [{ id: "c1", name: "Alice Smith" }],
+    }
+    const archiveResponse = {
+      notifications: [],
+      unreadCount: 0,
+    }
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(allResponse) })
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve(archiveResponse) })
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<NotificationsPageClient />)
+
+    // Wait for initial fetch to complete — contact picker should appear
+    await waitFor(() => {
+      expect(screen.getByTestId("notification-filter-contact")).toBeInTheDocument()
+    })
+
+    // Switch to Archive tab
+    await user.click(screen.getByTestId("page-tab-archive"))
+
+    // Contact picker must disappear immediately (contactOptions cleared on tab click)
+    await waitFor(() => {
+      expect(screen.queryByTestId("notification-filter-contact")).toBeNull()
+    })
+
+    vi.unstubAllGlobals()
   })
 })

@@ -240,6 +240,80 @@ describe("listNotifications — q free-text search", () => {
   })
 })
 
+// ── listNotifications — ILIKE wildcard escaping (E1 fix 2) ───────────────────
+
+describe("listNotifications — ILIKE wildcard escaping", () => {
+  it("literal % in title is matched when the user searches for %", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      const matchId = await seedNotification(db, orgId, userId, {
+        title: "50% off deal notification",
+      })
+      await seedNotification(db, orgId, userId, {
+        title: "No special chars here",
+      })
+
+      const rows = await listNotifications(db, orgId, userId, { q: "%" })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.id).toBe(matchId)
+    })
+  })
+
+  it("%-only search does NOT match everything (treated as literal, not wildcard)", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      // Neither title contains a literal %
+      await seedNotification(db, orgId, userId, { title: "Regular notification" })
+      await seedNotification(db, orgId, userId, { title: "Another notification" })
+
+      // Without escaping, q="%" → pattern "%%" → matches every row.
+      // With escaping,    q="%" → pattern "%\%%" → matches only rows with literal %.
+      const rows = await listNotifications(db, orgId, userId, { q: "%" })
+      expect(rows).toHaveLength(0)
+    })
+  })
+
+  it("literal _ in title is matched when the user searches for _", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      const matchId = await seedNotification(db, orgId, userId, {
+        title: "event_123 triggered",
+      })
+      await seedNotification(db, orgId, userId, {
+        title: "event without underscore",
+      })
+
+      const rows = await listNotifications(db, orgId, userId, { q: "_" })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.id).toBe(matchId)
+    })
+  })
+
+  it("_-only search does NOT match everything (treated as literal, not wildcard)", async () => {
+    await withTestDb(async (db) => {
+      const userId = await createUser(db)
+      const orgId = await createOrganization(db, userId)
+      await setOrgContext(db, orgId, "owner", userId)
+
+      // No underscore in titles
+      await seedNotification(db, orgId, userId, { title: "Regular notification" })
+      await seedNotification(db, orgId, userId, { title: "Another notification" })
+
+      const rows = await listNotifications(db, orgId, userId, { q: "_" })
+      expect(rows).toHaveLength(0)
+    })
+  })
+})
+
 // ── listNotifications — sort order ────────────────────────────────────────────
 
 describe("listNotifications — sort order", () => {

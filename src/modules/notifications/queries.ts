@@ -30,6 +30,17 @@ export interface NotificationContactOption {
 type DbHandle = NodePgDatabase<typeof schema>
 
 /**
+ * Escape Postgres ILIKE/LIKE pattern special characters (`%`, `_`, `\`) so a
+ * user-supplied search term is treated as a literal substring. Drizzle already
+ * parameterises the value (no injection risk), but without this escaping a
+ * user who types `%` or `_` gets Postgres wildcard semantics instead of a
+ * literal match.
+ */
+function escapeLikePattern(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")
+}
+
+/**
  * A notification row augmented with the linked contact's display name
  * (null when contactId IS NULL or the contact has been hard-deleted).
  */
@@ -179,11 +190,14 @@ export async function listNotifications(
         contactId ? eq(notifications.contactId, contactId) : undefined,
         from ? gte(notifications.createdAt, from) : undefined,
         to ? lte(notifications.createdAt, to) : undefined,
-        // Free-text search: ilike over title OR body (null body → body leg is NULL, OR-skips it)
+        // Free-text search: ilike over title OR body (null body → body leg is NULL, OR-skips it).
+        // escapeLikePattern ensures literal % and _ in the user's term are not treated as
+        // Postgres wildcards — Drizzle parameterises the value so there is no injection risk,
+        // but without escaping `%`-only or `_`-only searches would match every row.
         q?.trim()
           ? or(
-              ilike(notifications.title, `%${q.trim()}%`),
-              ilike(notifications.body, `%${q.trim()}%`),
+              ilike(notifications.title, `%${escapeLikePattern(q.trim())}%`),
+              ilike(notifications.body, `%${escapeLikePattern(q.trim())}%`),
             )
           : undefined,
       ),

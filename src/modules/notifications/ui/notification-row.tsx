@@ -152,6 +152,12 @@ export interface NotificationRowProps {
   selectable?: boolean
   selected?: boolean
   onToggleSelect?: (id: string) => void
+  /**
+   * Section E4 — density prop.
+   * When true, reduces vertical padding and gap for a more compact layout.
+   * The bell dropdown does NOT pass this (stays comfortable by default).
+   */
+  compact?: boolean
 }
 
 /**
@@ -170,6 +176,7 @@ export function NotificationRow({
   selectable,
   selected,
   onToggleSelect,
+  compact = false,
 }: NotificationRowProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -289,11 +296,13 @@ export function NotificationRow({
     <div
       role="listitem"
       className={cn(
-        "group relative flex cursor-pointer items-start gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-[var(--color-accent)]/30",
+        "group relative flex cursor-pointer items-start rounded-md px-3 transition-colors hover:bg-[var(--color-accent)]/30",
+        compact ? "gap-2 py-1.5" : "gap-3 py-2.5",
         !isRead && "bg-[var(--color-accent)]/10",
       )}
       data-testid="notification-row"
       data-unread={!isRead ? "true" : "false"}
+      data-density={compact ? "compact" : "comfortable"}
       onClick={handleRowClick}
     >
       {/* Per-row selection checkbox — page-mode only; hidden in the bell dropdown */}

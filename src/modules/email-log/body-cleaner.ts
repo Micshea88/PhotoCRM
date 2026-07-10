@@ -23,7 +23,8 @@ const TRACKING_PIXEL_RE =
 // and are a KNOWN GAP (no real captured payload yet) — see
 // docs/cleanup-and-tech-debt.md. Do NOT invent markers that haven't been
 // observed in a real payload.
-const GMAIL_QUOTE_RE = /<(?:div|blockquote)\b[^>]*\bclass="[^"]*gmail_(?:quote|attr)[^"]*"/i
+const GMAIL_QUOTE_RE =
+  /<(?:div|blockquote)\b[^>]*\bclass=(?:"[^"]*gmail_(?:quote|attr)[^"]*"|'[^']*gmail_(?:quote|attr)[^']*')/i
 
 // Detects the "On <date>, <name> wrote:" line that plain-text email clients
 // insert before the quoted original. Used only on the PLAIN-TEXT / newline-based

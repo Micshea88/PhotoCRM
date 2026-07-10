@@ -242,11 +242,28 @@ describe("cleanEmailBody — real captured Gmail reply (D1)", () => {
     // The quoted history is GONE (container cut).
     expect(result!).not.toContain("Hey send me one back")
     expect(result!).not.toContain("On Thu, Jul 9")
-    // HTML entities are decoded / removed — no literal &lt; &gt;.
+    // No literal entities survive. (In THIS payload the &lt;/&gt; sit inside the
+    // cut quote block, so the cut removes them; entity-decode on SURVIVING text
+    // is proven separately below + in the decodeHtmlEntities suite.)
     expect(result!).not.toContain("&lt;")
     expect(result!).not.toContain("&gt;")
     // The echoed tracking pixel is gone.
     expect(result!).not.toContain("/api/email/track/")
+  })
+
+  it("decodes an HTML entity that survives in the KEPT (non-quoted) body text", () => {
+    // The entity is in the new reply (before the quote container) — it must be
+    // decoded in the output, proving decode runs on surviving text, not only
+    // that the cut happened to remove entity-bearing quoted history.
+    const body =
+      '<div>Tom &amp; Jerry say it&#39;s done &lt;here&gt;</div><div class="gmail_quote gmail_quote_container"><blockquote class="gmail_quote">old</blockquote></div>'
+    const result = cleanEmailBody(body)
+    expect(result).not.toBeNull()
+    expect(result!).toContain("Tom & Jerry")
+    expect(result!).toContain("it's done")
+    expect(result!).toContain("<here>")
+    expect(result!).not.toContain("&amp;")
+    expect(result!).not.toContain("&#39;")
   })
 
   it("empty-guard: a bottom-posted reply (quote first, new text after) is NOT blank", () => {

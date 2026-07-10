@@ -180,6 +180,13 @@ Full detail + fixes + effort + tests: **`docs/multi-tenant-remediation-plan.md`*
 - **Rule of thumb (revisit trigger):** extract a shared `GenericFilterStrip` primitive **only once a THIRD consumer exists** (e.g. a Tasks or Events filter page) and the correct shape is obvious rather than guessed. Until then, primitive-level reuse is the standard — this is a deliberate deferral, **not** a violation of the reuse rule.
 - **Severity:** internal / design-record. **Status:** Decided + implemented at primitive level (E1, Section E of `feat/notifications-inbound-fixes`).
 
+### A.21 — Inbound email cleaner handles GMAIL quote markers only (Outlook / Apple Mail = known gap)
+
+- **What:** `cleanEmailBody` (`src/modules/email-log/body-cleaner.ts`) does a structure-aware quote cut keyed on **Gmail** markers only — `gmail_quote` / `gmail_quote_container` / `gmail_attr` — taken from a **real captured prod payload** (row `xil9ac8293g055i9ywsjeko0`). A plain-text `>`/`On … wrote:` fallback also runs for the Resend text lane.
+- **Gap:** **Outlook** and **Apple Mail** replies use different quote markup (e.g. Outlook's `#divRplyFwdMsg` / `<hr>` separator, Apple's `blockquote type="cite"`). We have **no real captured payload** for either, so — per the standing rule (do NOT invent markers) — they are **not handled**: an Outlook/Apple reply will fall back to the line-based cut (which usually won't fire on single-line HTML), leaving quoted history in the cleaned body. The raw HTML is retained in `body_html`, so nothing is lost.
+- **Fix (when a real payload exists):** capture a real Outlook and a real Apple Mail inbound reply, add their observed container markers to `GMAIL_QUOTE_RE`'s sibling set, add each as a real-payload fixture (LAW 7). Do not add markers speculatively.
+- **Severity:** internal (degraded display for non-Gmail replies; no data loss, no security impact). **Status:** Open (needs real payloads). Surfaced building Section 1 (D1), 2026-07-10.
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

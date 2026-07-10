@@ -298,6 +298,21 @@ describe("NotificationsPageClient — localStorage persistence (E4)", () => {
     }
   })
 
+  it("falls back to comfortable when localStorage holds a corrupt value", async () => {
+    localStorage.setItem("pathway.notifications.density", "corrupt-garbage")
+
+    render(<NotificationsPageClient />)
+
+    await waitFor(() => {
+      expect(screen.queryAllByTestId("notification-row").length).toBeGreaterThan(0)
+    })
+
+    const rows = screen.getAllByTestId("notification-row")
+    for (const row of rows) {
+      expect(row).toHaveAttribute("data-density", "comfortable")
+    }
+  })
+
   it("default is comfortable when localStorage is empty", async () => {
     // localStorage is cleared in beforeEach
     render(<NotificationsPageClient />)

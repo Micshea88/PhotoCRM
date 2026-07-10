@@ -302,7 +302,6 @@ function BulkActionBar({
 }
 
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
 // Density toggle helpers
 // ---------------------------------------------------------------------------
 
@@ -517,8 +516,9 @@ export function NotificationsPageClient() {
     // dead margins on wide screens. Interim per-page fix; the shared
     // PageContainer (see docs/theme-token-layer-plan.md) replaces this in the reskin.
     <div className="space-y-4">
-      {/* Tabs + header actions */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Tabs + header actions — wrap on narrow viewports so the toolbar
+          (tabs + density toggle + mark-all-read + settings) never overflows (LAW 6). */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div
           className="flex border-b border-[var(--color-border)]"
           role="tablist"

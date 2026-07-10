@@ -449,6 +449,13 @@
       "when": 1783518686415,
       "tag": "0063_payment_installments_role_gate_fail_closed",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1783565601099,
+      "tag": "0064_cold_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

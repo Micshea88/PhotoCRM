@@ -5,7 +5,10 @@ import Link from "next/link"
 import { Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { markAllNotificationsRead } from "@/modules/notifications/actions"
+import {
+  markAllNotificationsRead,
+  markAllNotificationsUnread,
+} from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 import { NotificationRow } from "./notification-row"
 import {
@@ -117,6 +120,14 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
     })
   }
 
+  function handleMarkAllUnread() {
+    startTransition(() => {
+      void markAllNotificationsUnread({}).then((res) => {
+        if (!res.serverError) doFetch(tab, filter)
+      })
+    })
+  }
+
   function handleRefresh() {
     doFetch(tab, filter)
   }
@@ -130,6 +141,15 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
         <span className="text-sm font-semibold">Notifications</span>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={handleMarkAllUnread}
+            data-testid="mark-all-unread"
+          >
+            Mark all as unread
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -185,7 +205,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
       </div>
 
       {/* ── Notification list ── */}
-      <div className="max-h-[480px] overflow-y-auto" role="list">
+      <div className="max-h-[85vh] overflow-y-auto" role="list">
         {loading ? (
           <NotificationSkeleton />
         ) : items.length === 0 ? (

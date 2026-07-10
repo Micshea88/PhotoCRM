@@ -46,7 +46,7 @@ why, tracing back to this section.
 
 ## 0a. Standing design laws (LOCKED — authoritative text in `AGENTS.md`)
 
-Two LOCKED laws govern every UI / PM push. Full statements + rationale
+Six LOCKED laws govern every UI / PM push. Full statements + rationale
 live in `AGENTS.md` → "Standing design laws"; summarized here as the
 wireframe/UI checklist:
 
@@ -80,6 +80,15 @@ wireframe/UI checklist:
 - **LAW 5 — Plain-English UI.** All UI copy — labels, prompts,
   questions, AI summaries — is simple plain English for a non-technical
   event professional. No tech-speak, code, or jargon.
+
+- **LAW 6 — Responsive content width (no fixed-width islands).** Page
+  content is FLUID — fills the available width with consistent horizontal
+  padding, up to a sensible readable max-width — **never pinned to one
+  fixed size, never a narrow island with big dead margins on wide screens.**
+  Every page uses the SHARED page-shell / content-container (build one if
+  it doesn't exist; a per-page width constraint is the bug this prevents).
+  No doubled gutters (parent padding + child max-width). Check every screen
+  at narrow / medium / wide before it's done. Applies to ALL screens.
 
 - **Persona-law companion — client-presentation views are dedicated +
   opt-in.** For client-facing display (e.g. day-of timeline), build a

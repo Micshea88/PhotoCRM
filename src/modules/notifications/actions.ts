@@ -1,13 +1,14 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, eq, isNull, lte, or, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm"
 import { createId } from "@paralleldrive/cuid2"
 import { z } from "zod"
 import { ActionError, orgAction } from "@/lib/safe-action"
 import { audit } from "@/modules/audit/audit"
 import { tasks } from "@/modules/tasks/schema"
 import { notifications, notificationPreferences } from "./schema"
+import { markAllNotificationsUnreadForUser } from "./queries"
 import { NOTIFICATION_TYPES } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -151,6 +152,34 @@ export const markAllNotificationsRead = orgAction
   })
 
 // ---------------------------------------------------------------------------
+// markAllNotificationsUnread
+// ---------------------------------------------------------------------------
+
+export const markAllNotificationsUnread = orgAction
+  .metadata({ actionName: "notifications.mark_all_unread" })
+  .inputSchema(z.object({}))
+  .action(async ({ ctx }) => {
+    const result = await markAllNotificationsUnreadForUser(
+      ctx.db,
+      ctx.activeOrg.id,
+      ctx.session.user.id,
+    )
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.mark_all_unread",
+      { resourceType: "notification", metadata: { count: result.length } },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
+  })
+
+// ---------------------------------------------------------------------------
 // snoozeNotification
 // ---------------------------------------------------------------------------
 
@@ -193,6 +222,43 @@ export const snoozeNotification = orgAction
         resourceId: parsedInput.id,
         metadata: { until: parsedInput.until.toISOString() },
       },
+    )
+    revalidatePath("/notifications")
+    return { id: parsedInput.id }
+  })
+
+// ---------------------------------------------------------------------------
+// unsnoozeNotification
+// ---------------------------------------------------------------------------
+
+export const unsnoozeNotification = orgAction
+  .metadata({ actionName: "notifications.unsnooze" })
+  .inputSchema(z.object({ id: z.string().min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ snoozedUntil: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(notifications.id, parsedInput.id),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    if (!result[0]) {
+      throw new ActionError("NOT_FOUND", "Notification not found")
+    }
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.unsnoozed",
+      { resourceType: "notification", resourceId: parsedInput.id },
     )
     revalidatePath("/notifications")
     return { id: parsedInput.id }
@@ -301,6 +367,255 @@ export const createTaskFromNotification = orgAction
     revalidatePath("/notifications")
     if (notif.contactId) revalidatePath(`/contacts/${notif.contactId}`)
     return { taskId }
+  })
+
+// ---------------------------------------------------------------------------
+// markNotificationsReadBulk
+// ---------------------------------------------------------------------------
+
+/**
+ * Mark multiple notifications as read for the current user.
+ * SECURITY: scoped to organizationId AND recipientUserId — a caller cannot
+ * affect another user's or another org's rows even if they supply foreign ids.
+ */
+export const markNotificationsReadBulk = orgAction
+  .metadata({ actionName: "notifications.bulk_mark_read" })
+  .inputSchema(z.object({ ids: z.array(z.string().min(1)).min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ readAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          inArray(notifications.id, parsedInput.ids),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.bulk_mark_read",
+      { resourceType: "notification", metadata: { ids: parsedInput.ids, count: result.length } },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
+  })
+
+// ---------------------------------------------------------------------------
+// markNotificationsUnreadBulk
+// ---------------------------------------------------------------------------
+
+/**
+ * Mark multiple notifications as unread for the current user.
+ * SECURITY: scoped to organizationId AND recipientUserId.
+ */
+export const markNotificationsUnreadBulk = orgAction
+  .metadata({ actionName: "notifications.bulk_mark_unread" })
+  .inputSchema(z.object({ ids: z.array(z.string().min(1)).min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ readAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          inArray(notifications.id, parsedInput.ids),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.bulk_mark_unread",
+      { resourceType: "notification", metadata: { ids: parsedInput.ids, count: result.length } },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
+  })
+
+// ---------------------------------------------------------------------------
+// snoozeNotificationsBulk
+// ---------------------------------------------------------------------------
+
+/**
+ * Snooze multiple notifications until the specified date for the current user.
+ * SECURITY: scoped to organizationId AND recipientUserId.
+ */
+export const snoozeNotificationsBulk = orgAction
+  .metadata({ actionName: "notifications.bulk_snooze" })
+  .inputSchema(
+    z.object({
+      ids: z.array(z.string().min(1)).min(1),
+      until: z.coerce.date().refine((d) => d > new Date(), {
+        message: "Snooze date must be in the future",
+      }),
+    }),
+  )
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ snoozedUntil: parsedInput.until, updatedAt: new Date() })
+      .where(
+        and(
+          inArray(notifications.id, parsedInput.ids),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.bulk_snooze",
+      {
+        resourceType: "notification",
+        metadata: {
+          ids: parsedInput.ids,
+          count: result.length,
+          until: parsedInput.until.toISOString(),
+        },
+      },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
+  })
+
+// ---------------------------------------------------------------------------
+// archiveNotificationsBulk
+// ---------------------------------------------------------------------------
+
+/**
+ * Archive multiple notifications for the current user.
+ * SECURITY: scoped to organizationId AND recipientUserId.
+ */
+export const archiveNotificationsBulk = orgAction
+  .metadata({ actionName: "notifications.bulk_archive" })
+  .inputSchema(z.object({ ids: z.array(z.string().min(1)).min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ archivedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          inArray(notifications.id, parsedInput.ids),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.bulk_archive",
+      { resourceType: "notification", metadata: { ids: parsedInput.ids, count: result.length } },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
+  })
+
+// ---------------------------------------------------------------------------
+// unarchiveNotification
+// ---------------------------------------------------------------------------
+
+/**
+ * Un-archive a single notification for the current user.
+ * SECURITY: scoped to organizationId AND recipientUserId — a user can only
+ * un-archive their own notifications.
+ */
+export const unarchiveNotification = orgAction
+  .metadata({ actionName: "notifications.unarchive" })
+  .inputSchema(z.object({ id: z.string().min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(notifications.id, parsedInput.id),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    if (!result[0]) {
+      throw new ActionError("NOT_FOUND", "Notification not found")
+    }
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.unarchived",
+      { resourceType: "notification", resourceId: parsedInput.id },
+    )
+    revalidatePath("/notifications")
+    return { id: parsedInput.id }
+  })
+
+// ---------------------------------------------------------------------------
+// unarchiveNotificationsBulk
+// ---------------------------------------------------------------------------
+
+/**
+ * Un-archive multiple notifications for the current user.
+ * Used by the undo affordance after a bulk archive.
+ * SECURITY: scoped to organizationId AND recipientUserId — a user can only
+ * un-archive their own notifications.
+ */
+export const unarchiveNotificationsBulk = orgAction
+  .metadata({ actionName: "notifications.bulk_unarchive" })
+  .inputSchema(z.object({ ids: z.array(z.string().min(1)).min(1) }))
+  .action(async ({ parsedInput, ctx }) => {
+    const result = await ctx.db
+      .update(notifications)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          inArray(notifications.id, parsedInput.ids),
+          eq(notifications.organizationId, ctx.activeOrg.id),
+          eq(notifications.recipientUserId, ctx.session.user.id),
+        ),
+      )
+      .returning({ id: notifications.id })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "notifications.bulk_unarchive",
+      { resourceType: "notification", metadata: { ids: parsedInput.ids, count: result.length } },
+    )
+    revalidatePath("/notifications")
+    return { count: result.length }
   })
 
 // ---------------------------------------------------------------------------

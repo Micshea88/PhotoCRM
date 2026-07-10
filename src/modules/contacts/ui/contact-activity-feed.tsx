@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { cn } from "@/lib/utils"
+import { detectUrls } from "@/lib/linkify"
 import { useDialer } from "@/modules/telephony/ui/dialer-context"
 import {
   ActivityRowControls,
@@ -1079,6 +1080,39 @@ function EmailAttachments({
 }
 
 /**
+ * Renders a plain-text body with http/https URLs turned into real anchors.
+ * NEVER uses dangerouslySetInnerHTML — the sender-supplied body is stored
+ * as cleaned plain text (no HTML); URL detection is done on the text
+ * directly and anchors are built from the detected URL string.
+ * Used only for email activity cards where the body is inbound plain text.
+ */
+function LinkifiedBody({ text }: { text: string }) {
+  const segments = detectUrls(text)
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.type === "url" ? (
+          <a
+            key={i}
+            href={seg.value}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-blue-600 underline dark:text-blue-400"
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+          >
+            {seg.value}
+          </a>
+        ) : (
+          <span key={i}>{seg.value}</span>
+        ),
+      )}
+    </>
+  )
+}
+
+/**
  * Backlog Item 1a/1b — activity-entry card with §1 pencil-only edit.
  *
  * Lifecycle (locked design system §1):
@@ -1300,7 +1334,7 @@ export function ActivityCard({
             )}
             {hasBody && (
               <p className="text-sm whitespace-pre-wrap text-[var(--color-muted-foreground)]">
-                {entry.body}
+                {entry.kind === "email" ? <LinkifiedBody text={entry.body ?? ""} /> : entry.body}
               </p>
             )}
             {hasAttachments && <EmailAttachments attachments={emailAttachments} />}

@@ -133,7 +133,11 @@ export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promi
     to: msg.to,
     cc: msg.cc,
     subject: msg.subject,
+    // Nylas always returns an HTML body. Store it in both fields:
+    // `body` will be cleaned by processInboundEmail; `bodyHtml` preserves
+    // the raw source for the activity feed's HTML column.
     body: msg.body,
+    bodyHtml: msg.body,
     inReplyTo: msg.inReplyTo,
     references: msg.references,
     sentAt: msg.date,
@@ -141,9 +145,13 @@ export async function ingestNylasInboundMessage(event: NylasWebhookEvent): Promi
   try {
     // The receiving mailbox's org is AUTHORITATIVE — pass it so processInboundEmail
     // routes to this tenant directly, never guessing cross-org (T2.2).
+    // ownMailboxAddress excludes the studio's own mailbox from the To/Cc fan-out
+    // so a reply addressed TO the studio does not create a participant row on the
+    // studio's own contact record.
     return await processInboundEmail(inbound, conn.sourceValue, {
       recipientUserIds: [conn.userId],
       organizationId: conn.organizationId,
+      ownMailboxAddress: conn.email,
     })
   } catch (err) {
     log.error({ err }, "nylas-inbound: processing failed")

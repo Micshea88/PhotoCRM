@@ -9,6 +9,8 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import {
   listNotifications,
   listArchivedNotifications,
+  listSnoozedNotifications,
+  listNotificationContactsForUser,
   unreadCount,
 } from "@/modules/notifications/queries"
 
@@ -21,13 +23,15 @@ export const dynamic = "force-dynamic"
  * in their active organization, plus the current unread count.
  *
  * Query params:
- *   tab        — "all" | "unread" | "needs_attention" | "archive" (default "all")
- *   types      — comma-separated notification type keys (OR filter)
- *   from       — ISO date string lower bound (inclusive)
- *   to         — ISO date string upper bound (inclusive)
- *   contactId  — filter to this contact
- *   limit      — max rows (default 50, min 1, max 200)
- *   offset     — pagination offset (default 0, min 0)
+ *   tab             — "all" | "unread" | "needs_attention" | "archive" (default "all")
+ *   types           — comma-separated notification type keys (OR filter)
+ *   from            — ISO date string lower bound (inclusive)
+ *   to              — ISO date string upper bound (inclusive)
+ *   contactId       — filter to this contact
+ *   q               — free-text search over title + body (case-insensitive)
+ *   includeContacts — "1" to include notificationContacts in the response
+ *   limit           — max rows (default 50, min 1, max 200)
+ *   offset          — pagination offset (default 0, min 0)
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const reqHeaders = await headers()
@@ -57,6 +61,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const fromRaw = sp.get("from")
   const toRaw = sp.get("to")
   const contactId = sp.get("contactId") ?? undefined
+  const q = sp.get("q") ?? undefined
+  const sortRaw = sp.get("sort")
+  const sort: "newest" | "oldest" = sortRaw === "oldest" ? "oldest" : "newest"
+  const includeContacts = sp.get("includeContacts") === "1"
 
   // Sanitise limit/offset — crafted params can produce NaN which becomes
   // invalid SQL. `|| fallback` collapses NaN→0 to the fallback.
@@ -82,7 +90,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             listArchivedNotifications(db, orgId, userId, { limit, offset }),
             unreadCount(db, orgId, userId),
           ])
-          return { notifications: notifs, unreadCount: cnt }
+          return { notifications: notifs, unreadCount: cnt, notificationContacts: undefined }
+        }
+
+        if (tab === "snoozed") {
+          const [notifs, cnt] = await Promise.all([
+            listSnoozedNotifications(db, orgId, userId, { limit, offset }),
+            unreadCount(db, orgId, userId),
+          ])
+          return { notifications: notifs, unreadCount: cnt, notificationContacts: undefined }
         }
 
         const preset =
@@ -92,19 +108,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               ? ("needs_attention" as const)
               : ("all" as const)
 
-        const [notifs, cnt] = await Promise.all([
+        const [notifs, cnt, notifContacts] = await Promise.all([
           listNotifications(db, orgId, userId, {
             preset,
             types,
             contactId,
             from,
             to,
+            q,
+            sort,
             limit,
             offset,
           }),
           unreadCount(db, orgId, userId),
+          includeContacts
+            ? listNotificationContactsForUser(db, orgId, userId)
+            : Promise.resolve(undefined),
         ])
-        return { notifications: notifs, unreadCount: cnt }
+        return {
+          notifications: notifs,
+          unreadCount: cnt,
+          notificationContacts: notifContacts,
+        }
       }),
     )
 

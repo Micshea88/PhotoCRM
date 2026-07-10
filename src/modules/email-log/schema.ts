@@ -64,6 +64,12 @@ export const emailLog = pgTable(
     subject: text("subject"),
     /** Body — plain text for V1; HTML lands when provider ingest does. */
     body: text("body"),
+    /** Raw HTML body — populated for inbound emails that arrive as HTML
+     *  (Nylas/Gmail lane). Null for plain-text inbound, manual entries,
+     *  and outbound rows. Stored alongside the cleaned plain-text `body`
+     *  so the activity feed can render clean text while the raw source is
+     *  preserved for debugging / future rich rendering. */
+    bodyHtml: text("body_html"),
     /** When the email was sent / received. Distinct from createdAt
      *  (which is when the row was inserted). */
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),

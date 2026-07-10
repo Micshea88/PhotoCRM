@@ -1,5 +1,20 @@
 import "server-only"
-import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm"
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
 import { notifications, notificationPreferences } from "./schema"
@@ -7,7 +22,24 @@ import type { Notification, NotificationPreference } from "./schema"
 import { contacts } from "@/modules/contacts/schema"
 import { NEEDS_ACTION_TYPES } from "./types"
 
+/** A lightweight contact option for the notification filter contact picker. */
+export interface NotificationContactOption {
+  id: string
+  name: string
+}
+
 type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Escape Postgres ILIKE/LIKE pattern special characters (`%`, `_`, `\`) so a
+ * user-supplied search term is treated as a literal substring. Drizzle already
+ * parameterises the value (no injection risk), but without this escaping a
+ * user who types `%` or `_` gets Postgres wildcard semantics instead of a
+ * literal match.
+ */
+function escapeLikePattern(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")
+}
 
 /**
  * A notification row augmented with the linked contact's display name
@@ -25,6 +57,15 @@ export interface NotificationFilter {
   from?: Date
   /** created_at range upper bound (inclusive). */
   to?: Date
+  /**
+   * Case-insensitive free-text search over notification title AND body (OR-
+   * combined). AND-combined with all other filters.
+   */
+  q?: string
+  /**
+   * Sort order on created_at. Default "newest" (desc). "oldest" = asc.
+   */
+  sort?: "newest" | "oldest"
   /** Default 50. */
   limit?: number
   /** Simple offset pagination. Default 0. */
@@ -90,7 +131,17 @@ export async function listNotifications(
   userId: string,
   filter: NotificationFilter = {},
 ): Promise<NotificationWithContact[]> {
-  const { preset = "all", types, contactId, from, to, limit = 50, offset = 0 } = filter
+  const {
+    preset = "all",
+    types,
+    contactId,
+    from,
+    to,
+    q,
+    sort = "newest",
+    limit = 50,
+    offset = 0,
+  } = filter
 
   const rows = await db
     .select({
@@ -140,9 +191,19 @@ export async function listNotifications(
         contactId ? eq(notifications.contactId, contactId) : undefined,
         from ? gte(notifications.createdAt, from) : undefined,
         to ? lte(notifications.createdAt, to) : undefined,
+        // Free-text search: ilike over title OR body (null body → body leg is NULL, OR-skips it).
+        // escapeLikePattern ensures literal % and _ in the user's term are not treated as
+        // Postgres wildcards — Drizzle parameterises the value so there is no injection risk,
+        // but without escaping `%`-only or `_`-only searches would match every row.
+        q?.trim()
+          ? or(
+              ilike(notifications.title, `%${escapeLikePattern(q.trim())}%`),
+              ilike(notifications.body, `%${escapeLikePattern(q.trim())}%`),
+            )
+          : undefined,
       ),
     )
-    .orderBy(desc(notifications.createdAt))
+    .orderBy(sort === "oldest" ? asc(notifications.createdAt) : desc(notifications.createdAt))
     .limit(limit)
     .offset(offset)
 
@@ -200,6 +261,121 @@ export async function listArchivedNotifications(
     .orderBy(desc(notifications.archivedAt))
     .limit(limit)
     .offset(offset)
+}
+
+/**
+ * List currently-snoozed notifications for the given user
+ * (archivedAt IS NULL AND snoozedUntil IS NOT NULL AND snoozedUntil > now()).
+ * Rows whose snooze has already elapsed are NOT included (they're live again).
+ * Ordered by snoozedUntil ASC (soonest-to-wake first). For the Snoozed tab.
+ */
+export async function listSnoozedNotifications(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<NotificationWithContact[]> {
+  const { limit = 50, offset = 0 } = opts
+  return db
+    .select({
+      id: notifications.id,
+      organizationId: notifications.organizationId,
+      recipientUserId: notifications.recipientUserId,
+      type: notifications.type,
+      category: notifications.category,
+      tier: notifications.tier,
+      title: notifications.title,
+      body: notifications.body,
+      linkPath: notifications.linkPath,
+      contactId: notifications.contactId,
+      payload: notifications.payload,
+      sourceModule: notifications.sourceModule,
+      readAt: notifications.readAt,
+      archivedAt: notifications.archivedAt,
+      snoozedUntil: notifications.snoozedUntil,
+      scheduledFor: notifications.scheduledFor,
+      emailSentAt: notifications.emailSentAt,
+      createdAt: notifications.createdAt,
+      updatedAt: notifications.updatedAt,
+      contactName: sql<string | null>`
+        CASE WHEN ${contacts.id} IS NOT NULL
+          THEN trim(${contacts.firstName} || ' ' || ${contacts.lastName})
+          ELSE NULL
+        END
+      `.as("contact_name"),
+    })
+    .from(notifications)
+    .leftJoin(contacts, eq(notifications.contactId, contacts.id))
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        isNull(notifications.archivedAt),
+        isNotNull(notifications.snoozedUntil),
+        gt(notifications.snoozedUntil, sql`now()`),
+      ),
+    )
+    .orderBy(asc(notifications.snoozedUntil))
+    .limit(limit)
+    .offset(offset)
+}
+
+/**
+ * Mark all live read notifications as unread for the given user in the given org.
+ * Targets only live rows (same predicate as markAllNotificationsRead).
+ * Returns the IDs of affected rows. Caller must set up RLS context before calling.
+ */
+export async function markAllNotificationsUnreadForUser(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+): Promise<{ id: string }[]> {
+  return db
+    .update(notifications)
+    .set({ readAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        isNotNull(notifications.readAt),
+        livePredicate(),
+      ),
+    )
+    .returning({ id: notifications.id })
+}
+
+/**
+ * Return the DISTINCT contacts that appear in live notifications for the given
+ * user in the given org. Used to populate the contact filter picker on the
+ * /notifications page. Returns a small, recipient-scoped set — never an org-
+ * wide dump. Excludes soft-deleted contacts. Ordered by display name.
+ *
+ * Caller is responsible for setting up RLS context before calling.
+ */
+export async function listNotificationContactsForUser(
+  db: DbHandle,
+  orgId: string,
+  userId: string,
+): Promise<NotificationContactOption[]> {
+  const nameExpr = sql<string>`trim(${contacts.firstName} || ' ' || ${contacts.lastName})`
+  const rows = await db
+    .select({
+      id: contacts.id,
+      name: nameExpr,
+    })
+    .from(notifications)
+    .innerJoin(contacts, eq(notifications.contactId, contacts.id))
+    .where(
+      and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.recipientUserId, userId),
+        livePredicate(),
+        isNull(contacts.deletedAt),
+      ),
+    )
+    .groupBy(contacts.id, contacts.firstName, contacts.lastName)
+    .orderBy(nameExpr)
+  return rows
 }
 
 /**

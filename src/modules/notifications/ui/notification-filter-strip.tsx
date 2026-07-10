@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react"
 import { Popover } from "@/components/ui/popover"
 import { MultiSelectMenu, type MultiSelectOption } from "@/components/ui/multi-select-menu"
 import { FilterPills, type FilterPillItem } from "@/components/ui/filter-pills"
+import { DebouncedSearchInput } from "@/components/ui/debounced-search-input"
 import { cn } from "@/lib/utils"
 import { NOTIFICATION_TYPES } from "@/modules/notifications/types"
 
@@ -13,11 +14,19 @@ import { NOTIFICATION_TYPES } from "@/modules/notifications/types"
 
 export type NotificationTimePreset = "today" | "this_week"
 
+export type NotificationSortOrder = "newest" | "oldest"
+
 export interface NotificationFilterState {
   types: string[]
   timePreset: NotificationTimePreset | null
   from: string | null
   to: string | null
+  /** Free-text search over notification title + body (case-insensitive). */
+  search: string
+  /** Filter to a single contact by ID. */
+  contactId: string | null
+  /** Sort order: "newest" (default) = desc(createdAt), "oldest" = asc(createdAt). */
+  sort: NotificationSortOrder
 }
 
 export const EMPTY_NOTIFICATION_FILTER: NotificationFilterState = {
@@ -25,6 +34,15 @@ export const EMPTY_NOTIFICATION_FILTER: NotificationFilterState = {
   timePreset: null,
   from: null,
   to: null,
+  search: "",
+  contactId: null,
+  sort: "newest",
+}
+
+/** A lightweight contact option for the notification filter contact picker. */
+export interface NotificationContactOption {
+  id: string
+  name: string
 }
 
 // ---------------------------------------------------------------------------
@@ -40,6 +58,15 @@ const TYPE_OPTIONS: MultiSelectOption[] = Object.entries(NOTIFICATION_TYPES).map
 const TYPE_LABEL_MAP: Record<string, string> = Object.fromEntries(
   Object.entries(NOTIFICATION_TYPES).map(([k, v]) => [k, v.label]),
 )
+
+// ---------------------------------------------------------------------------
+// Sort options
+// ---------------------------------------------------------------------------
+
+const SORT_OPTIONS: MultiSelectOption[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+]
 
 // ---------------------------------------------------------------------------
 // Time preset options
@@ -81,11 +108,19 @@ export function filterStateToApiParams(state: NotificationFilterState): Record<s
     params.from = monday.toISOString()
     params.to = sunday.toISOString()
   }
+  if (state.search.trim()) params.q = state.search.trim()
+  if (state.contactId) params.contactId = state.contactId
+  if (state.sort === "oldest") params.sort = "oldest"
   return params
 }
 
 export function hasActiveNotificationFilters(state: NotificationFilterState): boolean {
-  return state.types.length > 0 || state.timePreset !== null
+  return (
+    state.types.length > 0 ||
+    state.timePreset !== null ||
+    state.search.trim() !== "" ||
+    state.contactId !== null
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -94,16 +129,34 @@ export function hasActiveNotificationFilters(state: NotificationFilterState): bo
 
 /**
  * Filter strip for the notification center — Type (multi-select) + Time
- * (date-preset popover). Modeled on ActivityFilterStrip.
+ * (date-preset popover) + optional Contact (multi-select, single-pick) +
+ * optional free-text Search + optional Sort order.
+ *
+ * `contactOptions` — when non-empty, a Contact picker is rendered. Pass the
+ *   distinct contacts from the current user's live notifications (page-only).
+ * `showSearch` — when true, the DebouncedSearchInput is rendered (page-only).
+ * `showSort`   — when true, the Sort order control is rendered (page-only).
+ *
+ * The bell dropdown passes none of these props, so it continues to show only
+ * Type + Time (graceful degradation). The /notifications page passes
+ * `showSearch` and `showSort` to expose the full control set.
  */
 export function NotificationFilterStrip({
   state,
   onChange,
+  contactOptions = [],
+  showSearch = false,
+  showSort = false,
 }: {
   state: NotificationFilterState
   onChange: (next: NotificationFilterState) => void
+  contactOptions?: NotificationContactOption[]
+  showSearch?: boolean
+  showSort?: boolean
 }) {
   const anyActive = hasActiveNotificationFilters(state)
+
+  const contactLabel = (id: string) => contactOptions.find((c) => c.id === id)?.name ?? "Contact"
 
   const pills: FilterPillItem[] = [
     ...state.types.map((t) => ({
@@ -124,11 +177,33 @@ export function NotificationFilterStrip({
           },
         ]
       : []),
+    ...(state.contactId
+      ? [
+          {
+            key: `contact:${state.contactId}`,
+            label: contactLabel(state.contactId),
+            onRemove: () => {
+              onChange({ ...state, contactId: null })
+            },
+          },
+        ]
+      : []),
+    ...(state.search.trim()
+      ? [
+          {
+            key: "search",
+            label: `"${state.search.trim()}"`,
+            onRemove: () => {
+              onChange({ ...state, search: "" })
+            },
+          },
+        ]
+      : []),
   ]
 
   return (
     <div className="space-y-2" data-testid="notification-filter-strip">
-      {/* Dropdowns row */}
+      {/* Dropdowns + search row */}
       <div className="flex flex-wrap items-center gap-2">
         <MultiSelectMenu
           label="Type"
@@ -140,7 +215,42 @@ export function NotificationFilterStrip({
           testId="notification-filter-type"
         />
         <TimeMenu state={state} onChange={onChange} />
-        <span className="ml-auto text-xs text-[var(--color-muted-foreground)]">Newest</span>
+        {contactOptions.length > 0 && (
+          <MultiSelectMenu
+            label="Contact"
+            options={contactOptions.map((c) => ({ value: c.id, label: c.name }))}
+            values={state.contactId ? [state.contactId] : []}
+            onChange={(v) => {
+              onChange({ ...state, contactId: v[0] ?? null })
+            }}
+            testId="notification-filter-contact"
+          />
+        )}
+        {showSearch && (
+          <DebouncedSearchInput
+            value={state.search}
+            onDebouncedChange={(v) => {
+              onChange({ ...state, search: v })
+            }}
+            placeholder="Search notifications"
+            className="h-8 w-[180px] shrink text-sm"
+            testId="notification-search"
+          />
+        )}
+        {showSort && (
+          <span className="ml-auto">
+            <MultiSelectMenu
+              label={state.sort === "oldest" ? "Oldest first" : "Newest first"}
+              options={SORT_OPTIONS}
+              values={[state.sort]}
+              onChange={(v) => {
+                const next = v[0] === "oldest" ? "oldest" : "newest"
+                onChange({ ...state, sort: next })
+              }}
+              testId="notification-sort"
+            />
+          </span>
+        )}
       </div>
       {/* Pills row */}
       {anyActive && (

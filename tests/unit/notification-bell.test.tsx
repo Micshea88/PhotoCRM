@@ -1,11 +1,12 @@
 /**
- * Unit tests for the notification bell + row components (Task 15).
+ * Unit tests for the notification bell + row components (Task 15 / Section C).
  * Tests: bell badge shows/hides per count; row renders 3 layers + relative
  * time; create-task is disabled when contactId is null; snooze options
- * compute future `until` dates.
+ * compute future `until` dates; snooze menu renders all presets + custom row;
+ * choosing a preset calls snoozeNotification with the right `until`.
  */
-import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 // ---------------------------------------------------------------------------
@@ -29,14 +30,22 @@ vi.mock("next/link", () => ({
   ),
 }))
 
+// Mock next/navigation — useRouter().push is captured for assertions
+let mockRouterPush: ReturnType<typeof vi.fn>
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}))
+
 // Mock the server actions so they don't try to run in jsdom
 vi.mock("@/modules/notifications/actions", () => ({
   markNotificationRead: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   markNotificationUnread: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   archiveNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   snoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
+  unsnoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   createTaskFromNotification: vi.fn().mockResolvedValue({ data: { taskId: "t1" } }),
   markAllNotificationsRead: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+  markAllNotificationsUnread: vi.fn().mockResolvedValue({ data: { count: 0 } }),
 }))
 
 // Stub fetch for the dropdown/bell
@@ -48,12 +57,45 @@ vi.stubGlobal(
   }),
 )
 
+// Radix Popover requires pointer-event APIs that jsdom doesn't fully implement.
+// Shim them so Radix's pointer-capture guard doesn't trip.
+beforeEach(() => {
+  // Reset the router push mock for each test
+  mockRouterPush = vi.fn()
+
+  if (typeof window === "undefined") return
+  Object.defineProperty(Element.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: () => false,
+  })
+  Object.defineProperty(Element.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  })
+  Object.defineProperty(Element.prototype, "setPointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  })
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => undefined,
+  })
+})
+
 import { NotificationBell } from "@/modules/notifications/ui/notification-bell"
 import {
   NotificationRow,
   relativeTime,
   SNOOZE_OPTIONS,
+  formatSnoozeDate,
+  toLocalDatetimeValue,
 } from "@/modules/notifications/ui/notification-row"
+import {
+  markNotificationRead,
+  markNotificationUnread,
+  markAllNotificationsUnread,
+  snoozeNotification,
+} from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 
 // ---------------------------------------------------------------------------
@@ -166,18 +208,18 @@ describe("NotificationRow", () => {
     expect(timeEl.textContent).not.toBe("")
   })
 
-  it("shows unread dot when readAt is null", () => {
+  it("shows a blue dot when readAt is null (unread)", () => {
     const n = makeNotification({ readAt: null })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
     const dot = screen.getByTestId("notification-read-dot")
     expect(dot).toBeInTheDocument()
-    expect(dot.getAttribute("aria-label")).toBe("Unread")
+    expect(dot.classList.contains("bg-blue-500")).toBe(true)
   })
 
-  it("shows read indicator when readAt is set", () => {
+  it("renders NO dot element when readAt is set (read)", () => {
     const n = makeNotification({ readAt: new Date() })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    expect(screen.getByTestId("notification-read-dot").getAttribute("aria-label")).toBe("Read")
+    expect(screen.queryByTestId("notification-read-dot")).toBeNull()
   })
 })
 
@@ -234,36 +276,307 @@ describe("relativeTime", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Snooze — future `until` computation (calls production SNOOZE_OPTIONS)
+// Snooze option `computeUntil` — 4 new presets with fixed clock injection
 // ---------------------------------------------------------------------------
 
-describe("Snooze option `until` computation", () => {
+describe("SNOOZE_OPTIONS computeUntil (fixed now = Tuesday 2026-07-07T10:00:00 UTC)", () => {
   // Fixed reference point: 2026-07-07T10:00:00Z, a Tuesday
   const fixedNow = new Date("2026-07-07T10:00:00Z")
 
-  it("SNOOZE_OPTIONS[0] '1 hour' computes a date exactly 60 min in the future", () => {
-     
+  it("[0] 'Later today' produces exactly now + 3 hours", () => {
     const until = SNOOZE_OPTIONS[0]!.computeUntil(fixedNow)
-    expect(until.getTime() - fixedNow.getTime()).toBe(3_600_000)
-    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
+    expect(until.getTime() - fixedNow.getTime()).toBe(3 * 60 * 60 * 1000)
   })
 
-  it("SNOOZE_OPTIONS[1] 'Tomorrow' produces next-calendar-day at 09:00 local time", () => {
-     
+  it("[1] 'Tomorrow' is the next calendar day at 08:00 local time", () => {
     const until = SNOOZE_OPTIONS[1]!.computeUntil(fixedNow)
     expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
-    expect(until.getHours()).toBe(9)
+    // Should be one calendar day later
+    const expectedDate = new Date(fixedNow)
+    expectedDate.setDate(expectedDate.getDate() + 1)
+    expect(until.getDate()).toBe(expectedDate.getDate())
+    expect(until.getHours()).toBe(8)
     expect(until.getMinutes()).toBe(0)
     expect(until.getSeconds()).toBe(0)
   })
 
-  it("SNOOZE_OPTIONS[2] 'Next week' computes the coming Monday at 09:00 local time", () => {
-    // July 7, 2026 is a Tuesday (getDay() === 2), so next Monday is July 13
-     
+  it("[2] 'In 2 days' is 2 calendar days later at 08:00 local time", () => {
     const until = SNOOZE_OPTIONS[2]!.computeUntil(fixedNow)
     expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
-    expect(until.getDay()).toBe(1) // 1 === Monday
-    expect(until.getHours()).toBe(9)
+    const expectedDate = new Date(fixedNow)
+    expectedDate.setDate(expectedDate.getDate() + 2)
+    expect(until.getDate()).toBe(expectedDate.getDate())
+    expect(until.getHours()).toBe(8)
     expect(until.getMinutes()).toBe(0)
+    expect(until.getSeconds()).toBe(0)
+  })
+
+  it("[3] 'Next week' is the next Monday at 08:00 local time (Tuesday → next Mon in 6 days)", () => {
+    // July 7, 2026 is a Tuesday (getDay() === 2), so next Monday is July 13
+    const until = SNOOZE_OPTIONS[3]!.computeUntil(fixedNow)
+    expect(until.getTime()).toBeGreaterThan(fixedNow.getTime())
+    expect(until.getDay()).toBe(1) // 1 === Monday
+    expect(until.getHours()).toBe(8)
+    expect(until.getMinutes()).toBe(0)
+    expect(until.getSeconds()).toBe(0)
+  })
+
+  it("[3] 'Next week' always skips to next Monday even when today is Monday", () => {
+    // Monday 2026-07-06 10:00 local time (month is 0-indexed, so 6 = July)
+    const monday = new Date(2026, 6, 6, 10, 0, 0)
+    const until = SNOOZE_OPTIONS[3]!.computeUntil(monday)
+    // Should be next Monday (+7 days), not today
+    expect(until.getDay()).toBe(1)
+    expect(until.getTime()).toBeGreaterThan(monday.getTime() + 6 * 24 * 60 * 60 * 1000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// formatSnoozeDate helper
+// ---------------------------------------------------------------------------
+
+describe("formatSnoozeDate", () => {
+  it("returns only time when the target date is today", () => {
+    const now = new Date("2026-07-08T14:00:00")
+    const sameDay = new Date("2026-07-08T17:00:00")
+    const result = formatSnoozeDate(sameDay, now)
+    // Should NOT contain a weekday or month name — just a time
+    expect(result).not.toMatch(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+    // Should contain some time-like output (hour)
+    expect(result).toBeTruthy()
+  })
+
+  it("returns weekday + date when target is a different day", () => {
+    const now = new Date("2026-07-08T14:00:00")
+    const tomorrow = new Date("2026-07-09T08:00:00")
+    const result = formatSnoozeDate(tomorrow, now)
+    // The result should contain a weekday abbreviation
+    expect(result).toMatch(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// toLocalDatetimeValue helper
+// ---------------------------------------------------------------------------
+
+describe("toLocalDatetimeValue", () => {
+  it("formats a local Date as YYYY-MM-DDTHH:mm without UTC conversion", () => {
+    // Construct with local-time arguments so the result is deterministic regardless of TZ
+    const d = new Date(2026, 6, 15, 9, 5, 0) // July 15 2026 09:05:00 local
+    expect(toLocalDatetimeValue(d)).toBe("2026-07-15T09:05")
+  })
+
+  it("zero-pads month, day, hour, and minute", () => {
+    const d = new Date(2026, 0, 3, 8, 4, 0) // Jan 3 2026 08:04:00 local
+    expect(toLocalDatetimeValue(d)).toBe("2026-01-03T08:04")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Snooze menu component test (jsdom) — all 4 presets + custom row rendered;
+// clicking a preset calls snoozeNotification with the expected until
+// ---------------------------------------------------------------------------
+
+describe("NotificationRow — snooze menu", () => {
+  it("renders the snooze trigger button", () => {
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-snooze")).toBeInTheDocument()
+  })
+
+  it("opens the snooze menu with all 4 presets + custom row on trigger click", async () => {
+    const user = userEvent.setup()
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+
+    await user.click(screen.getByTestId("action-snooze"))
+
+    // Radix Portal renders to document.body — check body or use findBy*
+    const menu = await screen.findByTestId("snooze-menu")
+    expect(menu).toBeInTheDocument()
+
+    // All 4 presets
+    expect(screen.getByTestId("snooze-preset-later-today")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-preset-tomorrow")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-preset-in-2-days")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-preset-next-week")).toBeInTheDocument()
+
+    // Custom row
+    expect(screen.getByTestId("snooze-custom-row")).toBeInTheDocument()
+    expect(screen.getByTestId("snooze-custom-input")).toBeInTheDocument()
+  })
+
+  it("each preset button shows its label text", async () => {
+    const user = userEvent.setup()
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-snooze"))
+    await screen.findByTestId("snooze-menu")
+
+    expect(screen.getByTestId("snooze-preset-later-today").textContent).toContain("Later today")
+    expect(screen.getByTestId("snooze-preset-tomorrow").textContent).toContain("Tomorrow")
+    expect(screen.getByTestId("snooze-preset-in-2-days").textContent).toContain("In 2 days")
+    expect(screen.getByTestId("snooze-preset-next-week").textContent).toContain("Next week")
+  })
+
+  it("clicking 'Later today' preset calls snoozeNotification with until ~3h from now", async () => {
+    vi.mocked(snoozeNotification).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification()
+    const before = Date.now()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-snooze"))
+    await screen.findByTestId("snooze-menu")
+
+    await user.click(screen.getByTestId("snooze-preset-later-today"))
+
+    await waitFor(() => {
+      expect(snoozeNotification).toHaveBeenCalledOnce()
+    })
+    const call = vi.mocked(snoozeNotification).mock.calls[0]![0] as { id: string; until: Date }
+    expect(call.id).toBe("n1")
+    const diffMs = call.until.getTime() - before
+    // Should be ~3h: 3h ± 5s tolerance
+    expect(diffMs).toBeGreaterThanOrEqual(3 * 60 * 60 * 1000 - 5_000)
+    expect(diffMs).toBeLessThanOrEqual(3 * 60 * 60 * 1000 + 5_000)
+  })
+
+  it("clicking 'Tomorrow' preset calls snoozeNotification with until at 08:00 next day", async () => {
+    vi.mocked(snoozeNotification).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-snooze"))
+    await screen.findByTestId("snooze-menu")
+
+    await user.click(screen.getByTestId("snooze-preset-tomorrow"))
+
+    await waitFor(() => {
+      expect(snoozeNotification).toHaveBeenCalledOnce()
+    })
+    const call = vi.mocked(snoozeNotification).mock.calls[0]![0] as { id: string; until: Date }
+    expect(call.until.getHours()).toBe(8)
+    expect(call.until.getMinutes()).toBe(0)
+    expect(call.until.getSeconds()).toBe(0)
+    // Must be in the future
+    expect(call.until.getTime()).toBeGreaterThan(Date.now())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D2 — Row click navigation
+// ---------------------------------------------------------------------------
+
+describe("NotificationRow — row click navigation (D2)", () => {
+  it("clicking the row calls markNotificationRead and router.push(linkPath) when unread + linkPath set", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("notification-row"))
+    await waitFor(() => {
+      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
+    })
+    expect(mockRouterPush).toHaveBeenCalledWith("/contacts/c1")
+  })
+
+  it("clicking the row marks read but does NOT push when linkPath is null", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: null })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("notification-row"))
+    await waitFor(() => {
+      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
+    })
+    expect(mockRouterPush).not.toHaveBeenCalled()
+  })
+
+  it("clicking a hover action button does NOT navigate the row (stopPropagation)", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    // The hover cluster stops propagation: clicking an action fires its own
+    // handler but never triggers the row's navigation.
+    await user.click(screen.getByTestId("action-mark-read"))
+    expect(mockRouterPush).not.toHaveBeenCalled()
+  })
+
+  // E7 — explicit state-dependent mark-read / mark-unread hover action
+  it("E7: an unread row shows 'Mark as read' (not 'Mark as unread')", () => {
+    const n = makeNotification({ readAt: null })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-mark-read")).toBeInTheDocument()
+    expect(screen.queryByTestId("action-mark-unread")).toBeNull()
+  })
+
+  it("E7: a read row shows 'Mark as unread' (not 'Mark as read')", () => {
+    const n = makeNotification({ readAt: new Date() })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-mark-unread")).toBeInTheDocument()
+    expect(screen.queryByTestId("action-mark-read")).toBeNull()
+  })
+
+  it("E7: clicking 'Mark as read' calls markNotificationRead and does not navigate", async () => {
+    vi.mocked(markNotificationRead).mockClear()
+    const user = userEvent.setup()
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    await user.click(screen.getByTestId("action-mark-read"))
+    await waitFor(() => {
+      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
+    })
+    expect(mockRouterPush).not.toHaveBeenCalled()
+  })
+
+  it("mark-as-unread: after marking unread, re-rendering with readAt=null shows blue dot", async () => {
+    vi.mocked(markNotificationUnread).mockClear()
+    const user = userEvent.setup()
+    const readNotif = makeNotification({ readAt: new Date() })
+    const unreadNotif = makeNotification({ readAt: null })
+    const { rerender } = render(<NotificationRow notification={readNotif} onRefresh={vi.fn()} />)
+
+    // Read row: no dot in the DOM
+    expect(screen.queryByTestId("notification-read-dot")).toBeNull()
+
+    // Click mark-as-unread
+    await user.click(screen.getByTestId("action-mark-unread"))
+    await waitFor(() => {
+      expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
+    })
+
+    // Rerender with readAt=null (simulates parent refreshing state after onRefresh())
+    rerender(<NotificationRow notification={unreadNotif} onRefresh={vi.fn()} />)
+
+    // Blue dot reappears
+    const dot = screen.getByTestId("notification-read-dot")
+    expect(dot).toBeInTheDocument()
+    expect(dot.classList.contains("bg-blue-500")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D3 — Dropdown "Mark all as unread" control
+// ---------------------------------------------------------------------------
+
+describe("NotificationDropdown — mark all as unread (D3)", () => {
+  it("renders both 'Mark all read' and 'Mark all as unread' controls", async () => {
+    const user = userEvent.setup()
+    render(<NotificationBell initialUnreadCount={1} />)
+    await user.click(screen.getByTestId("notification-bell"))
+    expect(screen.getByTestId("mark-all-read")).toBeInTheDocument()
+    expect(screen.getByTestId("mark-all-unread")).toBeInTheDocument()
+  })
+
+  it("clicking 'Mark all as unread' invokes markAllNotificationsUnread", async () => {
+    vi.mocked(markAllNotificationsUnread).mockClear()
+    const user = userEvent.setup()
+    render(<NotificationBell initialUnreadCount={2} />)
+    await user.click(screen.getByTestId("notification-bell"))
+    await user.click(screen.getByTestId("mark-all-unread"))
+    await waitFor(() => {
+      expect(markAllNotificationsUnread).toHaveBeenCalledWith({})
+    })
   })
 })

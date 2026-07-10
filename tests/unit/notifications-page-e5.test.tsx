@@ -215,6 +215,23 @@ describe("NotificationRow — Unarchive affordance (E5)", () => {
     expect(onUnarchive).toHaveBeenCalledOnce()
   })
 
+  it("on the Archive tab (onUnarchive set), hides the Archive + Snooze buttons (no re-archive)", () => {
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} onUnarchive={vi.fn()} />)
+    // Unarchive is offered; the redundant re-archive + snooze are gone.
+    expect(screen.getByTestId("action-unarchive")).toBeInTheDocument()
+    expect(screen.queryByTestId("action-archive")).toBeNull()
+    expect(screen.queryByTestId("action-snooze")).toBeNull()
+  })
+
+  it("off the Archive tab (no onUnarchive), the Archive + Snooze buttons are present", () => {
+    const n = makeNotification()
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
+    expect(screen.getByTestId("action-archive")).toBeInTheDocument()
+    expect(screen.getByTestId("action-snooze")).toBeInTheDocument()
+    expect(screen.queryByTestId("action-unarchive")).toBeNull()
+  })
+
   it("Archive button calls archiveNotification and then onArchived with the row id", async () => {
     vi.mocked(archiveNotification).mockClear()
     const user = userEvent.setup()

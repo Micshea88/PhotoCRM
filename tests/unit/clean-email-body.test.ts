@@ -52,6 +52,28 @@ describe("cleanEmailBody", () => {
     expect(cleanEmailBody(body)).toBeNull()
   })
 
+  // ── false-positive protection: never eat legitimate content ──────────────
+
+  it("PRESERVES a stray '>' line that has real content AFTER it (no scatter-eating)", () => {
+    // A client quoting inline mid-message, then continuing to write. The '>'
+    // line is NOT part of a trailing quote block, so nothing after it is lost.
+    const body = "Here is my answer.\n> your question was about the album\nAnd my response is yes, add it."
+    const result = cleanEmailBody(body)
+    expect(result).not.toBeNull()
+    expect(result!).toContain("Here is my answer.")
+    // The content AFTER the stray '>' line must survive.
+    expect(result!).toContain("And my response is yes, add it.")
+  })
+
+  it("drops only the CONTIGUOUS trailing '>' block, keeping earlier content", () => {
+    const body = "Real reply line one.\nReal reply line two.\n> quoted history 1\n> quoted history 2"
+    const result = cleanEmailBody(body)
+    expect(result).not.toBeNull()
+    expect(result!).toContain("Real reply line one.")
+    expect(result!).toContain("Real reply line two.")
+    expect(result!).not.toContain("quoted history")
+  })
+
   // ── "On … wrote:" marker ─────────────────────────────────────────────────
 
   it("drops everything from the 'On … wrote:' plain-text marker onward", () => {

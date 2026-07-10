@@ -454,8 +454,10 @@ export function NotificationRow({
           </Tooltip>
         )}
 
-        {/* Snooze — portaled so it isn't clipped by the dropdown's overflow */}
-        <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+        {/* Snooze — hidden on the Archive tab (snoozing an already-archived
+            item is meaningless). Portaled so it isn't clipped by the dropdown. */}
+        {!onUnarchive && (
+          <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>
           <Tooltip label="Snooze">
             <RadixPopover.Trigger asChild>
               <button
@@ -540,7 +542,8 @@ export function NotificationRow({
               </div>
             </RadixPopover.Content>
           </RadixPopover.Portal>
-        </RadixPopover.Root>
+          </RadixPopover.Root>
+        )}
 
         {/* Create task */}
         <Tooltip label={n.contactId ? "Create task" : "No linked contact"}>
@@ -562,18 +565,22 @@ export function NotificationRow({
           </button>
         </Tooltip>
 
-        {/* Archive */}
-        <Tooltip label="Archive">
-          <button
-            type="button"
-            onClick={handleArchive}
-            className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-            aria-label="Archive"
-            data-testid="action-archive"
-          >
-            <Archive className="size-3.5" />
-          </button>
-        </Tooltip>
+        {/* Archive — hidden on the Archive tab (row is already archived;
+            re-archiving would fire a confusing "Archived 1" undo toast).
+            Unarchive is offered instead, above. */}
+        {!onUnarchive && (
+          <Tooltip label="Archive">
+            <button
+              type="button"
+              onClick={handleArchive}
+              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+              aria-label="Archive"
+              data-testid="action-archive"
+            >
+              <Archive className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
       </div>
 
       {error && <p className="absolute right-3 bottom-1 text-[10px] text-red-500">{error}</p>}

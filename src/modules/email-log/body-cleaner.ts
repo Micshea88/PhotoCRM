@@ -31,11 +31,16 @@ const ON_WROTE_RE = /^on\s.+wrote:\s*$/i
  * "On <date>… wrote:" header), and collapses whitespace.  Truncates to
  * `opts.maxLen` only when provided.  Pure — no side effects.
  *
- * Order matters: strip the tracking pixel first (before line-splitting, so a
- * multi-attribute img tag is removed cleanly); then split on newlines so that
- * plain-text `>` quote markers are detectable; then check each line for the
- * "On … wrote:" header (after stripping that line's HTML tags) and break on
- * first match; finally strip HTML from the kept lines and collapse whitespace.
+ * Trimming rule (trim ONLY from the first marker of the trailing quote block —
+ * never scatter-filter individual lines, so legitimate content is preserved):
+ *   1. Strip the tracking-pixel img first (before line-splitting).
+ *   2. Cut at the "On … wrote:" reply header (first occurrence, HTML-stripped
+ *      per line) — everything from that line onward is quoted history.
+ *   3. Within what remains, peel a CONTIGUOUS trailing block of `>`-quoted
+ *      lines (a quote block that carries no "On … wrote:" header). Only a run
+ *      of `>` lines that reaches the end is dropped — a stray `>` line FOLLOWED
+ *      by real content is kept (we never remove scattered mid-message `>` lines).
+ *   4. Strip residual HTML tags from the kept lines and collapse whitespace.
  */
 export function cleanEmailBody(raw: string | null, opts?: { maxLen?: number }): string | null {
   if (!raw) return null
@@ -43,20 +48,38 @@ export function cleanEmailBody(raw: string | null, opts?: { maxLen?: number }): 
   // 1. Strip our own tracking pixel (silently echoed back in replied HTML).
   const withoutPixel = raw.replace(TRACKING_PIXEL_RE, "")
 
-  // 2. Split on newlines; filter plain-text `>` quoted lines; break on the
-  //    "On … wrote:" header so quoted history is dropped entirely.
   const lines = withoutPixel.split("\n")
-  const kept: string[] = []
-  for (const line of lines) {
-    if (line.trim().startsWith(">")) continue
-    // Strip HTML tags from THIS line to detect the quote header inside HTML.
-    const textLine = line.replace(/<[^>]*>/g, "").trim()
-    if (ON_WROTE_RE.test(textLine)) break
-    kept.push(line)
+  // Per-line HTML-stripped text, used only for quote-marker detection.
+  const text = lines.map((l) => l.replace(/<[^>]*>/g, "").trim())
+
+  // 2. Cut at the first "On … wrote:" reply header (quoted history from here on).
+  let cut = lines.length
+  for (const [i, t] of text.entries()) {
+    if (ON_WROTE_RE.test(t)) {
+      cut = i
+      break
+    }
   }
 
-  // 3. Join remaining lines, strip residual HTML tags, collapse whitespace.
-  const cleaned = kept
+  // 3. Peel a CONTIGUOUS trailing run of `>`-quoted (or blank) lines within
+  //    [0, cut). Drop it only if that run actually contains a `>` line — a run
+  //    of just blank lines is not a quote block. A stray `>` line with real
+  //    content after it never enters this trailing run, so it is preserved.
+  let end = cut
+  while (end > 0) {
+    const prev = text[end - 1] ?? ""
+    if (prev === "" || prev.startsWith(">")) {
+      end--
+      continue
+    }
+    break
+  }
+  const trailingHasQuote = text.slice(end, cut).some((t) => t.startsWith(">"))
+  const keptCount = trailingHasQuote ? end : cut
+
+  // 4. Join kept lines, strip residual HTML tags, collapse whitespace.
+  const cleaned = lines
+    .slice(0, keptCount)
     .join(" ")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")

@@ -2,11 +2,15 @@
 
 import { ChevronDown } from "lucide-react"
 import { Popover } from "@/components/ui/popover"
-import { MultiSelectMenu, type MultiSelectOption } from "@/components/ui/multi-select-menu"
+import {
+  MultiSelectMenu,
+  type MultiSelectOption,
+  type MultiSelectSection,
+} from "@/components/ui/multi-select-menu"
 import { FilterPills, type FilterPillItem } from "@/components/ui/filter-pills"
 import { DebouncedSearchInput } from "@/components/ui/debounced-search-input"
 import { cn } from "@/lib/utils"
-import { NOTIFICATION_TYPES } from "@/modules/notifications/types"
+import { NOTIFICATION_TYPES, NOTIFICATION_CATEGORIES } from "@/modules/notifications/types"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,10 +53,14 @@ export interface NotificationContactOption {
 // Type options (derived from the registry)
 // ---------------------------------------------------------------------------
 
-const TYPE_OPTIONS: MultiSelectOption[] = Object.entries(NOTIFICATION_TYPES).map(([key, meta]) => ({
-  value: key,
-  label: meta.label,
-}))
+// Grouped by the 6 registry categories (single source of truth:
+// NOTIFICATION_CATEGORIES) so the Type filter mirrors the settings panel's bands.
+const TYPE_SECTIONS: MultiSelectSection[] = NOTIFICATION_CATEGORIES.map((cat) => ({
+  label: cat.label,
+  options: Object.entries(NOTIFICATION_TYPES)
+    .filter(([, meta]) => meta.category === cat.key)
+    .map(([key, meta]): MultiSelectOption => ({ value: key, label: meta.label })),
+})).filter((s) => s.options.length > 0)
 
 // Label lookup that's safe against unknown type keys from the DB
 const TYPE_LABEL_MAP: Record<string, string> = Object.fromEntries(
@@ -63,7 +71,8 @@ const TYPE_LABEL_MAP: Record<string, string> = Object.fromEntries(
 // Sort options
 // ---------------------------------------------------------------------------
 
-const SORT_OPTIONS: MultiSelectOption[] = [
+// Sort is mutually exclusive → single-select (radio), NOT MultiSelectMenu.
+const SORT_OPTIONS: { value: NotificationSortOrder; label: string }[] = [
   { value: "newest", label: "Newest first" },
   { value: "oldest", label: "Oldest first" },
 ]
@@ -207,7 +216,9 @@ export function NotificationFilterStrip({
       <div className="flex flex-wrap items-center gap-2">
         <MultiSelectMenu
           label="Type"
-          options={TYPE_OPTIONS}
+          sections={TYPE_SECTIONS}
+          searchable
+          searchPlaceholder="Search types…"
           values={state.types}
           onChange={(v) => {
             onChange({ ...state, types: v })
@@ -238,18 +249,34 @@ export function NotificationFilterStrip({
           />
         )}
         {showSort && (
-          <span className="ml-auto">
-            <MultiSelectMenu
-              label={state.sort === "oldest" ? "Oldest first" : "Newest first"}
-              options={SORT_OPTIONS}
-              values={[state.sort]}
-              onChange={(v) => {
-                const next = v[0] === "oldest" ? "oldest" : "newest"
-                onChange({ ...state, sort: next })
-              }}
-              testId="notification-sort"
-            />
-          </span>
+          <div
+            role="radiogroup"
+            aria-label="Sort order"
+            data-testid="notification-sort"
+            className="ml-auto flex overflow-hidden rounded-md border border-[var(--color-border)]"
+          >
+            {SORT_OPTIONS.map((o, i) => (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={state.sort === o.value}
+                onClick={() => {
+                  onChange({ ...state, sort: o.value })
+                }}
+                className={cn(
+                  "px-3 py-1 text-sm transition-colors",
+                  i > 0 && "border-l border-[var(--color-border)]",
+                  state.sort === o.value
+                    ? "bg-[var(--color-primary)] text-white"
+                    : "bg-[var(--color-background)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]",
+                )}
+                data-testid={`notification-sort-${o.value}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       {/* Pills row */}

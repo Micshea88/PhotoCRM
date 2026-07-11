@@ -356,6 +356,15 @@ export function NotificationsPageClient() {
       )
       .then((data) => {
         setItems(data.notifications)
+        // Reconcile the selection against what's now visible: a row that was
+        // selected then individually mutated (archived/read) disappears on
+        // refetch, so drop its id — otherwise the bulk bar shows an inflated
+        // "N selected" until the next tab switch (Nit #2).
+        const visible = new Set(data.notifications.map((n) => n.id))
+        setSelectedIds((prev) => {
+          const next = new Set([...prev].filter((id) => visible.has(id)))
+          return next.size === prev.size ? prev : next
+        })
         if (data.notificationContacts) {
           setContactOptions(data.notificationContacts)
         }

@@ -10,7 +10,7 @@
  */
 
 import type { NotificationCategory, NotificationType } from "./types"
-import { NOTIFICATION_TYPES } from "./types"
+import { NOTIFICATION_TYPES, NOTIFICATION_CATEGORY_LABELS } from "./types"
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -34,7 +34,7 @@ export interface SettingsSection {
 export const NOTIFICATION_SETTINGS_CATALOG: SettingsSection[] = [
   {
     key: "messages_email",
-    label: "Messages & email",
+    label: NOTIFICATION_CATEGORY_LABELS.messages_email,
     rows: [
       {
         label: "Email delivery problems",
@@ -48,7 +48,7 @@ export const NOTIFICATION_SETTINGS_CATALOG: SettingsSection[] = [
   },
   {
     key: "payments",
-    label: "Payments",
+    label: NOTIFICATION_CATEGORY_LABELS.payments,
     rows: [
       { label: "Payment received", types: ["payment.received"] },
       { label: "Payment failed", types: ["payment.failed"] },
@@ -56,7 +56,7 @@ export const NOTIFICATION_SETTINGS_CATALOG: SettingsSection[] = [
   },
   {
     key: "documents",
-    label: "Documents",
+    label: NOTIFICATION_CATEGORY_LABELS.documents,
     rows: [
       { label: "Proposal viewed", types: ["proposal.viewed"] },
       { label: "Form started", types: ["form.started"] },
@@ -66,7 +66,7 @@ export const NOTIFICATION_SETTINGS_CATALOG: SettingsSection[] = [
   },
   {
     key: "leads",
-    label: "Leads",
+    label: NOTIFICATION_CATEGORY_LABELS.leads,
     rows: [
       { label: "New inquiry", types: ["lead.new_inquiry"] },
       { label: "Untouched-lead reminder (2/5/7 days)", types: ["lead.untouched_reminder"] },
@@ -74,7 +74,7 @@ export const NOTIFICATION_SETTINGS_CATALOG: SettingsSection[] = [
   },
   {
     key: "scheduling",
-    label: "Scheduling",
+    label: NOTIFICATION_CATEGORY_LABELS.scheduling,
     rows: [
       { label: "Booking made", types: ["booking.made"] },
       { label: "Booking cancelled", types: ["booking.cancelled"] },
@@ -84,7 +84,7 @@ export const NOTIFICATION_SETTINGS_CATALOG: SettingsSection[] = [
   },
   {
     key: "system",
-    label: "System",
+    label: NOTIFICATION_CATEGORY_LABELS.system,
     rows: [
       { label: "Email inbox disconnected", types: ["email.disconnected"] },
       { label: "Account & security", types: ["account.security"] },

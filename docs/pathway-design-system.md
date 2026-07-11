@@ -46,7 +46,7 @@ why, tracing back to this section.
 
 ## 0a. Standing design laws (LOCKED — authoritative text in `AGENTS.md`)
 
-Six LOCKED laws govern every UI / PM push. Full statements + rationale
+Seven LOCKED laws govern every UI / PM push. Full statements + rationale
 live in `AGENTS.md` → "Standing design laws"; summarized here as the
 wireframe/UI checklist:
 
@@ -89,6 +89,16 @@ wireframe/UI checklist:
   it doesn't exist; a per-page width constraint is the bug this prevents).
   No doubled gutters (parent padding + child max-width). Check every screen
   at narrow / medium / wide before it's done. Applies to ALL screens.
+
+- **LAW 7 — Test the RESULT, not the setup.** A display/interaction feature
+  isn't done until a test asserts the **observable result**, not the state that
+  should produce it: assert the list **reordered** (not that a sort param
+  mapped), the row is **denser** (not that a density attribute is set), the
+  quote was **removed** (not that a trim ran). COROLLARY: code parsing
+  **external input** (email bodies, webhook payloads, imports) must be tested
+  against **REAL captured payloads** — a test that passes on a fixture that
+  doesn't resemble production input proves nothing. (Exists because D1/D2/D3
+  shipped broken through clean reviews — see `cleanup-and-tech-debt.md`.)
 
 - **Persona-law companion — client-presentation views are dedicated +
   opt-in.** For client-facing display (e.g. day-of timeline), build a

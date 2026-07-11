@@ -14,7 +14,18 @@
 import { describe, it, expect } from "vitest"
 // Import from body-cleaner (pure utils, no server-only deps) rather than
 // inbound.ts, which pulls in db/env/Resend and triggers the server-only guard.
-import { cleanEmailBody, buildBodyPreview } from "@/modules/email-log/body-cleaner"
+import {
+  cleanEmailBody,
+  buildBodyPreview,
+  decodeHtmlEntities,
+} from "@/modules/email-log/body-cleaner"
+
+// ── REAL captured Gmail payload (prod row xil9ac8293g055i9ywsjeko0, "Re: Test 2")
+// Single-line HTML, entity-encoded, real gmail_quote_container. This is the exact
+// shape the old line-based cleaner could never trim (LAW 7 — real payload, not a
+// hand-written fixture).
+const REAL_GMAIL_REPLY =
+  '<div>Yes, it worked.</div><div><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">On Thu, Jul 9, 2026 at 11:08 PM Michael Shea &lt;<a href="mailto:mike@kandkphotography.com">mike@kandkphotography.com</a>&gt; wrote:<br></div><blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex"><div>Hey send me one back. Does this work. </div><img src="https://photo-crm-three.vercel.app/api/email/track/zt95lrv5jz5kw8v6zkpn77vi.png" width="1" height="1" alt="" style="display: none;">\r\n</blockquote></div></div>\r\n'
 
 describe("cleanEmailBody", () => {
   it("returns null for null input", () => {
@@ -217,5 +228,63 @@ describe("buildBodyPreview (thin wrapper — existing behavior preserved)", () =
   it("returns null when only quoted content remains after stripping", () => {
     const body = "> quoted line\n> another quoted line"
     expect(buildBodyPreview(body)).toBeNull()
+  })
+})
+
+// ─── D1: real Gmail HTML payload (LAW 7 — assert on OUTPUT) ─────────────────
+
+describe("cleanEmailBody — real captured Gmail reply (D1)", () => {
+  it("trims the gmail_quote_container and decodes entities on the REAL payload", () => {
+    const result = cleanEmailBody(REAL_GMAIL_REPLY)
+    expect(result).not.toBeNull()
+    // The new reply survives.
+    expect(result!).toContain("Yes, it worked.")
+    // The quoted history is GONE (container cut).
+    expect(result!).not.toContain("Hey send me one back")
+    expect(result!).not.toContain("On Thu, Jul 9")
+    // No literal entities survive. (In THIS payload the &lt;/&gt; sit inside the
+    // cut quote block, so the cut removes them; entity-decode on SURVIVING text
+    // is proven separately below + in the decodeHtmlEntities suite.)
+    expect(result!).not.toContain("&lt;")
+    expect(result!).not.toContain("&gt;")
+    // The echoed tracking pixel is gone.
+    expect(result!).not.toContain("/api/email/track/")
+  })
+
+  it("decodes an HTML entity that survives in the KEPT (non-quoted) body text", () => {
+    // The entity is in the new reply (before the quote container) — it must be
+    // decoded in the output, proving decode runs on surviving text, not only
+    // that the cut happened to remove entity-bearing quoted history.
+    const body =
+      '<div>Tom &amp; Jerry say it&#39;s done &lt;here&gt;</div><div class="gmail_quote gmail_quote_container"><blockquote class="gmail_quote">old</blockquote></div>'
+    const result = cleanEmailBody(body)
+    expect(result).not.toBeNull()
+    expect(result!).toContain("Tom & Jerry")
+    expect(result!).toContain("it's done")
+    expect(result!).toContain("<here>")
+    expect(result!).not.toContain("&amp;")
+    expect(result!).not.toContain("&#39;")
+  })
+
+  it("empty-guard: a bottom-posted reply (quote first, new text after) is NOT blank", () => {
+    const bottomPosted =
+      '<div class="gmail_quote gmail_quote_container"><blockquote class="gmail_quote"><div>Old original message.</div></blockquote></div><div>My new reply is below the quote.</div>'
+    const result = cleanEmailBody(bottomPosted)
+    expect(result).not.toBeNull()
+    expect(result!.trim().length).toBeGreaterThan(0)
+    // The user's new text must survive even though it sits after the quote.
+    expect(result!).toContain("My new reply is below the quote.")
+  })
+})
+
+describe("decodeHtmlEntities", () => {
+  it("decodes named + numeric entities; &amp; last (no double-decode)", () => {
+    expect(decodeHtmlEntities("&lt;a&gt;")).toBe("<a>")
+    expect(decodeHtmlEntities("Tom &amp; Jerry")).toBe("Tom & Jerry")
+    expect(decodeHtmlEntities("it&#39;s")).toBe("it's")
+    expect(decodeHtmlEntities("it&#x27;s")).toBe("it's")
+    expect(decodeHtmlEntities("a&nbsp;b")).toBe("a b")
+    // &amp;lt; must stay &lt; (decoded once, not collapsed to <)
+    expect(decodeHtmlEntities("&amp;lt;")).toBe("&lt;")
   })
 })

@@ -87,6 +87,19 @@ To satisfy LAW 1 (persona separation) for live-consultation / client-facing disp
 - **Applies to ALL screens.** The failure mode is fixing one page and repeating the defect on the next — so the constraint lives in the shared container, not in each page.
 - **Trigger:** violated on the /notifications page (a fixed-width `mx-auto max-w-2xl` content island with excessive left/right whitespace on wide screens), 2026-07-09.
 
+### LAW 7 — Test the RESULT, not the setup
+
+**A display or interaction feature is not done until a test asserts the OBSERVABLE RESULT — not the state that should produce it.**
+
+- Assert the **list reordered** — not that a sort param was mapped.
+- Assert the **row is denser** (e.g. the preview clamped to one line) — not that a density attribute is present.
+- Assert the **quote was removed** from the cleaned string — not that a trim function was called.
+
+**COROLLARY — real payloads for external input:** any code that parses **EXTERNAL input** (email bodies, webhook payloads, imported files) MUST be tested against **REAL CAPTURED PAYLOADS**, not hand-written fixtures. Hand-written fixtures encode the shape the author *imagined*, and pass on code that fails on the shape that actually arrives. **A test that passes on a fixture that does not resemble production input proves nothing.**
+
+- **Why this law exists (worked examples, all shipped through clean reviews):** three notification features shipped broken because their tests verified *state* not *behavior* — sort didn't sort (test asserted the mapped param, not the rendered order), compact wasn't compact (test asserted a `data-density` attribute, not the row density), and the email cleaner didn't clean real Gmail HTML (fixtures were newline-separated + entity-free; the real payload is single-line + entity-encoded). See `docs/cleanup-and-tech-debt.md` for the full post-mortem.
+- **Trigger:** the D1/D2/D3 production defects (2026-07-10).
+
 ## Build-planning audits — STANDING PROCESS (every audit)
 
 Every build-planning / feature audit MUST research and reference best-in-class patterns from BOTH sides, and surface divergences as choices:

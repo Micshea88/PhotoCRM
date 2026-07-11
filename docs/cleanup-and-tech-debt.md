@@ -180,6 +180,24 @@ Full detail + fixes + effort + tests: **`docs/multi-tenant-remediation-plan.md`*
 - **Rule of thumb (revisit trigger):** extract a shared `GenericFilterStrip` primitive **only once a THIRD consumer exists** (e.g. a Tasks or Events filter page) and the correct shape is obvious rather than guessed. Until then, primitive-level reuse is the standard — this is a deliberate deferral, **not** a violation of the reuse rule.
 - **Severity:** internal / design-record. **Status:** Decided + implemented at primitive level (E1, Section E of `feat/notifications-inbound-fixes`).
 
+### A.21 — Inbound email cleaner handles GMAIL quote markers only (Outlook / Apple Mail = known gap)
+
+- **What:** `cleanEmailBody` (`src/modules/email-log/body-cleaner.ts`) does a structure-aware quote cut keyed on **Gmail** markers only — `gmail_quote` / `gmail_quote_container` / `gmail_attr` — taken from a **real captured prod payload** (row `xil9ac8293g055i9ywsjeko0`). A plain-text `>`/`On … wrote:` fallback also runs for the Resend text lane.
+- **Gap:** **Outlook** and **Apple Mail** replies use different quote markup (e.g. Outlook's `#divRplyFwdMsg` / `<hr>` separator, Apple's `blockquote type="cite"`). We have **no real captured payload** for either, so — per the standing rule (do NOT invent markers) — they are **not handled**: an Outlook/Apple reply will fall back to the line-based cut (which usually won't fire on single-line HTML), leaving quoted history in the cleaned body. The raw HTML is retained in `body_html`, so nothing is lost.
+- **Fix (when a real payload exists):** capture a real Outlook and a real Apple Mail inbound reply, add their observed container markers to `GMAIL_QUOTE_RE`'s sibling set, add each as a real-payload fixture (LAW 7). Do not add markers speculatively.
+- **Severity:** internal (degraded display for non-Gmail replies; no data loss, no security impact). **Status:** Open (needs real payloads). Surfaced building Section 1 (D1), 2026-07-10.
+
+### A.22 — Post-mortem: three features shipped broken through clean reviews (why LAW 7 exists)
+
+- **What happened (2026-07-10):** three notification features passed per-section reviews (Spec ✅ / Quality Approved) AND a final whole-branch review (READY-WITH-NITS), then were found **broken in production**. The common failure: **tests verified that STATE was set, not that BEHAVIOR occurred.**
+  - **D1 — email cleaner didn't clean real email.** `cleanEmailBody` split on `\n` and matched an anchored `^on … wrote:$` regex per line. Real Gmail HTML is a **single line, no newlines, entity-encoded**, so the cut never fired and quoted history + literal `&lt;`/`&gt;` rendered on the timeline. **Every fixture was newline-separated + entity-free** — the tests never exercised the shape that actually arrives.
+  - **D2 — sort didn't sort.** The sort control was a `MultiSelectMenu` (multi-select); clicking "Oldest first" appended to `["newest","oldest"]` so `v[0]` stayed "newest". Tests asserted `filterStateToApiParams` mapped the param **given a sort value directly** — they never clicked the control and asserted the **rendered list order** changed.
+  - **D3 — compact wasn't compact.** Compact differed from comfortable by ~8px padding only; the `data-density` attribute had **no CSS consumer**. Tests asserted the **attribute was present**, never that the row was **measurably denser**.
+- **Root cause (systemic):** consistency with a fixture/attribute proves the code is internally consistent — not that it produces the right observable result on real input. Reviews traced code paths and found them coherent; the fixtures/assertions were the wrong target.
+- **Remedy:** **LAW 7** (AGENTS.md → Standing design laws): assert the observable RESULT; test external-input parsers against REAL captured payloads. The D1/D2/D3 fixes each ship a LAW-7 test (real Gmail payload → output assertions; click-sort → rendered-order assertion; toggle → line-clamp assertion).
+- **Recommended mechanical checks (not yet built — follow-ups):** (1) a **golden-file payload corpus** for inbound email (real captured Gmail/Outlook/Apple bodies) that the cleaner tests consume; (2) a lint/review checklist item: "does this test assert output/order/rendered-state, or just a prop/attribute/param?"; (3) a **"does this attribute/prop have a consumer" check** (the dead `data-density` would have been caught).
+- **Severity:** process / internal. **Status:** LAW 7 locked; mechanical follow-ups open.
+
 ---
 
 ## SECTION B — DEFERRED SCOPE (intentionally postponed features — NOT bugs; do NOT "fix")

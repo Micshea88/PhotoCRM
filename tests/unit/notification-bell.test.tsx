@@ -533,7 +533,7 @@ describe("NotificationRow — row click navigation (D2)", () => {
     // Flipped to read: action fired, dot gone, label flipped — no navigation.
     expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
     expect(screen.queryByTestId("notification-read-dot")).toBeNull()
-    expect(screen.getByTestId("row-read-toggle")).toHaveAttribute("aria-label", "Mark as unread")
+    expect(screen.getByTestId("row-read-toggle")).toHaveTextContent("Mark as unread")
     expect(mockRouterPush).not.toHaveBeenCalled()
 
     // Click again → reverses to unread.
@@ -541,7 +541,7 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
     const dot = screen.getByTestId("notification-read-dot")
     expect(dot.classList.contains("bg-blue-500")).toBe(true)
-    expect(screen.getByTestId("row-read-toggle")).toHaveAttribute("aria-label", "Mark as read")
+    expect(screen.getByTestId("row-read-toggle")).toHaveTextContent("Mark as read")
   })
 })
 

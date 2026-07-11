@@ -471,8 +471,8 @@ export function NotificationRow({
           </Tooltip>
         )}
 
-        {/* Mark read/unread lives OUTSIDE this hover cluster now — it's a
-            persistent (always-visible) toggle on Line 3 (see above). */}
+        {/* Mark read/unread lives OUTSIDE this hover cluster — it is a hover-revealed
+            text link on Line 3, by the timestamp (see above). */}
 
         {/* Snooze — hidden on the Archive tab (snoozing an already-archived
             item is meaningless) AND on the Snoozed tab (the row is already

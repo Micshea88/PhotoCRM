@@ -458,3 +458,37 @@ describe("NotificationsPageClient — multi-select and bulk bar (E3)", () => {
     })
   })
 })
+
+describe("NotificationsPageClient — selection reconciles after refetch (Nit #2)", () => {
+  it("drops a selected id that is no longer visible so the count isn't inflated", async () => {
+    const user = userEvent.setup()
+    render(<NotificationsPageClient />)
+    await waitFor(() => {
+      expect(screen.getAllByTestId("notification-row").length).toBe(2)
+    })
+
+    // Select both rows → "2 selected".
+    const checkboxes = screen.getAllByTestId("notification-select-checkbox")
+    await user.click(checkboxes[0]!)
+    await user.click(checkboxes[1]!)
+    expect(screen.getByTestId("bulk-selected-count")).toHaveTextContent("2 selected")
+
+    // Next fetch returns only n1 (n2 disappeared, e.g. archived elsewhere).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({ ...FETCH_RESPONSE, notifications: [FETCH_RESPONSE.notifications[0]] }),
+      }),
+    )
+
+    // Trigger a refetch (Mark all read → doFetch).
+    await user.click(screen.getByText("Mark all read"))
+
+    // The count reconciles to the still-visible selection (1), not a stale 2.
+    await waitFor(() => {
+      expect(screen.getByTestId("bulk-selected-count")).toHaveTextContent("1 selected")
+    })
+  })
+})

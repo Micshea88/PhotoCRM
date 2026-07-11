@@ -460,8 +460,10 @@ export function NotificationRow({
         )}
 
         {/* Snooze — hidden on the Archive tab (snoozing an already-archived
-            item is meaningless). Portaled so it isn't clipped by the dropdown. */}
-        {!onUnarchive && (
+            item is meaningless) AND on the Snoozed tab (the row is already
+            snoozed; "Wake now" is offered there instead). Portaled so it isn't
+            clipped by the dropdown. */}
+        {!onUnarchive && !onUnsnooze && (
           <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>
           <Tooltip label="Snooze">
             <RadixPopover.Trigger asChild>

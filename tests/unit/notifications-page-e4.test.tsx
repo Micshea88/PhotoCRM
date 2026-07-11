@@ -2,12 +2,12 @@
  * Unit tests for Section E4 — compact/dense view toggle on the /notifications page.
  *
  * Tests:
- *   - Default density is "comfortable" (rows have data-density="comfortable")
- *   - Toggling to Compact sets rows to data-density="compact"
- *   - Toggling back to Comfortable restores data-density="comfortable"
+ *   - Default density is comfortable (body clamps to 2 lines)
+ *   - Toggling to Compact clamps the body to 1 line (Gmail-style)
+ *   - Toggling back to Comfortable restores the 2-line clamp
  *   - The preference is written to localStorage when the toggle is clicked
  *   - Setting pathway.notifications.density="compact" in localStorage causes rows
- *     to mount with data-density="compact"
+ *     to mount compact (body clamps to 1 line)
  *   - Default is comfortable when localStorage is empty
  *   - The bell dropdown (NotificationRow without compact prop) stays comfortable
  */
@@ -68,7 +68,7 @@ const FETCH_RESPONSE = {
       category: "messages_email",
       tier: "critical",
       title: "Email bounced",
-      body: null,
+      body: "A preview line that density controls clamp to one or two lines.",
       linkPath: null,
       contactId: null,
       payload: null,
@@ -138,7 +138,7 @@ function makeNotification(
     category: "messages_email",
     tier: "critical",
     title: "Email bounced to client@example.com",
-    body: null,
+    body: "A preview line that density controls clamp to one or two lines.",
     linkPath: null,
     contactId: null,
     payload: null,
@@ -155,27 +155,42 @@ function makeNotification(
   }
 }
 
+// Density's OBSERVABLE effect (LAW 7): the body preview clamps to ONE line in
+// compact, TWO in comfortable. Assert the clamp, not a data attribute.
+function expectAllBodiesClampTo(lines: 1 | 2): void {
+  const want = lines === 1 ? "line-clamp-1" : "line-clamp-2"
+  const notWant = lines === 1 ? "line-clamp-2" : "line-clamp-1"
+  const bodies = screen.getAllByTestId("notification-body")
+  expect(bodies.length).toBeGreaterThan(0)
+  for (const b of bodies) {
+    expect(b.className).toContain(want)
+    expect(b.className).not.toContain(notWant)
+  }
+}
+
 // ---------------------------------------------------------------------------
-// NotificationRow — compact prop and data-density attribute
+// NotificationRow — compact clamps the body preview
 // ---------------------------------------------------------------------------
 
-describe("NotificationRow — data-density attribute (E4)", () => {
-  it("has data-density='comfortable' when compact is not passed", () => {
+describe("NotificationRow — compact clamps the body preview (E4 / D3)", () => {
+  it("clamps the body to TWO lines when compact is not passed", () => {
     const n = makeNotification()
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    expect(screen.getByTestId("notification-row")).toHaveAttribute("data-density", "comfortable")
+    expect(screen.getByTestId("notification-body").className).toContain("line-clamp-2")
   })
 
-  it("has data-density='comfortable' when compact=false", () => {
+  it("clamps the body to TWO lines when compact=false", () => {
     const n = makeNotification()
     render(<NotificationRow notification={n} onRefresh={vi.fn()} compact={false} />)
-    expect(screen.getByTestId("notification-row")).toHaveAttribute("data-density", "comfortable")
+    expect(screen.getByTestId("notification-body").className).toContain("line-clamp-2")
   })
 
-  it("has data-density='compact' when compact=true", () => {
+  it("clamps the body to ONE line when compact=true", () => {
     const n = makeNotification()
     render(<NotificationRow notification={n} onRefresh={vi.fn()} compact={true} />)
-    expect(screen.getByTestId("notification-row")).toHaveAttribute("data-density", "compact")
+    const body = screen.getByTestId("notification-body")
+    expect(body.className).toContain("line-clamp-1")
+    expect(body.className).not.toContain("line-clamp-2")
   })
 })
 
@@ -201,16 +216,13 @@ describe("NotificationsPageClient — density toggle visible (E4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("NotificationsPageClient — default density (E4)", () => {
-  it("rows mount with data-density='comfortable' when localStorage is empty", async () => {
+  it("rows mount comfortable (body clamps to 2 lines) when localStorage is empty", async () => {
     render(<NotificationsPageClient />)
     await waitFor(() => {
       expect(screen.queryAllByTestId("notification-row").length).toBeGreaterThan(0)
     })
     // All rows should be comfortable
-    const rows = screen.getAllByTestId("notification-row")
-    for (const row of rows) {
-      expect(row).toHaveAttribute("data-density", "comfortable")
-    }
+    expectAllBodiesClampTo(2)
   })
 })
 
@@ -219,7 +231,7 @@ describe("NotificationsPageClient — default density (E4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("NotificationsPageClient — toggling density (E4)", () => {
-  it("clicking Compact sets rows to data-density='compact'", async () => {
+  it("clicking Compact clamps the rows' body to ONE line", async () => {
     const user = userEvent.setup()
     render(<NotificationsPageClient />)
 
@@ -229,13 +241,10 @@ describe("NotificationsPageClient — toggling density (E4)", () => {
 
     await user.click(screen.getByTestId("density-compact"))
 
-    const rows = screen.getAllByTestId("notification-row")
-    for (const row of rows) {
-      expect(row).toHaveAttribute("data-density", "compact")
-    }
+    expectAllBodiesClampTo(1)
   })
 
-  it("clicking Comfortable after Compact restores data-density='comfortable'", async () => {
+  it("clicking Comfortable after Compact restores the TWO-line clamp", async () => {
     const user = userEvent.setup()
     render(<NotificationsPageClient />)
 
@@ -248,10 +257,7 @@ describe("NotificationsPageClient — toggling density (E4)", () => {
     // Switch back to comfortable
     await user.click(screen.getByTestId("density-comfortable"))
 
-    const rows = screen.getAllByTestId("notification-row")
-    for (const row of rows) {
-      expect(row).toHaveAttribute("data-density", "comfortable")
-    }
+    expectAllBodiesClampTo(2)
   })
 })
 
@@ -292,10 +298,7 @@ describe("NotificationsPageClient — localStorage persistence (E4)", () => {
       expect(screen.queryAllByTestId("notification-row").length).toBeGreaterThan(0)
     })
 
-    const rows = screen.getAllByTestId("notification-row")
-    for (const row of rows) {
-      expect(row).toHaveAttribute("data-density", "compact")
-    }
+    expectAllBodiesClampTo(1)
   })
 
   it("falls back to comfortable when localStorage holds a corrupt value", async () => {
@@ -307,10 +310,7 @@ describe("NotificationsPageClient — localStorage persistence (E4)", () => {
       expect(screen.queryAllByTestId("notification-row").length).toBeGreaterThan(0)
     })
 
-    const rows = screen.getAllByTestId("notification-row")
-    for (const row of rows) {
-      expect(row).toHaveAttribute("data-density", "comfortable")
-    }
+    expectAllBodiesClampTo(2)
   })
 
   it("default is comfortable when localStorage is empty", async () => {
@@ -321,10 +321,7 @@ describe("NotificationsPageClient — localStorage persistence (E4)", () => {
       expect(screen.queryAllByTestId("notification-row").length).toBeGreaterThan(0)
     })
 
-    const rows = screen.getAllByTestId("notification-row")
-    for (const row of rows) {
-      expect(row).toHaveAttribute("data-density", "comfortable")
-    }
+    expectAllBodiesClampTo(2)
   })
 })
 
@@ -333,10 +330,10 @@ describe("NotificationsPageClient — localStorage persistence (E4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("NotificationRow — bell dropdown stays comfortable (E4)", () => {
-  it("NotificationRow without compact prop defaults to data-density='comfortable'", () => {
+  it("NotificationRow without compact prop stays comfortable (body clamps to 2 lines)", () => {
     const n = makeNotification()
     // Simulate bell dropdown usage: no compact prop passed
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    expect(screen.getByTestId("notification-row")).toHaveAttribute("data-density", "comfortable")
+    expect(screen.getByTestId("notification-body").className).toContain("line-clamp-2")
   })
 })

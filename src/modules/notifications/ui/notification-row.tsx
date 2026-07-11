@@ -302,7 +302,6 @@ export function NotificationRow({
       )}
       data-testid="notification-row"
       data-unread={!isRead ? "true" : "false"}
-      data-density={compact ? "compact" : "comfortable"}
       onClick={handleRowClick}
     >
       {/* Per-row selection checkbox — page-mode only; hidden in the bell dropdown */}
@@ -347,10 +346,16 @@ export function NotificationRow({
           {n.title}
         </p>
 
-        {/* Line 2 — detail (body) */}
+        {/* Line 2 — detail (body). Compact clamps the preview to ONE line
+            (Gmail-style), collapsing the row toward a single scannable line;
+            comfortable keeps two lines. The preview is always shown — it's what
+            signals whether a notification matters without opening it. */}
         {n.body && (
           <p
-            className="line-clamp-2 text-xs text-[var(--color-muted-foreground)]"
+            className={cn(
+              "text-xs text-[var(--color-muted-foreground)]",
+              compact ? "line-clamp-1" : "line-clamp-2",
+            )}
             data-testid="notification-body"
           >
             {n.body}

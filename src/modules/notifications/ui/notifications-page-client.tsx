@@ -5,9 +5,7 @@ import { Settings, Clock, CalendarDays } from "lucide-react"
 import Link from "next/link"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
-  markAllNotificationsRead,
   unsnoozeNotification,
   unarchiveNotification,
   unarchiveNotificationsBulk,
@@ -439,9 +437,17 @@ export function NotificationsPageClient() {
     }
   }, [])
 
-  function handleMarkAllRead() {
+  // Unified mark-all toggle: acts on the CURRENTLY VISIBLE set (active tab +
+  // filters) via the bulk actions — not all notifications globally. Marks all
+  // read when any visible row is unread, else marks all unread.
+  function handleMarkAllToggle() {
+    const visible = items ?? []
+    const ids = visible.map((n) => n.id)
+    if (ids.length === 0) return
+    const anyUnread = visible.some((n) => n.readAt === null)
+    const run = anyUnread ? markNotificationsReadBulk : markNotificationsUnreadBulk
     startTransition(() => {
-      void markAllNotificationsRead({}).then((res) => {
+      void run({ ids }).then((res) => {
         if (!res.serverError) doFetch(tab, filter)
       })
     })
@@ -518,6 +524,8 @@ export function NotificationsPageClient() {
 
   const groups = items ? groupByDate(items) : []
   const loading = items === null
+  const visibleItems = items ?? []
+  const anyVisibleUnread = visibleItems.some((n) => n.readAt === null)
 
   return (
     // LAW 6: fluid full-width (matches the Contacts list). The former
@@ -603,9 +611,16 @@ export function NotificationsPageClient() {
               Compact
             </button>
           </div>
-          <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
-            Mark all read
-          </Button>
+          {/* Plain text link (HoneyBook pattern), not a bordered button. */}
+          <button
+            type="button"
+            onClick={handleMarkAllToggle}
+            disabled={visibleItems.length === 0}
+            data-testid="mark-all-toggle"
+            className="text-sm font-medium text-[var(--color-primary)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-muted-foreground)] disabled:no-underline"
+          >
+            {anyVisibleUnread ? "Mark all read" : "Mark all unread"}
+          </button>
           <Link
             href="/settings/notifications"
             className="flex size-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"

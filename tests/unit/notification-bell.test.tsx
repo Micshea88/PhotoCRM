@@ -44,8 +44,8 @@ vi.mock("@/modules/notifications/actions", () => ({
   snoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   unsnoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   createTaskFromNotification: vi.fn().mockResolvedValue({ data: { taskId: "t1" } }),
-  markAllNotificationsRead: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-  markAllNotificationsUnread: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+  markNotificationsReadBulk: vi.fn().mockResolvedValue({ data: { count: 1 } }),
+  markNotificationsUnreadBulk: vi.fn().mockResolvedValue({ data: { count: 1 } }),
 }))
 
 // Stub fetch for the dropdown/bell
@@ -93,7 +93,7 @@ import {
 import {
   markNotificationRead,
   markNotificationUnread,
-  markAllNotificationsUnread,
+  markNotificationsReadBulk,
   snoozeNotification,
 } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
@@ -492,91 +492,111 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
-  it("clicking a hover action button does NOT navigate the row (stopPropagation)", async () => {
-    vi.mocked(markNotificationRead).mockClear()
+  it("clicking a hover cluster action (archive) does NOT navigate the row (stopPropagation)", async () => {
     const user = userEvent.setup()
     const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    // The hover cluster stops propagation: clicking an action fires its own
-    // handler but never triggers the row's navigation.
-    await user.click(screen.getByTestId("action-mark-read"))
+    await user.click(screen.getByTestId("action-archive"))
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
-  // E7 — explicit state-dependent mark-read / mark-unread hover action
-  it("E7: an unread row shows 'Mark as read' (not 'Mark as unread')", () => {
-    const n = makeNotification({ readAt: null })
-    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    expect(screen.getByTestId("action-mark-read")).toBeInTheDocument()
-    expect(screen.queryByTestId("action-mark-unread")).toBeNull()
+  // STEP 2 — HOVER-REVEALED read/unread TEXT link (HoneyBook placement)
+  it("STEP 2: the read control is a hover-revealed text link with a state-dependent label", () => {
+    render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
+    const toggle = screen.getByTestId("row-read-toggle")
+    // Reads as TEXT (not an always-on icon): unread → 'Mark as read'.
+    expect(toggle).toHaveTextContent("Mark as read")
+    // Hover-revealed: hidden by default, shown on row (group) hover. jsdom can't
+    // render CSS :hover, so the reveal mechanism is asserted structurally; the
+    // click behavior below is the observable-result test.
+    expect(toggle.className).toContain("hidden")
+    expect(toggle.className).toContain("group-hover:inline")
+
+    // A read row → 'Mark as unread'.
+    render(
+      <NotificationRow notification={makeNotification({ readAt: new Date() })} onRefresh={vi.fn()} />,
+    )
+    expect(screen.getAllByTestId("row-read-toggle")[1]).toHaveTextContent("Mark as unread")
   })
 
-  it("E7: a read row shows 'Mark as unread' (not 'Mark as read')", () => {
-    const n = makeNotification({ readAt: new Date() })
-    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    expect(screen.getByTestId("action-mark-unread")).toBeInTheDocument()
-    expect(screen.queryByTestId("action-mark-read")).toBeNull()
-  })
-
-  it("E7: clicking 'Mark as read' calls markNotificationRead and does not navigate", async () => {
+  it("STEP 2: clicking the toggle flips the row read-state + dot in lockstep, and reverses", async () => {
     vi.mocked(markNotificationRead).mockClear()
-    const user = userEvent.setup()
-    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
-    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
-    await user.click(screen.getByTestId("action-mark-read"))
-    await waitFor(() => {
-      expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
-    })
-    expect(mockRouterPush).not.toHaveBeenCalled()
-  })
-
-  it("mark-as-unread: after marking unread, re-rendering with readAt=null shows blue dot", async () => {
     vi.mocked(markNotificationUnread).mockClear()
     const user = userEvent.setup()
-    const readNotif = makeNotification({ readAt: new Date() })
-    const unreadNotif = makeNotification({ readAt: null })
-    const { rerender } = render(<NotificationRow notification={readNotif} onRefresh={vi.fn()} />)
+    const n = makeNotification({ readAt: null, linkPath: "/contacts/c1" })
+    render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
 
-    // Read row: no dot in the DOM
+    // Unread: dot present, toggle says 'Mark as read'.
+    expect(screen.getByTestId("notification-read-dot")).toBeInTheDocument()
+    await user.click(screen.getByTestId("row-read-toggle"))
+
+    // Flipped to read: action fired, dot gone, label flipped — no navigation.
+    expect(markNotificationRead).toHaveBeenCalledWith({ id: "n1" })
     expect(screen.queryByTestId("notification-read-dot")).toBeNull()
+    expect(screen.getByTestId("row-read-toggle")).toHaveTextContent("Mark as unread")
+    expect(mockRouterPush).not.toHaveBeenCalled()
 
-    // Click mark-as-unread
-    await user.click(screen.getByTestId("action-mark-unread"))
-    await waitFor(() => {
-      expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
-    })
-
-    // Rerender with readAt=null (simulates parent refreshing state after onRefresh())
-    rerender(<NotificationRow notification={unreadNotif} onRefresh={vi.fn()} />)
-
-    // Blue dot reappears
+    // Click again → reverses to unread.
+    await user.click(screen.getByTestId("row-read-toggle"))
+    expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
     const dot = screen.getByTestId("notification-read-dot")
-    expect(dot).toBeInTheDocument()
     expect(dot.classList.contains("bg-blue-500")).toBe(true)
+    expect(screen.getByTestId("row-read-toggle")).toHaveTextContent("Mark as read")
   })
 })
 
 // ---------------------------------------------------------------------------
-// D3 — Dropdown "Mark all as unread" control
+// STEP 3 — unified state-driven "mark all" toggle (one button, visible set)
 // ---------------------------------------------------------------------------
 
-describe("NotificationDropdown — mark all as unread (D3)", () => {
-  it("renders both 'Mark all read' and 'Mark all as unread' controls", async () => {
+describe("NotificationDropdown — unified mark-all toggle (STEP 3)", () => {
+  it("reads 'Mark all read' when the visible set has unread, and marks the visible ids read", async () => {
+    vi.mocked(markNotificationsReadBulk).mockClear()
+    // Dropdown fetch returns one UNREAD notification.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            notifications: [makeNotification({ id: "d1", readAt: null })],
+            unreadCount: 1,
+          }),
+      }),
+    )
     const user = userEvent.setup()
     render(<NotificationBell initialUnreadCount={1} />)
     await user.click(screen.getByTestId("notification-bell"))
-    expect(screen.getByTestId("mark-all-read")).toBeInTheDocument()
-    expect(screen.getByTestId("mark-all-unread")).toBeInTheDocument()
+
+    const toggle = await screen.findByTestId("mark-all-toggle")
+    // Only ONE mark-all control (the old two-button pattern is gone).
+    expect(screen.queryByTestId("mark-all-read")).toBeNull()
+    expect(screen.queryByTestId("mark-all-unread")).toBeNull()
+    expect(toggle).toHaveTextContent("Mark all read")
+
+    await user.click(toggle)
+    // Acts on the VISIBLE ids via the bulk action.
+    await waitFor(() => {
+      expect(markNotificationsReadBulk).toHaveBeenCalledWith({ ids: ["d1"] })
+    })
   })
 
-  it("clicking 'Mark all as unread' invokes markAllNotificationsUnread", async () => {
-    vi.mocked(markAllNotificationsUnread).mockClear()
+  it("reads 'Mark all unread' when the visible set is all read", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            notifications: [makeNotification({ id: "d1", readAt: new Date() })],
+            unreadCount: 0,
+          }),
+      }),
+    )
     const user = userEvent.setup()
-    render(<NotificationBell initialUnreadCount={2} />)
+    render(<NotificationBell initialUnreadCount={0} />)
     await user.click(screen.getByTestId("notification-bell"))
-    await user.click(screen.getByTestId("mark-all-unread"))
-    await waitFor(() => {
-      expect(markAllNotificationsUnread).toHaveBeenCalledWith({})
-    })
+    const toggle = await screen.findByTestId("mark-all-toggle")
+    expect(toggle).toHaveTextContent("Mark all unread")
   })
 })

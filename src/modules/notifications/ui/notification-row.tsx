@@ -1,14 +1,12 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Bell,
-  BellOff,
   BellRing,
   Archive,
   ArchiveRestore,
-  Check,
   CheckSquare,
   Clock,
   CalendarDays,
@@ -183,14 +181,33 @@ export function NotificationRow({
   const [error, setError] = useState<string | null>(null)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [customValue, setCustomValue] = useState("")
-  const isRead = n.readAt !== null
+  // Read state with an optimistic override so the persistent read/unread toggle
+  // (+ the unread dot) flip in lockstep on click, before the refetch lands.
+  const serverRead = n.readAt !== null
+  const [optimisticRead, setOptimisticRead] = useState<boolean | null>(null)
+  const isRead = optimisticRead ?? serverRead
+  // When the server truth changes (readAt crosses the null boundary, e.g. after
+  // refetch or a "mark all" elsewhere), drop the override so server wins.
+  // Deferred to a microtask to satisfy react-hooks/set-state-in-effect (the
+  // module convention — same as the density mount-read effect).
+  useEffect(() => {
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active) setOptimisticRead(null)
+    })
+    return () => {
+      active = false
+    }
+  }, [serverRead])
 
   function handleMarkRead() {
     setError(null)
+    setOptimisticRead(true)
     startTransition(() => {
       void markNotificationRead({ id: n.id }).then((res) => {
         if (res.serverError) {
           setError(res.serverError)
+          setOptimisticRead(null)
         } else {
           onRefresh()
         }
@@ -200,10 +217,12 @@ export function NotificationRow({
 
   function handleMarkUnread() {
     setError(null)
+    setOptimisticRead(false)
     startTransition(() => {
       void markNotificationUnread({ id: n.id }).then((res) => {
         if (res.serverError) {
           setError(res.serverError)
+          setOptimisticRead(null)
         } else {
           onRefresh()
         }
@@ -362,7 +381,7 @@ export function NotificationRow({
           </p>
         )}
 
-        {/* Line 3 — anchor (contact name) + relative time */}
+        {/* Line 3 — anchor (contact name) + hover read link + relative time */}
         <div className="flex items-center justify-between gap-2">
           <span
             className="truncate text-[11px] text-[var(--color-muted-foreground)]"
@@ -374,12 +393,30 @@ export function NotificationRow({
               <span>{typeLabel}</span>
             )}
           </span>
-          <span
-            className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
-            data-testid="notification-time"
-          >
-            {relativeTime(new Date(n.createdAt))}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Read/unread — HOVER-REVEALED text link at the bottom-right of the
+                block, in line with the timestamp (HoneyBook pattern). State-dependent;
+                clicking flips read state + the unread dot in lockstep, stopPropagation. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isRead) handleMarkUnread()
+                else handleMarkRead()
+              }}
+              aria-label={isRead ? "Mark as unread" : "Mark as read"}
+              data-testid="row-read-toggle"
+              className="hidden text-[11px] font-medium text-[var(--color-primary)] hover:underline group-hover:inline"
+            >
+              {isRead ? "Mark as unread" : "Mark as read"}
+            </button>
+            <span
+              className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
+              data-testid="notification-time"
+            >
+              {relativeTime(new Date(n.createdAt))}
+            </span>
+          </div>
         </div>
 
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}
@@ -394,9 +431,11 @@ export function NotificationRow({
         )}
       </div>
 
-      {/* Hover action buttons */}
+      {/* Hover action buttons — rendered INSIDE the row (a right-aligned flex
+          member revealed on hover), NOT a floating bordered overlay. No box,
+          border or shadow; the content reflows so the icons never obscure text. */}
       <div
-        className="absolute top-2 right-2 hidden items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-sm group-hover:flex"
+        className="hidden shrink-0 items-center gap-0.5 self-center group-hover:flex"
         data-testid="notification-actions"
         onClick={(e) => {
           e.stopPropagation()
@@ -432,32 +471,8 @@ export function NotificationRow({
           </Tooltip>
         )}
 
-        {/* Mark read / Mark unread — state-dependent */}
-        {!isRead ? (
-          <Tooltip label="Mark as read">
-            <button
-              type="button"
-              onClick={handleMarkRead}
-              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-              aria-label="Mark as read"
-              data-testid="action-mark-read"
-            >
-              <Check className="size-3.5" />
-            </button>
-          </Tooltip>
-        ) : (
-          <Tooltip label="Mark as unread">
-            <button
-              type="button"
-              onClick={handleMarkUnread}
-              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-              aria-label="Mark as unread"
-              data-testid="action-mark-unread"
-            >
-              <BellOff className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
+        {/* Mark read/unread lives OUTSIDE this hover cluster — it is a hover-revealed
+            text link on Line 3, by the timestamp (see above). */}
 
         {/* Snooze — hidden on the Archive tab (snoozing an already-archived
             item is meaningless) AND on the Snoozed tab (the row is already

@@ -4,10 +4,9 @@ import { useCallback, useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
-  markAllNotificationsRead,
-  markAllNotificationsUnread,
+  markNotificationsReadBulk,
+  markNotificationsUnreadBulk,
 } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 import { NotificationRow } from "./notification-row"
@@ -112,17 +111,17 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
     setFilter(next)
   }
 
-  function handleMarkAllRead() {
+  // Unified mark-all toggle: acts on the VISIBLE set (this dropdown's fetched
+  // list) via the bulk actions. Marks all read when any visible row is unread,
+  // else marks all unread.
+  function handleMarkAllToggle() {
+    const visible = items ?? []
+    const ids = visible.map((n) => n.id)
+    if (ids.length === 0) return
+    const anyUnread = visible.some((n) => n.readAt === null)
+    const run = anyUnread ? markNotificationsReadBulk : markNotificationsUnreadBulk
     startTransition(() => {
-      void markAllNotificationsRead({}).then((res) => {
-        if (!res.serverError) doFetch(tab, filter)
-      })
-    })
-  }
-
-  function handleMarkAllUnread() {
-    startTransition(() => {
-      void markAllNotificationsUnread({}).then((res) => {
+      void run({ ids }).then((res) => {
         if (!res.serverError) doFetch(tab, filter)
       })
     })
@@ -141,24 +140,16 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
         <span className="text-sm font-semibold">Notifications</span>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={handleMarkAllUnread}
-            data-testid="mark-all-unread"
+          {/* Plain text link (HoneyBook pattern), not a bordered button. */}
+          <button
+            type="button"
+            onClick={handleMarkAllToggle}
+            disabled={(items ?? []).length === 0}
+            data-testid="mark-all-toggle"
+            className="text-xs font-medium text-[var(--color-primary)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-muted-foreground)] disabled:no-underline"
           >
-            Mark all as unread
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={handleMarkAllRead}
-            data-testid="mark-all-read"
-          >
-            Mark all read
-          </Button>
+            {(items ?? []).some((n) => n.readAt === null) ? "Mark all read" : "Mark all unread"}
+          </button>
           <Link
             href="/settings/notifications"
             onClick={onClose}

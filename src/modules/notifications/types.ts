@@ -24,6 +24,27 @@ export type NotificationCategory =
   | "system"
 export type NotificationTier = "critical" | "routine"
 
+/**
+ * The 6 categories in display order, with their band labels. SINGLE SOURCE OF
+ * TRUTH for category grouping + labels — consumed by the settings panel
+ * (settings-catalog.ts) AND the notification Type filter. Do not hardcode these
+ * labels anywhere else.
+ */
+export const NOTIFICATION_CATEGORIES: readonly { key: NotificationCategory; label: string }[] = [
+  { key: "messages_email", label: "Messages & email" },
+  { key: "payments", label: "Payments" },
+  { key: "documents", label: "Documents" },
+  { key: "leads", label: "Leads" },
+  { key: "scheduling", label: "Scheduling" },
+  { key: "system", label: "System" },
+]
+
+export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> =
+  Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c.key, c.label])) as Record<
+    NotificationCategory,
+    string
+  >
+
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------

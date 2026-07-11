@@ -4,11 +4,9 @@ import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Bell,
-  BellOff,
   BellRing,
   Archive,
   ArchiveRestore,
-  Check,
   CheckSquare,
   Clock,
   CalendarDays,
@@ -193,9 +191,13 @@ export function NotificationRow({
   // Deferred to a microtask to satisfy react-hooks/set-state-in-effect (the
   // module convention — same as the density mount-read effect).
   useEffect(() => {
+    let active = true
     void Promise.resolve().then(() => {
-      setOptimisticRead(null)
+      if (active) setOptimisticRead(null)
     })
+    return () => {
+      active = false
+    }
   }, [serverRead])
 
   function handleMarkRead() {
@@ -379,7 +381,7 @@ export function NotificationRow({
           </p>
         )}
 
-        {/* Line 3 — anchor (contact name) + PERSISTENT read toggle + relative time */}
+        {/* Line 3 — anchor (contact name) + hover read link + relative time */}
         <div className="flex items-center justify-between gap-2">
           <span
             className="truncate text-[11px] text-[var(--color-muted-foreground)]"
@@ -391,24 +393,23 @@ export function NotificationRow({
               <span>{typeLabel}</span>
             )}
           </span>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {/* Persistent read/unread toggle — ALWAYS visible (frequent, touch-usable
-                action), state-dependent. Unlike the hover cluster, this stays shown. */}
-            <Tooltip label={isRead ? "Mark as unread" : "Mark as read"}>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (isRead) handleMarkUnread()
-                  else handleMarkRead()
-                }}
-                className="flex size-6 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-                aria-label={isRead ? "Mark as unread" : "Mark as read"}
-                data-testid="row-read-toggle"
-              >
-                {isRead ? <BellOff className="size-3.5" /> : <Check className="size-3.5" />}
-              </button>
-            </Tooltip>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Read/unread — HOVER-REVEALED text link at the bottom-right of the
+                block, in line with the timestamp (HoneyBook pattern). State-dependent;
+                clicking flips read state + the unread dot in lockstep, stopPropagation. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isRead) handleMarkUnread()
+                else handleMarkRead()
+              }}
+              aria-label={isRead ? "Mark as unread" : "Mark as read"}
+              data-testid="row-read-toggle"
+              className="hidden text-[11px] font-medium text-[var(--color-primary)] hover:underline group-hover:inline"
+            >
+              {isRead ? "Mark as unread" : "Mark as read"}
+            </button>
             <span
               className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
               data-testid="notification-time"
@@ -430,9 +431,11 @@ export function NotificationRow({
         )}
       </div>
 
-      {/* Hover action buttons */}
+      {/* Hover action buttons — rendered INSIDE the row (a right-aligned flex
+          member revealed on hover), NOT a floating bordered overlay. No box,
+          border or shadow; the content reflows so the icons never obscure text. */}
       <div
-        className="absolute top-2 right-2 hidden items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-sm group-hover:flex"
+        className="hidden shrink-0 items-center gap-0.5 self-center group-hover:flex"
         data-testid="notification-actions"
         onClick={(e) => {
           e.stopPropagation()

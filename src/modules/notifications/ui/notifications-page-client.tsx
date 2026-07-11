@@ -5,7 +5,6 @@ import { Settings, Clock, CalendarDays } from "lucide-react"
 import Link from "next/link"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
   unsnoozeNotification,
   unarchiveNotification,
@@ -612,15 +611,16 @@ export function NotificationsPageClient() {
               Compact
             </button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
+          {/* Plain text link (HoneyBook pattern), not a bordered button. */}
+          <button
+            type="button"
             onClick={handleMarkAllToggle}
             disabled={visibleItems.length === 0}
             data-testid="mark-all-toggle"
+            className="text-sm font-medium text-[var(--color-primary)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-muted-foreground)] disabled:no-underline"
           >
             {anyVisibleUnread ? "Mark all read" : "Mark all unread"}
-          </Button>
+          </button>
           <Link
             href="/settings/notifications"
             className="flex size-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"

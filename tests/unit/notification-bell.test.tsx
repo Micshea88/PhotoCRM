@@ -44,8 +44,6 @@ vi.mock("@/modules/notifications/actions", () => ({
   snoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   unsnoozeNotification: vi.fn().mockResolvedValue({ data: { id: "n1" } }),
   createTaskFromNotification: vi.fn().mockResolvedValue({ data: { taskId: "t1" } }),
-  markAllNotificationsRead: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-  markAllNotificationsUnread: vi.fn().mockResolvedValue({ data: { count: 0 } }),
   markNotificationsReadBulk: vi.fn().mockResolvedValue({ data: { count: 1 } }),
   markNotificationsUnreadBulk: vi.fn().mockResolvedValue({ data: { count: 1 } }),
 }))
@@ -502,20 +500,23 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
-  // STEP 2 — persistent (always-visible) read/unread toggle
-  it("STEP 2: the read toggle is present WITHOUT hovering + state-dependent label", () => {
+  // STEP 2 — HOVER-REVEALED read/unread TEXT link (HoneyBook placement)
+  it("STEP 2: the read control is a hover-revealed text link with a state-dependent label", () => {
     render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
-    // Queried directly (no hover): unread → 'Mark as read'.
-    expect(screen.getByTestId("row-read-toggle")).toHaveAttribute("aria-label", "Mark as read")
+    const toggle = screen.getByTestId("row-read-toggle")
+    // Reads as TEXT (not an always-on icon): unread → 'Mark as read'.
+    expect(toggle).toHaveTextContent("Mark as read")
+    // Hover-revealed: hidden by default, shown on row (group) hover. jsdom can't
+    // render CSS :hover, so the reveal mechanism is asserted structurally; the
+    // click behavior below is the observable-result test.
+    expect(toggle.className).toContain("hidden")
+    expect(toggle.className).toContain("group-hover:inline")
 
     // A read row → 'Mark as unread'.
     render(
       <NotificationRow notification={makeNotification({ readAt: new Date() })} onRefresh={vi.fn()} />,
     )
-    expect(screen.getAllByTestId("row-read-toggle")[1]).toHaveAttribute(
-      "aria-label",
-      "Mark as unread",
-    )
+    expect(screen.getAllByTestId("row-read-toggle")[1]).toHaveTextContent("Mark as unread")
   })
 
   it("STEP 2: clicking the toggle flips the row read-state + dot in lockstep, and reverses", async () => {

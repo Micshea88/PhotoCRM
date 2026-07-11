@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
   markNotificationsReadBulk,
   markNotificationsUnreadBulk,
@@ -141,16 +140,16 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
         <span className="text-sm font-semibold">Notifications</span>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
+          {/* Plain text link (HoneyBook pattern), not a bordered button. */}
+          <button
+            type="button"
             onClick={handleMarkAllToggle}
             disabled={(items ?? []).length === 0}
             data-testid="mark-all-toggle"
+            className="text-xs font-medium text-[var(--color-primary)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-muted-foreground)] disabled:no-underline"
           >
             {(items ?? []).some((n) => n.readAt === null) ? "Mark all read" : "Mark all unread"}
-          </Button>
+          </button>
           <Link
             href="/settings/notifications"
             onClick={onClose}

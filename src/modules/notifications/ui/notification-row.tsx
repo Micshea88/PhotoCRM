@@ -381,42 +381,37 @@ export function NotificationRow({
           </p>
         )}
 
-        {/* Line 3 — anchor (contact name) + hover read link + relative time */}
+        {/* Line 3 — bottom line (HoneyBook): anchor + timestamp on the LEFT
+            (always visible), the read/unread link on the RIGHT (hover-revealed),
+            at OPPOSITE edges so they never crowd. */}
         <div className="flex items-center justify-between gap-2">
-          <span
-            className="truncate text-[11px] text-[var(--color-muted-foreground)]"
-            data-testid="notification-anchor"
-          >
-            {n.contactName ? (
-              <span className="text-[var(--color-foreground)]">{n.contactName}</span>
-            ) : (
-              <span>{typeLabel}</span>
-            )}
-          </span>
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Read/unread — HOVER-REVEALED text link at the bottom-right of the
-                block, in line with the timestamp (HoneyBook pattern). State-dependent;
-                clicking flips read state + the unread dot in lockstep, stopPropagation. */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                if (isRead) handleMarkUnread()
-                else handleMarkRead()
-              }}
-              aria-label={isRead ? "Mark as unread" : "Mark as read"}
-              data-testid="row-read-toggle"
-              className="hidden text-[11px] font-medium text-[var(--color-primary)] hover:underline group-hover:inline"
-            >
-              {isRead ? "Mark as unread" : "Mark as read"}
-            </button>
-            <span
-              className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
-              data-testid="notification-time"
-            >
+          <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]">
+            <span className="truncate" data-testid="notification-anchor">
+              {n.contactName ? (
+                <span className="text-[var(--color-foreground)]">{n.contactName}</span>
+              ) : (
+                <span>{typeLabel}</span>
+              )}
+            </span>
+            <span className="shrink-0 tabular-nums" data-testid="notification-time">
               {relativeTime(new Date(n.createdAt))}
             </span>
           </div>
+          {/* Read/unread link — RIGHT edge, hover-revealed. State-dependent;
+              clicking flips read state + the unread dot in lockstep, stopPropagation. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (isRead) handleMarkUnread()
+              else handleMarkRead()
+            }}
+            aria-label={isRead ? "Mark as unread" : "Mark as read"}
+            data-testid="row-read-toggle"
+            className="hidden shrink-0 text-[11px] font-medium text-[var(--color-primary)] hover:underline group-hover:inline"
+          >
+            {isRead ? "Mark as unread" : "Mark as read"}
+          </button>
         </div>
 
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}

@@ -6,8 +6,8 @@ import { Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
-  markAllNotificationsRead,
-  markAllNotificationsUnread,
+  markNotificationsReadBulk,
+  markNotificationsUnreadBulk,
 } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
 import { NotificationRow } from "./notification-row"
@@ -112,17 +112,17 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
     setFilter(next)
   }
 
-  function handleMarkAllRead() {
+  // Unified mark-all toggle: acts on the VISIBLE set (this dropdown's fetched
+  // list) via the bulk actions. Marks all read when any visible row is unread,
+  // else marks all unread.
+  function handleMarkAllToggle() {
+    const visible = items ?? []
+    const ids = visible.map((n) => n.id)
+    if (ids.length === 0) return
+    const anyUnread = visible.some((n) => n.readAt === null)
+    const run = anyUnread ? markNotificationsReadBulk : markNotificationsUnreadBulk
     startTransition(() => {
-      void markAllNotificationsRead({}).then((res) => {
-        if (!res.serverError) doFetch(tab, filter)
-      })
-    })
-  }
-
-  function handleMarkAllUnread() {
-    startTransition(() => {
-      void markAllNotificationsUnread({}).then((res) => {
+      void run({ ids }).then((res) => {
         if (!res.serverError) doFetch(tab, filter)
       })
     })
@@ -145,19 +145,11 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
-            onClick={handleMarkAllUnread}
-            data-testid="mark-all-unread"
+            onClick={handleMarkAllToggle}
+            disabled={(items ?? []).length === 0}
+            data-testid="mark-all-toggle"
           >
-            Mark all as unread
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={handleMarkAllRead}
-            data-testid="mark-all-read"
-          >
-            Mark all read
+            {(items ?? []).some((n) => n.readAt === null) ? "Mark all read" : "Mark all unread"}
           </Button>
           <Link
             href="/settings/notifications"

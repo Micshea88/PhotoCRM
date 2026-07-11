@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Bell,
@@ -183,14 +183,29 @@ export function NotificationRow({
   const [error, setError] = useState<string | null>(null)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [customValue, setCustomValue] = useState("")
-  const isRead = n.readAt !== null
+  // Read state with an optimistic override so the persistent read/unread toggle
+  // (+ the unread dot) flip in lockstep on click, before the refetch lands.
+  const serverRead = n.readAt !== null
+  const [optimisticRead, setOptimisticRead] = useState<boolean | null>(null)
+  const isRead = optimisticRead ?? serverRead
+  // When the server truth changes (readAt crosses the null boundary, e.g. after
+  // refetch or a "mark all" elsewhere), drop the override so server wins.
+  // Deferred to a microtask to satisfy react-hooks/set-state-in-effect (the
+  // module convention — same as the density mount-read effect).
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      setOptimisticRead(null)
+    })
+  }, [serverRead])
 
   function handleMarkRead() {
     setError(null)
+    setOptimisticRead(true)
     startTransition(() => {
       void markNotificationRead({ id: n.id }).then((res) => {
         if (res.serverError) {
           setError(res.serverError)
+          setOptimisticRead(null)
         } else {
           onRefresh()
         }
@@ -200,10 +215,12 @@ export function NotificationRow({
 
   function handleMarkUnread() {
     setError(null)
+    setOptimisticRead(false)
     startTransition(() => {
       void markNotificationUnread({ id: n.id }).then((res) => {
         if (res.serverError) {
           setError(res.serverError)
+          setOptimisticRead(null)
         } else {
           onRefresh()
         }
@@ -362,7 +379,7 @@ export function NotificationRow({
           </p>
         )}
 
-        {/* Line 3 — anchor (contact name) + relative time */}
+        {/* Line 3 — anchor (contact name) + PERSISTENT read toggle + relative time */}
         <div className="flex items-center justify-between gap-2">
           <span
             className="truncate text-[11px] text-[var(--color-muted-foreground)]"
@@ -374,12 +391,31 @@ export function NotificationRow({
               <span>{typeLabel}</span>
             )}
           </span>
-          <span
-            className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
-            data-testid="notification-time"
-          >
-            {relativeTime(new Date(n.createdAt))}
-          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Persistent read/unread toggle — ALWAYS visible (frequent, touch-usable
+                action), state-dependent. Unlike the hover cluster, this stays shown. */}
+            <Tooltip label={isRead ? "Mark as unread" : "Mark as read"}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isRead) handleMarkUnread()
+                  else handleMarkRead()
+                }}
+                className="flex size-6 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                aria-label={isRead ? "Mark as unread" : "Mark as read"}
+                data-testid="row-read-toggle"
+              >
+                {isRead ? <BellOff className="size-3.5" /> : <Check className="size-3.5" />}
+              </button>
+            </Tooltip>
+            <span
+              className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
+              data-testid="notification-time"
+            >
+              {relativeTime(new Date(n.createdAt))}
+            </span>
+          </div>
         </div>
 
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}
@@ -432,32 +468,8 @@ export function NotificationRow({
           </Tooltip>
         )}
 
-        {/* Mark read / Mark unread — state-dependent */}
-        {!isRead ? (
-          <Tooltip label="Mark as read">
-            <button
-              type="button"
-              onClick={handleMarkRead}
-              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-              aria-label="Mark as read"
-              data-testid="action-mark-read"
-            >
-              <Check className="size-3.5" />
-            </button>
-          </Tooltip>
-        ) : (
-          <Tooltip label="Mark as unread">
-            <button
-              type="button"
-              onClick={handleMarkUnread}
-              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-              aria-label="Mark as unread"
-              data-testid="action-mark-unread"
-            >
-              <BellOff className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
+        {/* Mark read/unread lives OUTSIDE this hover cluster now — it's a
+            persistent (always-visible) toggle on Line 3 (see above). */}
 
         {/* Snooze — hidden on the Archive tab (snoozing an already-archived
             item is meaningless) AND on the Snoozed tab (the row is already

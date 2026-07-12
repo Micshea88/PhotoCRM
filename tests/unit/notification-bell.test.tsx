@@ -519,6 +519,22 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(screen.getAllByTestId("row-read-toggle")[1]).toHaveTextContent("Mark as unread")
   })
 
+  it("STEP 2 layout: timestamp and read link are at OPPOSITE edges of the bottom line (not crowded)", () => {
+    render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
+    const time = screen.getByTestId("notification-time")
+    const toggle = screen.getByTestId("row-read-toggle")
+    // The timestamp's group (bottom-LEFT) does NOT contain the read link — the
+    // link is a separate flex child pinned to the bottom-RIGHT (justify-between),
+    // so they can't crowd together in one corner.
+    const leftGroup = time.parentElement
+    expect(leftGroup).not.toBeNull()
+    expect(leftGroup!.contains(toggle)).toBe(false)
+    // Both live in the same bottom line (justify-between row).
+    const bottomLine = leftGroup!.parentElement
+    expect(bottomLine!.contains(time)).toBe(true)
+    expect(bottomLine!.contains(toggle)).toBe(true)
+  })
+
   it("STEP 2: clicking the toggle flips the row read-state + dot in lockstep, and reverses", async () => {
     vi.mocked(markNotificationRead).mockClear()
     vi.mocked(markNotificationUnread).mockClear()

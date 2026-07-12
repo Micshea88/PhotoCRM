@@ -416,14 +416,17 @@ Primary is editorial INK (#211c15), not green; paper is brighter ivory (#f8f5ee)
 DEMOTED to accent/ring/category, no longer primary. @theme now:
 
 - surfaces: background #f8f5ee, foreground #211c15, card/popover #fdfcf8, muted #efeadf,
-  muted-foreground #8c8578, border/input #e6e1d4, sidebar #2b2720 (kept), sidebar-fg #f8f5ee.
-- brand: primary #211c15 (ink), primary-fg #f8f5ee, brand-accent #38473a (green — ACCENT ONLY),
-  ring #7c8a72 (sage), accent/secondary #efeadf (NEUTRAL cream hover surface — never sage).
-- states (dusty): destructive rust #b05a34, warning gold #bd9a4c, success green #3d5243,
-  info dusty-blue #3f5a76 (--color-info stays DEFINED).
-- category (dustier) + blush: cat-lead #3f5a76, cat-client #38473a, cat-referral #7c8a72,
-  cat-vendor #90a6b0 (kept steel), cat-payment #bd9a4c, cat-scheduling #b06a45 terracotta,
-  cat-blush #c79a8d (NEW wedding accent) + derived tints.
+  muted-foreground #8c8578, border/input #e6e1d4, sidebar #14110c (DEEPEST ink — nav joins the
+  ink family), sidebar-fg #f8f5ee.
+- brand: primary #211c15 (ink), primary-fg #f8f5ee, brand-accent #38473a (sage-green — ACCENT
+  ONLY, never a fill), ring #7c8a72 (sage), accent/secondary #efeadf (NEUTRAL cream hover — never
+  sage). The BRAND palette is exactly 4: ink + ivory + espresso + sage-green.
+- states (dusty band): destructive rust #a8543a, warning = clay-gold #b2924e, success = sage-green
+  #38473a, info = dusty-blue #4a6178 (--color-info stays DEFINED).
+- category (SEPARATE quiet tier — badges/dots/26px avatars ONLY, never a surface/chrome; one
+  narrow desaturated band): cat-lead dusty-blue #4a6178, cat-client #38473a, cat-referral sage
+  #7c8a72, cat-vendor #90a6b0 (kept steel), cat-payment clay-gold #b2924e (foil, not web-gold),
+  cat-scheduling terracotta #a86a48, cat-blush #c2988c (NEW) + derived tints.
   FIX B (dark labeled nav) + FIX C (serif page titles + KPI numbers): already applied, kept.
   FIX D (card shadow) REMOVED — card is owned by 4e (rounded-xl, border/60, NO shadow); the
   earlier soft shadow was reverted.

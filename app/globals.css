@@ -13,7 +13,7 @@
   --color-muted-foreground: oklch(0.619 0.0209 83); /* #8c8578 taupe */
   --color-border: oklch(0.9101 0.0183 89.4); /* #e6e1d4 hairline */
   --color-input: oklch(0.9101 0.0183 89.4);
-  --color-sidebar: oklch(0.275 0.014 81.7); /* #2b2720 dark rail/hero */
+  --color-sidebar: oklch(0.1794 0.011 80.5); /* #14110c deepest ink — nav joins the ink family */
   --color-sidebar-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee */
 
   /* ========== BRAND — primary is editorial INK; green is demoted to accent ========== */
@@ -29,31 +29,31 @@
   --color-ring: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage focus */
 
   /* ========== STATES — dusty (info stays DEFINED) ========== */
-  --color-destructive: oklch(0.564 0.124 43.4); /* #b05a34 rust */
+  --color-destructive: oklch(0.5432 0.1174 37.9); /* #a8543a rust */
   --color-destructive-foreground: oklch(0.9705 0.0098 87.5);
-  --color-warning: oklch(0.7025 0.1053 85.3); /* #bd9a4c gold */
+  --color-warning: oklch(0.6751 0.095 84.6); /* #b2924e clay-gold */
   --color-warning-foreground: oklch(0.2298 0.0151 76.1);
-  --color-success: oklch(0.4162 0.036 153.6); /* #3d5243 green */
+  --color-success: oklch(0.3805 0.0291 148.7); /* #38473a sage-green */
   --color-success-foreground: oklch(0.9705 0.0098 87.5);
-  --color-info: oklch(0.4581 0.0563 250); /* #3f5a76 dusty blue — FIXES undefined bug */
+  --color-info: oklch(0.4832 0.0464 248.8); /* #4a6178 dusty blue — FIXES undefined bug */
   --color-info-foreground: oklch(0.9705 0.0098 87.5);
 
   /* ========== CATEGORY (dots · AI badges · dispositions · calendar) — dustier ========== */
-  --color-cat-lead: oklch(0.4581 0.0563 250); /* #3f5a76 dusty blue */
+  --color-cat-lead: oklch(0.4832 0.0464 248.8); /* #4a6178 dusty blue */
   --color-cat-client: oklch(0.3805 0.0291 148.7); /* #38473a green */
   --color-cat-referral: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage */
   --color-cat-vendor: oklch(0.711 0.029 226.9); /* #90a6b0 steel */
-  --color-cat-payment: oklch(0.7025 0.1053 85.3); /* #bd9a4c gold */
-  --color-cat-scheduling: oklch(0.5936 0.1035 47.8); /* #b06a45 terracotta */
-  --color-cat-blush: oklch(0.7247 0.0574 36.7); /* #c79a8d blush — wedding accent */
+  --color-cat-payment: oklch(0.6751 0.095 84.6); /* #b2924e clay-gold (foil, not web-gold) */
+  --color-cat-scheduling: oklch(0.5838 0.0931 49); /* #a86a48 terracotta */
+  --color-cat-blush: oklch(0.7155 0.0536 36.5); /* #c2988c blush — wedding accent */
   /* pale tints (badge/pill bg). DERIVED at tint lightness (~0.925 L) from each hue. */
-  --color-cat-lead-tint: oklch(0.924 0.019 250); /* derived */
+  --color-cat-lead-tint: oklch(0.924 0.019 248.8); /* derived */
   --color-cat-client-tint: oklch(0.925 0.02 148.7); /* derived */
   --color-cat-referral-tint: oklch(0.925 0.014 132.3); /* derived */
   --color-cat-vendor-tint: oklch(0.925 0.015 226.9); /* derived */
-  --color-cat-payment-tint: oklch(0.932 0.04 85.3); /* derived */
-  --color-cat-scheduling-tint: oklch(0.907 0.037 47.8); /* derived */
-  --color-cat-blush-tint: oklch(0.925 0.025 36.7); /* derived */
+  --color-cat-payment-tint: oklch(0.932 0.04 84.6); /* derived */
+  --color-cat-scheduling-tint: oklch(0.907 0.037 49); /* derived */
+  --color-cat-blush-tint: oklch(0.925 0.025 36.5); /* derived */
   --color-destructive-tint: oklch(0.898 0.022 42.6); /* #ebd9d2 */
 
   /* ========== TYPE ========== */

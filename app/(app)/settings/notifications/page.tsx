@@ -2,6 +2,7 @@ import { withPageOrgContext } from "@/lib/page-org-context"
 import { withOrgContext } from "@/lib/org-context"
 import { getNotificationPreferences } from "@/modules/notifications/queries"
 import { NotificationSettingsPanel } from "@/modules/notifications/ui/notification-settings-panel"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * /settings/notifications — Notification channel preferences.
@@ -19,7 +20,7 @@ export default async function NotificationSettingsPage() {
     )
 
     return (
-      <main className="mx-auto max-w-2xl p-6">
+      <PageContainer variant="narrow">
         <h1 className="text-2xl font-semibold">Notification settings</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
           Choose how you&apos;re notified for each type. Opens are tracked on your timeline, not
@@ -28,7 +29,7 @@ export default async function NotificationSettingsPage() {
         <div className="mt-6">
           <NotificationSettingsPanel prefs={prefs} />
         </div>
-      </main>
+      </PageContainer>
     )
   })
 }

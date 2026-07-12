@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
 import { getCurrentMember, getOrganizationById } from "@/modules/org/queries"
 import { DangerZone } from "@/modules/org/ui/danger-zone"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function DangerPage() {
   const session = await getSession()
@@ -18,7 +19,7 @@ export default async function DangerPage() {
   if (!org) redirect("/onboarding/create-organization")
 
   return (
-    <main className="mx-auto max-w-2xl p-6">
+    <PageContainer variant="narrow">
       <h1 className="text-2xl font-semibold">Danger zone</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Irreversible actions for owners only.
@@ -26,6 +27,6 @@ export default async function DangerPage() {
       <div className="mt-6">
         <DangerZone orgId={org.id} orgName={org.name} />
       </div>
-    </main>
+    </PageContainer>
   )
 }

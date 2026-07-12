@@ -344,19 +344,19 @@ export function NotificationRow({
         </div>
       )}
 
-      {/* Read / unread indicator dot — only rendered when unread */}
+      {/* Read / unread indicator dot — TOP-RIGHT corner (HoneyBook), only when
+          unread. Absolute so it doesn't take a leading slot; the content's right
+          padding keeps the title clear of it. */}
       {!isRead && (
-        <div className="mt-1.5 shrink-0">
-          <div
-            className="size-2 rounded-full bg-blue-500"
-            data-testid="notification-read-dot"
-            aria-label="Unread"
-          />
-        </div>
+        <div
+          className="absolute top-3 right-3 size-2 rounded-full bg-blue-500"
+          data-testid="notification-read-dot"
+          aria-label="Unread"
+        />
       )}
 
-      {/* Main content */}
-      <div className="min-w-0 flex-1 space-y-0.5">
+      {/* Main content — pr-5 reserves the top-right corner for the unread dot */}
+      <div className="min-w-0 flex-1 space-y-0.5 pr-5">
         {/* Line 1 — headline */}
         <p
           className={cn("truncate text-sm leading-snug", !isRead && "font-medium")}

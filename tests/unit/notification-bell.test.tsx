@@ -558,7 +558,7 @@ describe("NotificationRow — row click navigation (D2)", () => {
     // min height so the bands never meet.
     expect(dot.className).toContain("top-3")
     expect(zone.className).toContain("mt-auto")
-    expect(row.className).toContain("min-h-[84px]")
+    expect(row.className).toContain("min-h-[88px]")
   })
 
   it("HoneyBook layout: renders the category icon glyph per registry category (payments → DollarSign, messages → Mail)", () => {

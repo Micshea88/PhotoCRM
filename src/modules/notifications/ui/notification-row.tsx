@@ -357,7 +357,10 @@ export function NotificationRow({
       className={cn(
         // items-stretch + min-h give the right column full height so its
         // bottom-pinned action zone sits well below the top-right dot's band.
-        "group relative flex min-h-[84px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-accent)]/30",
+        // 88px floors the shortest (no-body) row so the ~48px bottom-pinned zone
+        // starts at y≈28 — an ~8px cushion below the dot's y=12–20 band, holding
+        // even if the link's line-height grows.
+        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-accent)]/30",
         !isRead && "bg-[var(--color-accent)]/10",
       )}
       data-testid="notification-row"

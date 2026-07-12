@@ -4,18 +4,21 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  // 4e motion: functional, restrained — a 150ms ease-out hover darken + 1px
+  // lift (motion-safe only, so prefers-reduced-motion users get no movement),
+  // sage focus-visible ring. No shadows — restraint (hairlines/whitespace).
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,transform] duration-150 ease-out focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none motion-safe:hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow hover:opacity-90",
+          "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:brightness-95",
         destructive:
-          "bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)] shadow-sm hover:opacity-90",
+          "bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)] hover:brightness-95",
         outline:
-          "border border-[var(--color-border)] bg-[var(--color-background)] shadow-sm hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+          "border border-[var(--color-border)] bg-[var(--color-background)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
         secondary:
-          "bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] shadow-sm hover:opacity-90",
+          "bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:brightness-95",
         ghost: "hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
         link: "text-[var(--color-primary)] underline-offset-4 hover:underline",
       },

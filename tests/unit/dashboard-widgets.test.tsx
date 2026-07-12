@@ -5,7 +5,7 @@
  *   - any prop-variant edge case
  */
 import { describe, it, expect } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, fireEvent } from "@testing-library/react"
 import { WelcomeHeader } from "@/modules/dashboard/ui/welcome-header"
 import { CountCard } from "@/modules/dashboard/ui/count-card"
 import { TeamThisWeek } from "@/modules/dashboard/ui/team-this-week"
@@ -198,7 +198,7 @@ describe("TasksDueList", () => {
     expect(screen.getByText("05/17/2026")).toBeInTheDocument()
   })
 
-  it("shows the assignee avatar (initials) for an assigned task", () => {
+  it("shows the assignee avatar (initials) for an assigned task", async () => {
     render(
       <TasksDueList
         totalCount={1}
@@ -216,9 +216,15 @@ describe("TasksDueList", () => {
       />,
     )
     // Avatar initials for Mike Shea, name in the hover tooltip (no id leak).
+    // The Tooltip is portaled + lazy — the name mounts on focus, not up-front.
     expect(screen.getByText("MS")).toBeInTheDocument()
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Mike Shea")
     expect(screen.queryByText(/user_a/)).toBeNull()
+    // Focus the Radix tooltip trigger (the wrapping span carries data-state) to
+    // open the portaled tooltip; the assignee name then mounts.
+    const trigger = screen.getByText("MS").closest("[data-state]")
+    expect(trigger).not.toBeNull()
+    fireEvent.focusIn(trigger!)
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Mike Shea")
   })
 
   it("handles a task with no due date gracefully", () => {

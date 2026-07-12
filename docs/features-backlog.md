@@ -230,6 +230,18 @@ Bloom's most-praised feature is a high-altitude view showing the NEXT task per p
 
 Maroo makes CRM free and monetizes the money flow (MoR). Pathway's counter: "your money, your processor, no platform lock-in, no MoR risk" — control, not fee-savings. Have this crisp for sales.
 
+### Contacts list: Lifetime value + Last contacted columns (post-reskin)
+
+Two new contact-list columns, ON by default, added to the existing per-saved-view Edit-columns system (`columnConfig` jsonb).
+
+- **Lifetime value** = revenue rollup per contact (aggregation across projects/invoices).
+- **Last contacted** = max(activity date) per contact (from the activity log).
+- **PERFORMANCE REQUIREMENT:** both must be cheap to fetch for the whole visible page — pre-aggregate or fast-join; do not compute per-row lazily, or the list slows at scale.
+- **Empty states:** no revenue → "$0" or "—"; never contacted → "—". Must look intentional.
+- **Default-on scope:** backfill into the DEFAULT view's `columnConfig` only; leave user-customized saved views untouched.
+- **NOT part of the reskin** — feature build (backend + column defs) after the reskin lands.
+- **"Next event" column was explicitly REJECTED** (a contact can have many events → ambiguous).
+
 ---
 
 _Roadmap only — not scheduled. When one is picked up, run it through the standing research → synthesize → complaint-scope → options → approval path before building._

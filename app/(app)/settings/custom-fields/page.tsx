@@ -15,6 +15,7 @@ import {
   type CustomFieldsTabSpec,
 } from "@/modules/custom-fields/ui/custom-fields-page-tabs"
 import { CustomFieldsList } from "@/modules/custom-fields/ui/custom-fields-list"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * /settings/custom-fields — the per-org custom-field-definitions admin
@@ -106,7 +107,7 @@ export default async function CustomFieldsSettingsPage({
   )
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <PageContainer variant="default" className="space-y-6">
       <div>
         <Link
           href="/dashboard"
@@ -129,6 +130,6 @@ export default async function CustomFieldsSettingsPage({
         initialDefinitions={definitions}
         usageById={usageById}
       />
-    </div>
+    </PageContainer>
   )
 }

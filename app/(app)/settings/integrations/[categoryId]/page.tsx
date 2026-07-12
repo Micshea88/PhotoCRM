@@ -8,6 +8,7 @@ import { getCategoryById } from "@/modules/integrations/registry"
 import { CategoryDetail } from "@/modules/integrations/ui/category-detail"
 import { getLiveConnectionForUser } from "@/modules/email-connections/queries"
 import { EmailProviderPicker } from "@/modules/email-connections/ui/email-provider-picker"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * /settings/integrations/[categoryId] — one category and its providers.
@@ -71,7 +72,7 @@ export default async function IntegrationsCategoryPage({
       async () => withOrgContext((tx) => getLiveConnectionForUser(tx, orgId, session.user.id)),
     )
     return (
-      <div className="space-y-6 p-6">
+      <PageContainer variant="default" className="space-y-6">
         <div>
           <h1 className="text-xl font-semibold">Email</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
@@ -83,13 +84,13 @@ export default async function IntegrationsCategoryPage({
           connectedEmail={conn?.email ?? null}
           statusError={statusMessage(error)}
         />
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="p-6">
+    <PageContainer variant="default">
       <CategoryDetail category={category} />
-    </div>
+    </PageContainer>
   )
 }

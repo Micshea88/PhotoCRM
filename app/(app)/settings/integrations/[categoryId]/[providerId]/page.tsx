@@ -9,6 +9,7 @@ import type { IntegrationProvider } from "@/modules/integrations/types"
 import { ProviderDetail } from "@/modules/integrations/ui/provider-detail"
 import { listConnectedProvidersForUser, orgRcCallSyncEnabled } from "@/modules/telephony/queries"
 import { getLiveConnectionForUser } from "@/modules/email-connections/queries"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * /settings/integrations/[categoryId]/[providerId] — provider wizard.
@@ -108,13 +109,13 @@ export default async function IntegrationsProviderPage({
       : false
 
   return (
-    <div className="p-6">
+    <PageContainer variant="default">
       <ProviderDetail
         category={category}
         provider={provider}
         canManage={canManage}
         callSyncEnabled={callSyncEnabled}
       />
-    </div>
+    </PageContainer>
   )
 }

@@ -8,6 +8,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { LEAD_SOURCE_DEFAULTS } from "@/modules/lead-sources/types"
 import { countContactsPerLeadSource, listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { LeadSourcesSettings } from "@/modules/lead-sources/ui/lead-sources-settings"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function LeadSourcesSettingsPage() {
   const session = await getSession()
@@ -44,7 +45,7 @@ export default async function LeadSourcesSettingsPage() {
     .sort((a, b) => a.sourceName.localeCompare(b.sourceName))
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <PageContainer variant="default" className="space-y-6">
       <div>
         <Link
           href="/contacts"
@@ -60,6 +61,6 @@ export default async function LeadSourcesSettingsPage() {
         </p>
       </div>
       <LeadSourcesSettings initialHidden={hidden} initialCustom={customRows} />
-    </div>
+    </PageContainer>
   )
 }

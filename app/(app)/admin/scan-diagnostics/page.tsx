@@ -7,6 +7,7 @@ import { getExtendedMemberRole } from "@/modules/rbac/queries"
 import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/types"
 import { getScanDiagnostics } from "@/modules/files/queries"
 import type { FileScanDiagnostic } from "@/modules/files/scan-diagnostics-schema"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * TEMPORARY scan-pipeline diagnostics viewer (2026-06-26). Owner/Admin only.
@@ -116,7 +117,7 @@ export default async function ScanDiagnosticsPage() {
     .sort((a, b) => b.lastAt - a.lastAt)
 
   return (
-    <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "24px", fontFamily: "system-ui" }}>
+    <PageContainer variant="default" className="font-sans">
       <div style={{ display: "flex", alignItems: "baseline", gap: "16px" }}>
         <h1 style={{ fontSize: "20px", fontWeight: 600 }}>Scan diagnostics</h1>
         <a href="/admin/scan-diagnostics" style={{ color: "#06c" }}>
@@ -152,6 +153,6 @@ export default async function ScanDiagnosticsPage() {
           <DiagTable rows={g.rows} />
         </section>
       ))}
-    </div>
+    </PageContainer>
   )
 }

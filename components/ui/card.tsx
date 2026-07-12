@@ -6,9 +6,10 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        // Reskin: soft, rounded, warm cards — larger radius + a softer/larger
-        // shadow carries the elevation, so the border is lightened to /60.
-        "rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-card)] text-[var(--color-card-foreground)] shadow-[0_1px_3px_rgba(43,39,32,0.06),0_6px_16px_-4px_rgba(43,39,32,0.08)]",
+        // Reskin (4e owns card treatment): rounded-xl + hairline border /60, NO
+        // shadow — restraint. Elevation comes from the border + whitespace, not
+        // a drop shadow.
+        "rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-card)] text-[var(--color-card-foreground)]",
         className,
       )}
       {...props}

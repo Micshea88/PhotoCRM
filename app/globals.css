@@ -2,57 +2,58 @@
 @plugin "tailwindcss-animate";
 
 @theme {
-  /* ========== SURFACES — cream family ========== */
-  --color-background: oklch(0.9585 0.0098 87.5); /* #f4f1ea page cream */
-  --color-foreground: oklch(0.275 0.014 81.7); /* #2b2720 warm ink */
-  --color-card: oklch(0.9934 0.0067 97.3); /* #fefdf8 card white */
-  --color-card-foreground: oklch(0.275 0.014 81.7);
-  --color-popover: oklch(0.9934 0.0067 97.3); /* #fefdf8 */
-  --color-popover-foreground: oklch(0.275 0.014 81.7);
-  --color-muted: oklch(0.928 0.017 91.6); /* #ebe7db deeper cream */
-  --color-muted-foreground: oklch(0.623 0.017 94.3); /* #8a877c warm grey */
-  --color-border: oklch(0.882 0.017 91.6); /* #dcd8cc hairline */
-  --color-input: oklch(0.882 0.017 91.6);
+  /* ========== SURFACES — editorial ivory/ink (4c revised) ========== */
+  --color-background: oklch(0.9705 0.0098 87.5); /* #f8f5ee bright ivory */
+  --color-foreground: oklch(0.2298 0.0151 76.1); /* #211c15 espresso ink */
+  --color-card: oklch(0.9907 0.0054 95.1); /* #fdfcf8 */
+  --color-card-foreground: oklch(0.2298 0.0151 76.1);
+  --color-popover: oklch(0.9907 0.0054 95.1); /* #fdfcf8 */
+  --color-popover-foreground: oklch(0.2298 0.0151 76.1);
+  --color-muted: oklch(0.9379 0.0156 86.4); /* #efeadf */
+  --color-muted-foreground: oklch(0.619 0.0209 83); /* #8c8578 taupe */
+  --color-border: oklch(0.9101 0.0183 89.4); /* #e6e1d4 hairline */
+  --color-input: oklch(0.9101 0.0183 89.4);
   --color-sidebar: oklch(0.275 0.014 81.7); /* #2b2720 dark rail/hero */
-  --color-sidebar-foreground: oklch(0.9585 0.0098 87.5); /* #f4f1ea */
+  --color-sidebar-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee */
 
-  /* ========== BRAND ========== */
-  --color-primary: oklch(0.415 0.032 151.5); /* #3f5143 forest-olive */
-  --color-primary-foreground: oklch(0.993 0 0);
-  /* accent = SUBTLE SURFACE (shadcn hover/selected bg) → pale sage.
-     Mid-sage identity lives in --color-ring + --color-brand-accent. */
-  --color-accent: oklch(0.925 0.011 136.6); /* #e3e8e1 pale sage */
-  --color-accent-foreground: oklch(0.275 0.014 81.7);
-  --color-brand-accent: oklch(0.518 0.046 149.1); /* #56705a mid-sage: logo, emphasis */
-  --color-secondary: oklch(0.928 0.017 91.6); /* #ebe7db */
-  --color-secondary-foreground: oklch(0.275 0.014 81.7);
-  --color-ring: oklch(0.518 0.046 149.1); /* #56705a sage focus */
+  /* ========== BRAND — primary is editorial INK; green is demoted to accent ========== */
+  --color-primary: oklch(0.2298 0.0151 76.1); /* #211c15 ink buttons */
+  --color-primary-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee cream text */
+  /* accent = SUBTLE NEUTRAL SURFACE (shadcn hover/selected bg) → cream, never sage.
+     The refined-green identity lives in --color-brand-accent (accent only). */
+  --color-accent: oklch(0.9379 0.0156 86.4); /* #efeadf neutral cream */
+  --color-accent-foreground: oklch(0.2298 0.0151 76.1);
+  --color-brand-accent: oklch(0.3805 0.0291 148.7); /* #38473a refined green — ACCENT ONLY */
+  --color-secondary: oklch(0.9379 0.0156 86.4); /* #efeadf */
+  --color-secondary-foreground: oklch(0.2298 0.0151 76.1);
+  --color-ring: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage focus */
 
-  /* ========== STATES ========== */
+  /* ========== STATES — dusty (info stays DEFINED) ========== */
   --color-destructive: oklch(0.564 0.124 43.4); /* #b05a34 rust */
-  --color-destructive-foreground: oklch(0.993 0 0);
-  --color-warning: oklch(0.692 0.126 81.6); /* #c3932f gold */
-  --color-warning-foreground: oklch(0.275 0.014 81.7);
-  --color-success: oklch(0.416 0.036 153.6); /* #3d5243 green */
-  --color-success-foreground: oklch(0.993 0 0);
-  --color-info: oklch(0.456 0.06 247.7); /* #3b5a77 blue — FIXES undefined bug */
-  --color-info-foreground: oklch(0.993 0 0);
+  --color-destructive-foreground: oklch(0.9705 0.0098 87.5);
+  --color-warning: oklch(0.7025 0.1053 85.3); /* #bd9a4c gold */
+  --color-warning-foreground: oklch(0.2298 0.0151 76.1);
+  --color-success: oklch(0.4162 0.036 153.6); /* #3d5243 green */
+  --color-success-foreground: oklch(0.9705 0.0098 87.5);
+  --color-info: oklch(0.4581 0.0563 250); /* #3f5a76 dusty blue — FIXES undefined bug */
+  --color-info-foreground: oklch(0.9705 0.0098 87.5);
 
-  /* ========== CATEGORY (dots · AI badges · dispositions · calendar) ========== */
-  --color-cat-lead: oklch(0.456 0.06 247.7); /* #3b5a77 blue */
-  --color-cat-client: oklch(0.415 0.032 151.5); /* #3f5143 green */
-  --color-cat-referral: oklch(0.518 0.046 149.1); /* #56705a sage */
+  /* ========== CATEGORY (dots · AI badges · dispositions · calendar) — dustier ========== */
+  --color-cat-lead: oklch(0.4581 0.0563 250); /* #3f5a76 dusty blue */
+  --color-cat-client: oklch(0.3805 0.0291 148.7); /* #38473a green */
+  --color-cat-referral: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage */
   --color-cat-vendor: oklch(0.711 0.029 226.9); /* #90a6b0 steel */
-  --color-cat-payment: oklch(0.692 0.126 81.6); /* #c3932f gold */
-  --color-cat-scheduling: oklch(0.594 0.114 46.3); /* #b56740 clay */
-  /* pale tints (badge/pill bg). client + vendor DERIVED at tint lightness (~0.925 L)
-     from their hue — no wireframe swatch existed; adjust later if needed. */
-  --color-cat-lead-tint: oklch(0.924 0.019 237.8); /* #dbe8f1 */
-  --color-cat-client-tint: oklch(0.925 0.02 151.5); /* derived */
-  --color-cat-referral-tint: oklch(0.925 0.011 136.6); /* #e3e8e1 */
+  --color-cat-payment: oklch(0.7025 0.1053 85.3); /* #bd9a4c gold */
+  --color-cat-scheduling: oklch(0.5936 0.1035 47.8); /* #b06a45 terracotta */
+  --color-cat-blush: oklch(0.7247 0.0574 36.7); /* #c79a8d blush — wedding accent */
+  /* pale tints (badge/pill bg). DERIVED at tint lightness (~0.925 L) from each hue. */
+  --color-cat-lead-tint: oklch(0.924 0.019 250); /* derived */
+  --color-cat-client-tint: oklch(0.925 0.02 148.7); /* derived */
+  --color-cat-referral-tint: oklch(0.925 0.014 132.3); /* derived */
   --color-cat-vendor-tint: oklch(0.925 0.015 226.9); /* derived */
-  --color-cat-payment-tint: oklch(0.932 0.04 89.7); /* #f3e8cb */
-  --color-cat-scheduling-tint: oklch(0.907 0.037 72.6); /* #f0ddc6 */
+  --color-cat-payment-tint: oklch(0.932 0.04 85.3); /* derived */
+  --color-cat-scheduling-tint: oklch(0.907 0.037 47.8); /* derived */
+  --color-cat-blush-tint: oklch(0.925 0.025 36.7); /* derived */
   --color-destructive-tint: oklch(0.898 0.022 42.6); /* #ebd9d2 */
 
   /* ========== TYPE ========== */

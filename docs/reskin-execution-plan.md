@@ -402,3 +402,57 @@ ContactsTable ]`. Panel = its own LIGHT card (`bg-[var(--color-card)]`, subtle b
 ## PHASE 5 → 6 → 7 — as specified above. Phase 5 also covers palette classes introduced by
 
 ## the new Saved Views panel (4d) and the scan-diagnostics inline hex.
+
+---
+
+# REVISED remaining reskin (AUTHORITATIVE — supersedes the two blocks above)
+
+Order: 4c → 4b → 4d → 4e → 5 → 6 → 7. UI/CSS only (no schema/columns/data).
+`app/globals.css` @theme is the source of truth; values below mirror it.
+
+## PHASE 4c (REVISED) — Editorial-ink palette
+
+Primary is editorial INK (#211c15), not green; paper is brighter ivory (#f8f5ee). Green is
+DEMOTED to accent/ring/category, no longer primary. @theme now:
+
+- surfaces: background #f8f5ee, foreground #211c15, card/popover #fdfcf8, muted #efeadf,
+  muted-foreground #8c8578, border/input #e6e1d4, sidebar #2b2720 (kept), sidebar-fg #f8f5ee.
+- brand: primary #211c15 (ink), primary-fg #f8f5ee, brand-accent #38473a (green — ACCENT ONLY),
+  ring #7c8a72 (sage), accent/secondary #efeadf (NEUTRAL cream hover surface — never sage).
+- states (dusty): destructive rust #b05a34, warning gold #bd9a4c, success green #3d5243,
+  info dusty-blue #3f5a76 (--color-info stays DEFINED).
+- category (dustier) + blush: cat-lead #3f5a76, cat-client #38473a, cat-referral #7c8a72,
+  cat-vendor #90a6b0 (kept steel), cat-payment #bd9a4c, cat-scheduling #b06a45 terracotta,
+  cat-blush #c79a8d (NEW wedding accent) + derived tints.
+  FIX B (dark labeled nav) + FIX C (serif page titles + KPI numbers): already applied, kept.
+  FIX D (card shadow) REMOVED — card is owned by 4e (rounded-xl, border/60, NO shadow); the
+  earlier soft shadow was reverted.
+
+## PHASE 4b — unchanged (container-query reflow + red→green spec #3).
+
+## PHASE 4d (REVISED) — Contacts list restructure. As above PLUS:
+
+- ADD small category-colored avatars to contact rows: 26px circle, initials from displayLabel,
+  bg = the contactType's category token color. Presentation-only, computed client-side — NO
+  data/column change. Do NOT change the Type column (contactType: vendor/lead/client — NOT
+  booking status) or any column set.
+  Commit: `feat(contacts): saved-views left panel + shortened search + avatars`.
+
+## PHASE 4e — Restraint + motion pass (warm editorial × premium restraint × functional motion)
+
+1. card.tsx: rounded-xl, border/60, NO shadow (supersedes FIX D). Lists/tables use divide-y
+   hairlines, not per-row boxes.
+2. tabular-nums on ALL data figures; uppercase tracked micro-labels (text-2xs uppercase
+   tracking-wide muted) on field/column/section labels.
+3. COLOR = SIGNAL ONLY (governs Phase 5): color fires only for meaning — primary(ink)=primary
+   actions; brand-accent/category=badges/dots; state tokens=status. Surfaces stay neutral
+   cream/ink; NEVER tint a surface with brand/category hue; hover bg = neutral muted, not sage.
+4. Motion (150–200ms ease-out, motion-safe + prefers-reduced-motion): row hover reveals actions
+   (group-hover, like notification rows); button hover darken +1px lift; inline-edit hover/focus
+   affordance via shared input primitive; global sage focus-visible ring; state cross-fade.
+   GUARDRAILS: notification geometry (448/88, specs #1/#2) unchanged; contact detail only via 4b;
+   protected-surface changes only through shared primitives/tokens.
+
+## PHASE 5 (revised note) — obey 4e color=signal: former-primary green → brand-accent/category,
+
+## NOT a tinted surface; decorative color → neutral.

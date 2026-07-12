@@ -120,3 +120,24 @@ describe("NotificationsPageClient — unified mark-all toggle (STEP 3 / LAW 7)",
     expect(screen.getAllByTestId("notification-read-dot").length).toBe(2)
   })
 })
+
+describe("NotificationsPageClient — Compact/density toggle is GONE (Part D)", () => {
+  it("does not render the density toggle, and never writes the density localStorage key", async () => {
+    localStorage.removeItem("pathway.notifications.density")
+    render(<NotificationsPageClient />)
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("notification-row").length).toBe(2)
+    })
+
+    // The Comfortable/Compact control and its buttons are fully removed.
+    expect(screen.queryByTestId("density-toggle")).toBeNull()
+    expect(screen.queryByTestId("density-comfortable")).toBeNull()
+    expect(screen.queryByTestId("density-compact")).toBeNull()
+    expect(screen.queryByText("Compact")).toBeNull()
+    expect(screen.queryByText("Comfortable")).toBeNull()
+
+    // The removed feature no longer persists anything.
+    expect(localStorage.getItem("pathway.notifications.density")).toBeNull()
+  })
+})

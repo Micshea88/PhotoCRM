@@ -300,25 +300,6 @@ function BulkActionBar({
 }
 
 // ---------------------------------------------------------------------------
-// Density toggle helpers
-// ---------------------------------------------------------------------------
-
-type Density = "comfortable" | "compact"
-const DENSITY_STORAGE_KEY = "pathway.notifications.density"
-
-function readStoredDensity(): Density {
-  if (typeof window === "undefined") return "comfortable"
-  const stored = window.localStorage.getItem(DENSITY_STORAGE_KEY)
-  if (stored === "compact" || stored === "comfortable") return stored
-  return "comfortable"
-}
-
-function writeStoredDensity(value: Density): void {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(DENSITY_STORAGE_KEY, value)
-}
-
-// ---------------------------------------------------------------------------
 // NotificationsPageClient
 // ---------------------------------------------------------------------------
 
@@ -342,8 +323,6 @@ export function NotificationsPageClient() {
   const [undoIds, setUndoIds] = useState<string[] | null>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [, startTransition] = useTransition()
-  // Section E4 — density toggle (default: comfortable; reads localStorage on mount)
-  const [density, setDensity] = useState<Density>("comfortable")
 
   const doFetch = useCallback((t: NotificationTab, f: NotificationFilterState) => {
     void fetch(buildFetchUrl(t, f))
@@ -375,20 +354,6 @@ export function NotificationsPageClient() {
   useEffect(() => {
     doFetch(tab, filter)
   }, [tab, filter, doFetch])
-
-  // Section E4 — read persisted density preference from localStorage on mount.
-  // Effect-only (never runs during SSR). setDensity is called inside .then() to
-  // satisfy react-hooks/set-state-in-effect (no synchronous setState in effects).
-  useEffect(() => {
-    void Promise.resolve(readStoredDensity()).then((d) => {
-      setDensity(d)
-    })
-  }, [])
-
-  function handleDensityChange(value: Density) {
-    setDensity(value)
-    writeStoredDensity(value)
-  }
 
   // ── undo snackbar helpers ───────────────────────────────────────────────────
 
@@ -534,7 +499,7 @@ export function NotificationsPageClient() {
     // PageContainer (see docs/theme-token-layer-plan.md) replaces this in the reskin.
     <div className="space-y-4">
       {/* Tabs + header actions — wrap on narrow viewports so the toolbar
-          (tabs + density toggle + mark-all-read + settings) never overflows (LAW 6). */}
+          (tabs + mark-all-read + settings) never overflows (LAW 6). */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div
           className="flex border-b border-[var(--color-border)]"
@@ -571,46 +536,6 @@ export function NotificationsPageClient() {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {/* Section E4 — density toggle */}
-          <div
-            role="group"
-            aria-label="Row spacing"
-            data-testid="density-toggle"
-            className="flex overflow-hidden rounded-md border border-[var(--color-border)] text-sm"
-          >
-            <button
-              type="button"
-              aria-pressed={density === "comfortable"}
-              onClick={() => {
-                handleDensityChange("comfortable")
-              }}
-              className={cn(
-                "px-3 py-1 text-sm transition-colors",
-                density === "comfortable"
-                  ? "bg-[var(--color-primary)] text-white"
-                  : "bg-[var(--color-background)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]",
-              )}
-              data-testid="density-comfortable"
-            >
-              Comfortable
-            </button>
-            <button
-              type="button"
-              aria-pressed={density === "compact"}
-              onClick={() => {
-                handleDensityChange("compact")
-              }}
-              className={cn(
-                "border-l border-[var(--color-border)] px-3 py-1 text-sm transition-colors",
-                density === "compact"
-                  ? "bg-[var(--color-primary)] text-white"
-                  : "bg-[var(--color-background)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]",
-              )}
-              data-testid="density-compact"
-            >
-              Compact
-            </button>
-          </div>
           {/* Plain text link (HoneyBook pattern), not a bordered button. */}
           <button
             type="button"
@@ -718,7 +643,6 @@ export function NotificationsPageClient() {
                     selectable={true}
                     selected={selectedIds.has(n.id)}
                     onToggleSelect={handleToggleSelect}
-                    compact={density === "compact"}
                   />
                 ))}
               </div>

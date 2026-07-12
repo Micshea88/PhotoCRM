@@ -108,6 +108,58 @@ wireframe/UI checklist:
 
 ---
 
+## Visual language (LOCKED — editorial-ink)
+
+Pathway's look is **warm editorial × premium restraint**: the calm, high-contrast feel of a
+fashion/wedding magazine (Vogue / The Row / Chanel editorial register) applied to a dense CRM
+work surface. Two disciplines held together — warm cream/serif identity, and Mercury/Stripe
+restraint (hairlines and whitespace do the work that boxes and shadows do in generic UI). Every
+new surface conforms to this; when in doubt, subtract.
+
+### Brand palette — 4 colors, no more
+
+The entire brand system is four colors. Luxury reads from how FEW colors are used, not how many.
+
+- Ink anchor #211c15 — primary actions, buttons; the dominant dark that makes everything on top feel deliberate
+- Deepest ink #14110c — sidebar/nav (same warm-black hue as ink, one notch deeper; nav + buttons = ONE anchor)
+- Bright ivory #f8f5ee — page paper (editorial whitespace)
+- Warm white #fdfcf8 — cards
+- Espresso #211c15 — body text (same as ink)
+- Sage-green accent #38473a — the SINGLE brand accent (focus ring, small emphasis) — NEVER a button/surface fill
+  Taupe #8c8578 (muted text) and hairline #e6e1d4 (borders) are the neutral supporting tones.
+
+### Category tier — quiet, functional, separate from brand
+
+A CRM must encode category at a glance, so a second tier exists ONLY for taxonomy/status. It is
+deliberately kept quiet so it never competes with the brand palette. Rules:
+
+- Appears ONLY on badges, dots, status text, and 26px avatars. NEVER on a surface, card, nav,
+  button, hover, or any chrome.
+- All values desaturated, no pure/primary hues, held in one narrow lightness+chroma band so
+  they read as a curated editorial set — elevated, never default-bright/cheap.
+- Tokens: terracotta #a86a48 · clay-gold #b2924e (foil-range, never web-gold #FFD700) ·
+  sage #7c8a72 · dusty-blue #4a6178 · blush #c2988c.
+- State reuses the same band: destructive rust #a8543a · warning = clay-gold · success = sage ·
+  info = dusty-blue.
+
+### Color = signal only (the governing rule)
+
+Color fires only for meaning. Surfaces stay neutral cream/ink and are NEVER tinted with a brand
+or category hue. Hover backgrounds are neutral muted, never sage. Decorative color is not allowed
+— if a color isn't encoding an action or a category/state, it's neutral.
+
+### Type
+
+- Display/headings + large KPI figures: Bodoni Moda (serif) — high-contrast, editorial; it should
+  print like a magazine page against the bright ivory.
+- Body / UI / labels: Open Sans (sans).
+- All data figures (currency, dates, counts, phones, timestamps): tabular-nums so columns align —
+  this is the premium tell in a data tool.
+- Micro-labels (field labels, column headers, section headers): text-2xs, uppercase, tracking-wide,
+  muted
+
+---
+
 ## 1. Inline edit + autosave UX contract
 
 **Every editable field in Pathway uses `InlineEditField` or

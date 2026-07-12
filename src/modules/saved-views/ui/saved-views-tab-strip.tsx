@@ -13,6 +13,7 @@ import {
 import {
   SortableContext,
   horizontalListSortingStrategy,
+  verticalListSortingStrategy,
   useSortable,
   arrayMove,
 } from "@dnd-kit/sortable"
@@ -159,6 +160,8 @@ interface TabStripProps {
   }
   /** Called when the user clicks Discard on the banner — host resets column state + URL params. */
   onDiscard: () => void
+  /** Layout orientation. "horizontal" (default) renders the existing tab strip; "vertical" renders a left-panel list. */
+  orientation?: "horizontal" | "vertical"
 }
 
 export function SavedViewsTabStrip({
@@ -174,6 +177,7 @@ export function SavedViewsTabStrip({
   isDirty,
   currentState,
   onDiscard,
+  orientation = "horizontal",
 }: TabStripProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -418,20 +422,35 @@ export function SavedViewsTabStrip({
   // ──────────────────────────────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────────────────────────────
+  const isVertical = orientation === "vertical"
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1 border-b border-[var(--color-border)] pb-2">
+      <div
+        className={
+          isVertical
+            ? undefined
+            : "flex items-center gap-1 border-b border-[var(--color-border)] pb-2"
+        }
+      >
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext
             items={pinnedTabs.map((v) => v.id)}
-            strategy={horizontalListSortingStrategy}
+            strategy={isVertical ? verticalListSortingStrategy : horizontalListSortingStrategy}
           >
-            <div className="flex flex-1 items-center gap-1 overflow-x-auto">
+            <div
+              className={
+                isVertical
+                  ? "flex flex-col items-stretch gap-1"
+                  : "flex flex-1 items-center gap-1 overflow-x-auto"
+              }
+            >
               {pinnedTabs.map((tab) => {
                 const active = tab.id === activeViewId
                 return (
                   <SortableTab
                     key={tab.id}
+                    orientation={orientation}
                     tab={tab}
                     active={active}
                     isDefault={defaultViewId === tab.id}
@@ -467,6 +486,7 @@ export function SavedViewsTabStrip({
               })}
               {transientTab && (
                 <TabButton
+                  orientation={orientation}
                   tab={transientTab}
                   active={true}
                   isDefault={defaultViewId === transientTab.id}
@@ -507,14 +527,27 @@ export function SavedViewsTabStrip({
                   }}
                 />
               )}
-              <AddViewDropdown
-                onCreateNew={() => {
-                  setSaveAsOpen(true)
-                }}
-                onManage={() => {
-                  setManageOpen(true)
-                }}
-              />
+              {isVertical ? (
+                <div className="w-full">
+                  <AddViewDropdown
+                    onCreateNew={() => {
+                      setSaveAsOpen(true)
+                    }}
+                    onManage={() => {
+                      setManageOpen(true)
+                    }}
+                  />
+                </div>
+              ) : (
+                <AddViewDropdown
+                  onCreateNew={() => {
+                    setSaveAsOpen(true)
+                  }}
+                  onManage={() => {
+                    setManageOpen(true)
+                  }}
+                />
+              )}
             </div>
           </SortableContext>
         </DndContext>
@@ -630,6 +663,7 @@ interface TabButtonProps {
   onPin?: () => void
   onUnpin?: () => void
   onSetDefault: () => void
+  orientation?: "horizontal" | "vertical"
   dragHandle?: React.ReactNode
 }
 
@@ -649,18 +683,28 @@ function TabButton({
   onPin,
   onUnpin,
   onSetDefault,
+  orientation = "horizontal",
   dragHandle,
 }: TabButtonProps) {
+  const isVertical = orientation === "vertical"
   return (
     <div
-      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-3 py-1.5 text-sm transition ${
+      className={`${isVertical ? "flex w-full" : "inline-flex shrink-0"} items-center gap-1 rounded-md border px-3 py-1.5 text-sm transition ${
         active
-          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium"
-          : "border-transparent hover:bg-[var(--color-accent)]"
+          ? isVertical
+            ? "border-[var(--color-primary)] bg-[var(--color-primary)] font-medium text-[var(--color-primary-foreground)]"
+            : "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium"
+          : isVertical
+            ? "border-transparent hover:bg-[var(--color-muted)]"
+            : "border-transparent hover:bg-[var(--color-accent)]"
       }`}
     >
       {dragHandle}
-      <button type="button" onClick={onClick} className="cursor-pointer">
+      <button
+        type="button"
+        onClick={onClick}
+        className={isVertical ? "flex-1 cursor-pointer text-left" : "cursor-pointer"}
+      >
         {tab.name}
         {isDefault && (
           <span
@@ -721,7 +765,11 @@ function SortableTab(props: TabButtonProps) {
     opacity: isDragging ? 0.6 : undefined,
   }
   return (
-    <div ref={setNodeRef} style={style} className="inline-flex">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={props.orientation === "vertical" ? "flex w-full" : "inline-flex"}
+    >
       <TabButton
         {...props}
         dragHandle={

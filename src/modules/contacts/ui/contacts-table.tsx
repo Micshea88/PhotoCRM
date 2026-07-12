@@ -29,6 +29,7 @@ import type { ListCustomFieldDef } from "@/modules/custom-fields/ui/column-helpe
 import { archiveContact, deleteContact } from "../actions"
 import { fontFromElement, getMeasurementContext, measureColumnAutoFit } from "./column-auto-fit"
 import { resolveContactColumns, type ColumnConfigItem, type ContactRow } from "./columns"
+import { ContactTypeAvatar } from "./contact-type-avatar"
 import { HorizontalScrollIndicator } from "./horizontal-scroll-indicator"
 
 const DELETE_BODY =
@@ -372,7 +373,18 @@ export function ContactsTable({
                       }}
                       title={measured}
                     >
-                      {col.render(row)}
+                      {col.id === "displayLabel" ? (
+                        <span className="flex items-center gap-2">
+                          <ContactTypeAvatar
+                            type={row.contactType}
+                            firstName={row.firstName}
+                            lastName={row.lastName}
+                          />
+                          <span className="truncate">{col.render(row)}</span>
+                        </span>
+                      ) : (
+                        col.render(row)
+                      )}
                     </td>
                   )
                 })}

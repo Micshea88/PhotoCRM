@@ -150,7 +150,7 @@ export function ContactsFilterBar(props: FilterBarProps) {
           onChange={(e) => {
             setSearchInput(e.target.value)
           }}
-          className="flex-1"
+          className="max-w-md flex-1"
         />
         <Button type="submit" variant="outline" size="sm">
           Search

@@ -85,7 +85,7 @@ export function RestoreDeletedButton({
         submitting={busy}
       />
       {error && (
-        <p className="text-xs text-red-600 dark:text-red-400" data-testid="restore-error">
+        <p className="text-xs text-red-600" data-testid="restore-error">
           {error}
         </p>
       )}

@@ -3,7 +3,6 @@ import type { ReactNode } from "react"
 import { Open_Sans, Bodoni_Moda } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
-import { ThemeProvider } from "@/modules/org/ui/theme-provider"
 import "./globals.css"
 
 // Body / UI type — Open Sans. Display / headings — Bodoni Moda (serif; italics
@@ -34,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <body className="bg-background text-foreground min-h-screen antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        {children}
         <Analytics />
         <SpeedInsights />
       </body>

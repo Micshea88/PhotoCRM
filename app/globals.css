@@ -3,70 +3,73 @@
 
 @theme {
   /* ========== SURFACES — cream family ========== */
-  --color-background:            oklch(0.959 0 0);         /* #f4f1ea page cream */
-  --color-foreground:            oklch(0.275 0.014 81.7);  /* #2b2720 warm ink */
-  --color-card:                  oklch(0.993 0 0);         /* #fefdf8 card white */
-  --color-card-foreground:       oklch(0.275 0.014 81.7);
-  --color-popover:               oklch(0.993 0 0);
-  --color-popover-foreground:    oklch(0.275 0.014 81.7);
-  --color-muted:                 oklch(0.928 0.017 91.6);  /* #ebe7db deeper cream */
-  --color-muted-foreground:      oklch(0.623 0.017 94.3);  /* #8a877c warm grey */
-  --color-border:                oklch(0.882 0.017 91.6);  /* #dcd8cc hairline */
-  --color-input:                 oklch(0.882 0.017 91.6);
-  --color-sidebar:               oklch(0.275 0.014 81.7);  /* #2b2720 dark rail/hero */
-  --color-sidebar-foreground:    oklch(0.959 0 0);
+  --color-background: oklch(0.959 0 0); /* #f4f1ea page cream */
+  --color-foreground: oklch(0.275 0.014 81.7); /* #2b2720 warm ink */
+  --color-card: oklch(0.993 0 0); /* #fefdf8 card white */
+  --color-card-foreground: oklch(0.275 0.014 81.7);
+  --color-popover: oklch(0.993 0 0);
+  --color-popover-foreground: oklch(0.275 0.014 81.7);
+  --color-muted: oklch(0.928 0.017 91.6); /* #ebe7db deeper cream */
+  --color-muted-foreground: oklch(0.623 0.017 94.3); /* #8a877c warm grey */
+  --color-border: oklch(0.882 0.017 91.6); /* #dcd8cc hairline */
+  --color-input: oklch(0.882 0.017 91.6);
+  --color-sidebar: oklch(0.275 0.014 81.7); /* #2b2720 dark rail/hero */
+  --color-sidebar-foreground: oklch(0.959 0 0);
 
   /* ========== BRAND ========== */
-  --color-primary:               oklch(0.415 0.032 151.5); /* #3f5143 forest-olive */
-  --color-primary-foreground:    oklch(0.993 0 0);
+  --color-primary: oklch(0.415 0.032 151.5); /* #3f5143 forest-olive */
+  --color-primary-foreground: oklch(0.993 0 0);
   /* accent = SUBTLE SURFACE (shadcn hover/selected bg) → pale sage.
      Mid-sage identity lives in --color-ring + --color-brand-accent. */
-  --color-accent:                oklch(0.925 0.011 136.6); /* #e3e8e1 pale sage */
-  --color-accent-foreground:     oklch(0.275 0.014 81.7);
-  --color-brand-accent:          oklch(0.518 0.046 149.1); /* #56705a mid-sage: logo, emphasis */
-  --color-secondary:             oklch(0.928 0.017 91.6);  /* #ebe7db */
-  --color-secondary-foreground:  oklch(0.275 0.014 81.7);
-  --color-ring:                  oklch(0.518 0.046 149.1); /* #56705a sage focus */
+  --color-accent: oklch(0.925 0.011 136.6); /* #e3e8e1 pale sage */
+  --color-accent-foreground: oklch(0.275 0.014 81.7);
+  --color-brand-accent: oklch(0.518 0.046 149.1); /* #56705a mid-sage: logo, emphasis */
+  --color-secondary: oklch(0.928 0.017 91.6); /* #ebe7db */
+  --color-secondary-foreground: oklch(0.275 0.014 81.7);
+  --color-ring: oklch(0.518 0.046 149.1); /* #56705a sage focus */
 
   /* ========== STATES ========== */
-  --color-destructive:           oklch(0.564 0.124 43.4);  /* #b05a34 rust */
-  --color-destructive-foreground:oklch(0.993 0 0);
-  --color-warning:               oklch(0.692 0.126 81.6);  /* #c3932f gold */
-  --color-warning-foreground:    oklch(0.275 0.014 81.7);
-  --color-success:               oklch(0.416 0.036 153.6); /* #3d5243 green */
-  --color-success-foreground:    oklch(0.993 0 0);
-  --color-info:                  oklch(0.456 0.060 247.7); /* #3b5a77 blue — FIXES undefined bug */
-  --color-info-foreground:       oklch(0.993 0 0);
+  --color-destructive: oklch(0.564 0.124 43.4); /* #b05a34 rust */
+  --color-destructive-foreground: oklch(0.993 0 0);
+  --color-warning: oklch(0.692 0.126 81.6); /* #c3932f gold */
+  --color-warning-foreground: oklch(0.275 0.014 81.7);
+  --color-success: oklch(0.416 0.036 153.6); /* #3d5243 green */
+  --color-success-foreground: oklch(0.993 0 0);
+  --color-info: oklch(0.456 0.06 247.7); /* #3b5a77 blue — FIXES undefined bug */
+  --color-info-foreground: oklch(0.993 0 0);
 
   /* ========== CATEGORY (dots · AI badges · dispositions · calendar) ========== */
-  --color-cat-lead:              oklch(0.456 0.060 247.7); /* #3b5a77 blue */
-  --color-cat-client:            oklch(0.415 0.032 151.5); /* #3f5143 green */
-  --color-cat-referral:          oklch(0.518 0.046 149.1); /* #56705a sage */
-  --color-cat-vendor:            oklch(0.711 0.029 226.9); /* #90a6b0 steel */
-  --color-cat-payment:           oklch(0.692 0.126 81.6);  /* #c3932f gold */
-  --color-cat-scheduling:        oklch(0.594 0.114 46.3);  /* #b56740 clay */
+  --color-cat-lead: oklch(0.456 0.06 247.7); /* #3b5a77 blue */
+  --color-cat-client: oklch(0.415 0.032 151.5); /* #3f5143 green */
+  --color-cat-referral: oklch(0.518 0.046 149.1); /* #56705a sage */
+  --color-cat-vendor: oklch(0.711 0.029 226.9); /* #90a6b0 steel */
+  --color-cat-payment: oklch(0.692 0.126 81.6); /* #c3932f gold */
+  --color-cat-scheduling: oklch(0.594 0.114 46.3); /* #b56740 clay */
   /* pale tints (badge/pill bg). client + vendor DERIVED at tint lightness (~0.925 L)
      from their hue — no wireframe swatch existed; adjust later if needed. */
-  --color-cat-lead-tint:         oklch(0.924 0.019 237.8); /* #dbe8f1 */
-  --color-cat-client-tint:       oklch(0.925 0.020 151.5); /* derived */
-  --color-cat-referral-tint:     oklch(0.925 0.011 136.6); /* #e3e8e1 */
-  --color-cat-vendor-tint:       oklch(0.925 0.015 226.9); /* derived */
-  --color-cat-payment-tint:      oklch(0.932 0.040 89.7);  /* #f3e8cb */
-  --color-cat-scheduling-tint:   oklch(0.907 0.037 72.6);  /* #f0ddc6 */
-  --color-destructive-tint:      oklch(0.898 0.022 42.6);  /* #ebd9d2 */
+  --color-cat-lead-tint: oklch(0.924 0.019 237.8); /* #dbe8f1 */
+  --color-cat-client-tint: oklch(0.925 0.02 151.5); /* derived */
+  --color-cat-referral-tint: oklch(0.925 0.011 136.6); /* #e3e8e1 */
+  --color-cat-vendor-tint: oklch(0.925 0.015 226.9); /* derived */
+  --color-cat-payment-tint: oklch(0.932 0.04 89.7); /* #f3e8cb */
+  --color-cat-scheduling-tint: oklch(0.907 0.037 72.6); /* #f0ddc6 */
+  --color-destructive-tint: oklch(0.898 0.022 42.6); /* #ebd9d2 */
 
   /* ========== TYPE ========== */
-  --font-sans:  var(--font-sans-loaded), system-ui, sans-serif;
-  --font-serif: var(--font-serif-loaded), Georgia, serif;   /* display/headings; italics live here */
-  --font-mono:  ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-sans-loaded), system-ui, sans-serif;
+  --font-serif: var(--font-serif-loaded), Georgia, serif; /* display/headings; italics live here */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* sub-xs micro steps (Tailwind default xs/sm/base/… stay). Replace all bracket px. */
-  --text-2xs:   0.6875rem;  --text-2xs--line-height: 1rem;      /* 11px → text-2xs */
-  --text-3xs:   0.625rem;   --text-3xs--line-height: 0.875rem;  /* 10px → text-3xs */
-  --text-4xs:   0.5625rem;  --text-4xs--line-height: 0.75rem;   /* 9px  → text-4xs */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem; /* 11px → text-2xs */
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.875rem; /* 10px → text-3xs */
+  --text-4xs: 0.5625rem;
+  --text-4xs--line-height: 0.75rem; /* 9px  → text-4xs */
 
   /* ========== SHAPE ========== */
-  --radius: 0.5rem;  /* 8px — wireframe buttons. Badges/dots/avatars stay rounded-full. */
+  --radius: 0.5rem; /* 8px — wireframe buttons. Badges/dots/avatars stay rounded-full. */
 }
 
 @layer base {
@@ -76,25 +79,6 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-  }
-  .dark {
-    --color-background: oklch(0.145 0 0);
-    --color-foreground: oklch(0.985 0 0);
-    --color-muted: oklch(0.205 0 0);
-    --color-muted-foreground: oklch(0.708 0 0);
-    --color-card: oklch(0.205 0 0);
-    --color-card-foreground: oklch(0.985 0 0);
-    --color-popover: oklch(0.205 0 0);
-    --color-popover-foreground: oklch(0.985 0 0);
-    --color-primary: oklch(0.985 0 0);
-    --color-primary-foreground: oklch(0.205 0 0);
-    --color-secondary: oklch(0.269 0 0);
-    --color-secondary-foreground: oklch(0.985 0 0);
-    --color-accent: oklch(0.269 0 0);
-    --color-accent-foreground: oklch(0.985 0 0);
-    --color-border: oklch(0.275 0 0);
-    --color-input: oklch(0.275 0 0);
-    --color-ring: oklch(0.439 0 0);
   }
 }
 

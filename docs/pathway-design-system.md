@@ -273,9 +273,10 @@ ship):
    ("environment switching") under the menu. NOT a separate
    middle-bar dropdown.
 
-**Explicitly NOT in the header:** theme toggle (relocated to
-`/settings/system-settings` in a later push), sparkle icon, far-left
-"K&K" text, middle org-switcher dropdown.
+**Explicitly NOT in the header:** theme toggle (REMOVED — Pathway is a
+single light theme as of the reskin; dark mode + the toggle + `next-themes`
+were dropped, see `docs/reskin-execution-plan.md` Phase 2), sparkle icon,
+far-left "K&K" text, middle org-switcher dropdown.
 
 ---
 

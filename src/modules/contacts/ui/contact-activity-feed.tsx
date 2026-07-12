@@ -168,14 +168,14 @@ export interface ActivityEntry {
  *   - Blue (Transferred / Left Voicemail) — informational
  */
 const DISPOSITION_BADGE_CLASSES: Record<RecordedCallDisposition, string> = {
-  completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  no_answer: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  busy: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  cancelled: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
-  transferred: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  voicemail: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  wrong_number: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  completed: "bg-emerald-100 text-emerald-800",
+  no_answer: "bg-amber-100 text-amber-800",
+  busy: "bg-red-100 text-red-800",
+  failed: "bg-red-100 text-red-800",
+  cancelled: "bg-gray-100 text-gray-700",
+  transferred: "bg-blue-100 text-blue-800",
+  voicemail: "bg-blue-100 text-blue-800",
+  wrong_number: "bg-red-100 text-red-800",
 }
 
 function isKnownDisposition(value: string): value is RecordedCallDisposition {
@@ -206,10 +206,10 @@ type EmailDeliveryStatus = "sent" | "delivered" | "bounced" | "failed" | "compla
 const DELIVERY_CHIP_CLASSES: Record<EmailDeliveryStatus, string> = {
   sent: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
   // FLAG: hardcoded emerald — no --color-success token exists yet; migrate when theme layer lands.
-  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  bounced: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  complained: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  delivered: "bg-emerald-100 text-emerald-800",
+  bounced: "bg-red-100 text-red-800",
+  failed: "bg-red-100 text-red-800",
+  complained: "bg-red-100 text-red-800",
 }
 
 const DELIVERY_CHIP_LABEL: Record<EmailDeliveryStatus, string> = {
@@ -1097,7 +1097,7 @@ function LinkifiedBody({ text }: { text: string }) {
             href={seg.value}
             target="_blank"
             rel="noreferrer noopener"
-            className="text-blue-600 underline dark:text-blue-400"
+            className="text-blue-600 underline"
             onClick={(e) => {
               e.stopPropagation()
             }}
@@ -1302,7 +1302,7 @@ export function ActivityCard({
                       setDeleteOpen(true)
                     }}
                     data-testid={`activity-delete-${entry.kind}`}
-                    className="block w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-500/10 dark:text-red-400"
+                    className="block w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-500/10"
                   >
                     Delete
                   </button>
@@ -1370,7 +1370,7 @@ export function ActivityCard({
           />
           {saving && <p className="text-[11px] text-[var(--color-muted-foreground)]">Saving…</p>}
           {error && (
-            <p className="text-xs text-red-600 dark:text-red-400" data-testid="activity-edit-error">
+            <p className="text-xs text-red-600" data-testid="activity-edit-error">
               {error}
             </p>
           )}

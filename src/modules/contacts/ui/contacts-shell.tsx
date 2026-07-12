@@ -271,10 +271,8 @@ export function ContactsShell({
 
       {cappedOut ? (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-6 text-sm">
-          <p className="font-medium text-amber-800 dark:text-amber-200">
-            Too many matches to display
-          </p>
-          <p className="mt-1 text-amber-700 dark:text-amber-300">
+          <p className="font-medium text-amber-800">Too many matches to display</p>
+          <p className="mt-1 text-amber-700">
             More than 10,000 contacts match the current filters. Refine your filters (or pick a
             narrower saved view) to bring the list under the cap, or export your full dataset from
             Settings.

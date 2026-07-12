@@ -412,10 +412,10 @@ export function NotificationRow({
 
       {/* CENTER — headline + body preview + context/timestamp line. pr-5 keeps
           the text clear of the top-right dot. */}
-      <div className="min-w-0 flex-1 self-start space-y-1 pr-5">
+      <div className="min-w-0 flex-1 space-y-1 self-start pr-5">
         {/* Headline */}
         <p
-          className={cn("text-sm leading-snug line-clamp-2", !isRead && "font-medium")}
+          className={cn("line-clamp-2 text-sm leading-snug", !isRead && "font-medium")}
           data-testid="notification-title"
         >
           {n.title}
@@ -425,7 +425,7 @@ export function NotificationRow({
             matters without opening it. */}
         {n.body && (
           <p
-            className="text-xs leading-snug text-[var(--color-muted-foreground)] line-clamp-2"
+            className="line-clamp-2 text-xs leading-snug text-[var(--color-muted-foreground)]"
             data-testid="notification-body"
           >
             {n.body}
@@ -450,7 +450,7 @@ export function NotificationRow({
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}
         {onUnsnooze && n.snoozedUntil && (
           <div
-            className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+            className="flex items-center gap-1 text-[11px] text-amber-600"
             data-testid="notification-snooze-until"
           >
             <Clock className="size-3 shrink-0" />
@@ -481,7 +481,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={onUnsnooze}
-                  className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                  className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700"
                   aria-label="Wake now"
                   data-testid="action-unsnooze"
                 >

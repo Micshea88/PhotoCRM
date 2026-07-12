@@ -618,7 +618,7 @@ export function ContactMergeSideBySide({
       </header>
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-700/30 dark:bg-red-950/30 dark:text-red-200">
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -932,7 +932,7 @@ function ValueCell({
         )}
       </span>
       {edited && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-700/20 dark:text-amber-300">
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
           <Pencil className="size-2.5" aria-hidden="true" /> edited
         </span>
       )}

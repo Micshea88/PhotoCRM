@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "@/modules/notifications/ui/notification-bell"
 import { OrgSwitcher } from "./org-switcher"
-import { ThemeToggle } from "./theme-toggle"
 import { UserMenu } from "./user-menu"
 
 interface Org {
@@ -56,7 +55,6 @@ export function AppTopbar({
           <Sparkles className="size-4" />
         </Button>
         <NotificationBell initialUnreadCount={initialUnreadCount} />
-        <ThemeToggle />
         <UserMenu userName={user.name} userEmail={user.email} />
       </div>
     </header>

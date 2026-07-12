@@ -398,7 +398,7 @@ export function CreateEmailComposer({
           )}
         </div>
 
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
 
         <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] pt-3">
           <Button
@@ -614,7 +614,7 @@ function AttachmentRow({
         className={cn(
           "text-[11px]",
           a.scanStatus === "infected" || a.scanStatus === "error"
-            ? "text-red-600 dark:text-red-400"
+            ? "text-red-600"
             : "text-[var(--color-muted-foreground)]",
         )}
       >

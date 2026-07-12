@@ -695,13 +695,13 @@ export function ContactsImportWizard({
       <Stepper current={step} />
 
       {error && (
-        <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+        <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {stateLost && step === "upload" && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-800">
           Wizard state was lost (refresh or direct link). Re-upload the CSV to continue.
         </div>
       )}
@@ -1092,7 +1092,7 @@ function MapStep({
       )}
       {aiState === "failed" && (
         <div
-          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
           data-testid="csv-v2-ai-banner-failed"
         >
           AI mapping wasn&apos;t available for this upload — map columns manually below.
@@ -1172,7 +1172,7 @@ function MapStep({
                     />
                     {isCreateNew && (
                       <p
-                        className="mt-1 text-xs text-amber-700 dark:text-amber-300"
+                        className="mt-1 text-xs text-amber-700"
                         data-testid={`csv-v2-create-new-pending-${String(i)}`}
                       >
                         New custom field for this column — finish creating it in the dialog, pick an
@@ -1180,7 +1180,7 @@ function MapStep({
                       </p>
                     )}
                     {detectedMismatch && (
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      <p className="mt-1 text-xs text-amber-700">
                         This column looks like {humanizeType(detected)} but is mapped to{" "}
                         {FIELD_LABELS[detectedMismatch]}.
                       </p>
@@ -1373,7 +1373,7 @@ export function PreviewStep({
           {hasDbDuplicates && (
             <>
               {" · "}
-              <span className="font-medium text-red-600 dark:text-red-400">
+              <span className="font-medium text-red-600">
                 {String(dbMatchedCount)} {dbMatchedCount === 1 ? "duplicate" : "duplicates"} found
               </span>
             </>
@@ -1508,13 +1508,10 @@ export function PreviewStep({
              verbatim — the old red paragraph was visually overweight. */}
       {hasDbDuplicates && (
         <div
-          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
           data-testid="csv-v2-preview-dup-warning"
         >
-          <AlertTriangle
-            className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-400"
-            aria-hidden="true"
-          />
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-700" aria-hidden="true" />
           <span>
             {String(dbMatchedCount)}{" "}
             {dbMatchedCount === 1
@@ -1582,14 +1579,12 @@ export function PreviewStep({
                       </span>
                     </div>
                     {hasError && (
-                      <p className="mt-1 text-[11px] font-medium text-red-700 dark:text-red-400">
+                      <p className="mt-1 text-[11px] font-medium text-red-700">
                         {c.errors.join("; ")}
                       </p>
                     )}
                     {!hasError && hasWarning && (
-                      <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-                        {c.warnings.join("; ")}
-                      </p>
+                      <p className="mt-1 text-[11px] text-amber-700">{c.warnings.join("; ")}</p>
                     )}
                   </td>
                   {/* Email + phone stacked in one cell. The single
@@ -1602,9 +1597,7 @@ export function PreviewStep({
                   <td className="px-3 py-2 align-top text-xs">
                     <div
                       className={
-                        preview?.matchedField === "email"
-                          ? "font-medium text-red-600 dark:text-red-400"
-                          : undefined
+                        preview?.matchedField === "email" ? "font-medium text-red-600" : undefined
                       }
                       data-testid={`csv-v2-preview-email-${String(c.rowIndex)}`}
                     >
@@ -1615,7 +1608,7 @@ export function PreviewStep({
                     <div
                       className={
                         preview?.matchedField === "phone"
-                          ? "font-medium text-red-600 dark:text-red-400"
+                          ? "font-medium text-red-600"
                           : "text-[var(--color-muted-foreground)]"
                       }
                       data-testid={`csv-v2-preview-phone-${String(c.rowIndex)}`}
@@ -1630,11 +1623,9 @@ export function PreviewStep({
                       Email/phone cell to the left — no inline label. */}
                   <td className="px-3 py-2 align-top text-xs">
                     {hasError ? (
-                      <span className="text-red-700 dark:text-red-400">—</span>
+                      <span className="text-red-700">—</span>
                     ) : isDup ? (
-                      <span className="text-amber-700 dark:text-amber-300">
-                        Duplicate of row {String(dupOf)}
-                      </span>
+                      <span className="text-amber-700">Duplicate of row {String(dupOf)}</span>
                     ) : preview?.matchedContactName ? (
                       <span>{preview.matchedContactName}</span>
                     ) : (
@@ -1649,7 +1640,7 @@ export function PreviewStep({
                       <select
                         disabled
                         value="skip-error"
-                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs text-red-700 disabled:opacity-70 dark:text-red-400"
+                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs text-red-700 disabled:opacity-70"
                         aria-label={`Action for row ${String(c.rowIndex)} — disabled because the row has errors`}
                       >
                         <option value="skip-error">Skip — has errors</option>
@@ -1729,7 +1720,7 @@ function MetricCard({
 }) {
   const toneClasses =
     tone === "success"
-      ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
       : tone === "info"
         ? "border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 text-[var(--color-foreground)]"
         : "border-[var(--color-border)] bg-[var(--color-muted)]/40 text-[var(--color-foreground)]"
@@ -1937,11 +1928,11 @@ function DoneStep({
           mid-import (validation or DB error, NOT dedup skips). */}
       {result.errorCount > 0 && (
         <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-3 text-sm">
-          <p className="mb-2 font-medium text-red-700 dark:text-red-400">
+          <p className="mb-2 font-medium text-red-700">
             {String(result.errorCount)} row{result.errorCount === 1 ? "" : "s"} couldn&apos;t be
             imported.
           </p>
-          <p className="mb-3 text-xs text-red-700/80 dark:text-red-400/80">
+          <p className="mb-3 text-xs text-red-700/80">
             Fix the errors in this CSV and re-upload to import the remaining rows.
           </p>
           <Button onClick={onDownloadErrors}>Download errors as CSV</Button>

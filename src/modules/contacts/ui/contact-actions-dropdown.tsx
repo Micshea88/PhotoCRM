@@ -176,7 +176,7 @@ export function ContactActionsDropdown({
         body="This contact will be moved to Deleted and automatically purged after 90 days. You can restore it before then on the Deleted page."
         submitting={deleteBusy}
       />
-      {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
+      {deleteError && <p className="text-xs text-red-600">{deleteError}</p>}
 
       {placeholder && (
         <Modal
@@ -221,9 +221,7 @@ function Item({
 }) {
   const cls = cn(
     "block w-full rounded px-2 py-1.5 text-left",
-    destructive
-      ? "text-red-700 hover:bg-red-500/10 dark:text-red-400"
-      : "hover:bg-[var(--color-accent)]/40",
+    destructive ? "text-red-700 hover:bg-red-500/10" : "hover:bg-[var(--color-accent)]/40",
     disabled && "cursor-not-allowed opacity-50",
   )
   if (href && !disabled) {

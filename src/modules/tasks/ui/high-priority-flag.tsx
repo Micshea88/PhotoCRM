@@ -9,10 +9,5 @@ import { Flag } from "lucide-react"
  */
 export function HighPriorityFlag({ priority }: { priority: string | null }) {
   if (priority !== "high") return null
-  return (
-    <Flag
-      className="size-3.5 shrink-0 fill-red-600 text-red-600 dark:fill-red-400 dark:text-red-400"
-      aria-label="High priority"
-    />
-  )
+  return <Flag className="size-3.5 shrink-0 fill-red-600 text-red-600" aria-label="High priority" />
 }

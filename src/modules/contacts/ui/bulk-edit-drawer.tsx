@@ -378,9 +378,7 @@ function BulkEditDrawerBody({
                           />
                           <span>{f.label}</span>
                           {f.destructive && (
-                            <span className="ml-auto text-[10px] text-red-600 dark:text-red-400">
-                              destructive
-                            </span>
+                            <span className="ml-auto text-[10px] text-red-600">destructive</span>
                           )}
                         </button>
                         {isActive && (
@@ -398,7 +396,7 @@ function BulkEditDrawerBody({
                               hiddenLeadSources={hiddenLeadSources}
                             />
                             {f.destructive && (
-                              <label className="mt-3 flex items-start gap-2 text-xs text-red-700 dark:text-red-400">
+                              <label className="mt-3 flex items-start gap-2 text-xs text-red-700">
                                 <input
                                   type="checkbox"
                                   checked={replaceAcked}

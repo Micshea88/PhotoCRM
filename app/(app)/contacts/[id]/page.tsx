@@ -34,6 +34,7 @@ import { AiSummaryLive } from "@/modules/contacts/ui/ai-summary-live"
 import { RegenerateAiButton } from "@/modules/contacts/ui/regenerate-ai-button"
 import { isSummaryStale } from "@/modules/contacts/ai/summary-freshness"
 import type { AiInsight } from "@/modules/contacts/ai/insights-detector"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * Push 3 (C6c) — contact detail page rebuild.
@@ -249,7 +250,7 @@ export default async function ContactDetailPage({
     // distracting empty margins AND squeezed the action icon row past
     // its 6th slot. Drop the cap; columns flex with soft min/max
     // bounds so the center fills any extra space.
-    <div className="space-y-6 px-6">
+    <PageContainer variant="full" className="space-y-6">
       {/* P3 (C6c polish #3) — Actions dropdown sits adjacent to the
           back breadcrumb on the LEFT (HubSpot pattern). Row 1:
           [← Contacts] [Actions ▼]. Row 2: H1 title + lead status
@@ -430,6 +431,6 @@ export default async function ContactDetailPage({
           </>
         )
       })()}
-    </div>
+    </PageContainer>
   )
 }

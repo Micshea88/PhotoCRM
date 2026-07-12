@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { listDistinctContactTags } from "@/modules/contacts/filter-spec"
 import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { ContactsImportWizard } from "@/modules/contacts/ui/contacts-import-wizard"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export const dynamic = "force-dynamic"
 
@@ -49,7 +50,7 @@ export default async function ContactsImportPage() {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Import contacts</h1>
@@ -68,6 +69,6 @@ export default async function ContactsImportPage() {
         existingTags={data.tags}
         customFieldDefs={data.customFieldDefs}
       />
-    </div>
+    </PageContainer>
   )
 }

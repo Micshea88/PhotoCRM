@@ -8,6 +8,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { listDeletedContactsForOrg } from "@/modules/contacts/queries"
 import { contactLabel } from "@/modules/contacts/display"
 import { RestoreDeletedButton } from "@/modules/contacts/ui/restore-deleted-button"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * Push 2c.5 — Deleted contacts list with per-row Restore.
@@ -43,7 +44,7 @@ export default async function ContactsDeletedPage() {
   )
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <div>
         <Link
           href="/contacts"
@@ -95,6 +96,6 @@ export default async function ContactsDeletedPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }

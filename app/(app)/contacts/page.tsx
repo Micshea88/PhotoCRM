@@ -19,6 +19,7 @@ import {
   type CustomFieldFilter,
 } from "@/modules/contacts/filter-spec"
 import { ContactsShell } from "@/modules/contacts/ui/contacts-shell"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 import type { SavedViewTab } from "@/modules/saved-views/ui/saved-views-tab-strip"
 import type { Visibility } from "@/modules/saved-views/types"
 
@@ -406,7 +407,7 @@ export default async function ContactsPage({
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <ContactsShell
         contacts={data.contacts}
         totalCount={data.totalCount}
@@ -428,6 +429,6 @@ export default async function ContactsPage({
         hiddenLeadSources={data.hiddenLeadSources}
         customFieldDefs={data.cfDefs}
       />
-    </div>
+    </PageContainer>
   )
 }

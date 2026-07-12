@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
 import { listItemsForOrg } from "@/modules/items/queries"
 import { Button } from "@/components/ui/button"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function ItemsPage() {
   const session = await getSession()
@@ -13,7 +14,7 @@ export default async function ItemsPage() {
   const items = await listItemsForOrg(orgId)
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Items</h1>
@@ -52,6 +53,6 @@ export default async function ItemsPage() {
           ))}
         </ul>
       )}
-    </div>
+    </PageContainer>
   )
 }

@@ -8,6 +8,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { listArchivedContactsForOrg } from "@/modules/contacts/queries"
 import { contactLabel } from "@/modules/contacts/display"
 import { RestoreArchivedButton } from "@/modules/contacts/ui/restore-archived-button"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function ContactsArchivedPage() {
   const session = await getSession()
@@ -30,7 +31,7 @@ export default async function ContactsArchivedPage() {
   )
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <div>
         <Link
           href="/contacts"
@@ -82,6 +83,6 @@ export default async function ContactsArchivedPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }

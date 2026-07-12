@@ -14,6 +14,7 @@ import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { listFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { fetchContactDisplayRows } from "@/modules/duplicates/queries"
 import { ContactMergeSideBySide } from "@/modules/contacts/ui/contact-merge-side-by-side"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * Push 3 (C7) — manual pairwise merge route.
@@ -128,17 +129,19 @@ export default async function ContactMergePage({
   }
 
   return (
-    <ContactMergeSideBySide
-      recordA={loaded.recordA}
-      recordB={loaded.recordB}
-      customFieldDefs={loaded.customFieldDefs}
-      companyOptions={loaded.companyOptions}
-      ownerOptions={loaded.ownerOptions}
-      referralOptions={loaded.referralOptions}
-      leadSourceValues={loaded.leadSourceValues}
-      hiddenLeadSources={loaded.hiddenLeadSources}
-      tagOptions={loaded.tagOptions}
-      cancelHref={`/contacts/${thisId}`}
-    />
+    <PageContainer variant="full">
+      <ContactMergeSideBySide
+        recordA={loaded.recordA}
+        recordB={loaded.recordB}
+        customFieldDefs={loaded.customFieldDefs}
+        companyOptions={loaded.companyOptions}
+        ownerOptions={loaded.ownerOptions}
+        referralOptions={loaded.referralOptions}
+        leadSourceValues={loaded.leadSourceValues}
+        hiddenLeadSources={loaded.hiddenLeadSources}
+        tagOptions={loaded.tagOptions}
+        cancelHref={`/contacts/${thisId}`}
+      />
+    </PageContainer>
   )
 }

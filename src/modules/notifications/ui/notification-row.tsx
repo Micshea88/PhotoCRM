@@ -10,6 +10,13 @@ import {
   CheckSquare,
   Clock,
   CalendarDays,
+  Mail,
+  DollarSign,
+  FileText,
+  UserPlus,
+  Calendar,
+  Settings,
+  type LucideIcon,
 } from "lucide-react"
 import * as RadixPopover from "@radix-ui/react-popover"
 import { Tooltip } from "@/components/ui/tooltip"
@@ -22,10 +29,37 @@ import {
   createTaskFromNotification,
 } from "@/modules/notifications/actions"
 import type { NotificationWithContact } from "@/modules/notifications/queries"
-import { NOTIFICATION_TYPES } from "@/modules/notifications/types"
+import { NOTIFICATION_TYPES, type NotificationCategory } from "@/modules/notifications/types"
 
 // Export Bell so the import is not unused (it's re-exported for use elsewhere)
 export { Bell }
+
+// ---------------------------------------------------------------------------
+// Category icons — ONE lucide glyph per registry category (6 total).
+//
+// Keyed by NotificationCategory so TypeScript forces every category to have an
+// icon. The row derives a notification's category from the SAME source the
+// settings panel + Type filter use — NOTIFICATION_TYPES[type].category — so
+// there is no second type→category mapping to drift.
+// ---------------------------------------------------------------------------
+
+export const CATEGORY_ICONS: Record<NotificationCategory, LucideIcon> = {
+  messages_email: Mail,
+  payments: DollarSign,
+  documents: FileText,
+  leads: UserPlus,
+  scheduling: Calendar,
+  system: Settings,
+}
+
+/** Resolve a notification's category via the type registry, falling back to
+ *  "system" for unknown/legacy type keys (category can be any string from DB). */
+export function categoryForType(type: string): NotificationCategory {
+  return (
+    (NOTIFICATION_TYPES as Record<string, { category?: NotificationCategory } | undefined>)[type]
+      ?.category ?? "system"
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Relative time helper
@@ -150,20 +184,23 @@ export interface NotificationRowProps {
   selectable?: boolean
   selected?: boolean
   onToggleSelect?: (id: string) => void
-  /**
-   * Section E4 — density prop.
-   * When true, reduces vertical padding and gap for a more compact layout.
-   * The bell dropdown does NOT pass this (stays comfortable by default).
-   */
-  compact?: boolean
 }
 
 /**
- * 3-layer notification row (headline / detail / anchor + relative time).
- * Hover reveals 4 action buttons: mark unread, snooze, create task, archive.
+ * Notification row — HoneyBook layout. Each concern gets its own zone so nothing
+ * collides:
+ *   • LEFT: a category icon (one of six), top-aligned with the headline.
+ *   • CENTER (flex-1): headline + body preview + context/timestamp line, stacked.
+ *   • TOP-RIGHT corner: the unread dot — persistent (absolute; does NOT hide on
+ *     hover), only when unread.
+ *   • BOTTOM-RIGHT zone: hover-revealed action icons with the read/unread text
+ *     link directly below them. Pinned to the bottom of a full-height right
+ *     column (mt-auto) so it lives in a different vertical zone than the
+ *     top-right dot and can never overlap it (min-h guarantees the gap).
  *
  * The snooze menu uses @radix-ui/react-popover (portaled) so it escapes the
- * dropdown's overflow-y-auto container and is never clipped.
+ * dropdown's overflow-y-auto container and is never clipped. The shared Tooltip
+ * is likewise portaled.
  */
 export function NotificationRow({
   notification: n,
@@ -174,22 +211,20 @@ export function NotificationRow({
   selectable,
   selected,
   onToggleSelect,
-  compact = false,
 }: NotificationRowProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [customValue, setCustomValue] = useState("")
-  // Read state with an optimistic override so the persistent read/unread toggle
-  // (+ the unread dot) flip in lockstep on click, before the refetch lands.
+  // Read state with an optimistic override so the read/unread link (+ the unread
+  // dot) flip in lockstep on click, before the refetch lands.
   const serverRead = n.readAt !== null
   const [optimisticRead, setOptimisticRead] = useState<boolean | null>(null)
   const isRead = optimisticRead ?? serverRead
   // When the server truth changes (readAt crosses the null boundary, e.g. after
   // refetch or a "mark all" elsewhere), drop the override so server wins.
-  // Deferred to a microtask to satisfy react-hooks/set-state-in-effect (the
-  // module convention — same as the density mount-read effect).
+  // Deferred to a microtask to satisfy react-hooks/set-state-in-effect.
   useEffect(() => {
     let active = true
     void Promise.resolve().then(() => {
@@ -307,6 +342,11 @@ export function NotificationRow({
   const typeLabel =
     (NOTIFICATION_TYPES as Record<string, { label: string } | undefined>)[n.type]?.label ?? n.type
 
+  // Category icon — derived from the type registry (single source), never a
+  // second hardcoded mapping.
+  const category = categoryForType(n.type)
+  const CategoryIcon = CATEGORY_ICONS[category]
+
   // Compute preset dates once per render so JSX stays readable
   const now = new Date()
   const presets = SNOOZE_OPTIONS.map((opt) => ({ opt, until: opt.computeUntil(now) }))
@@ -315,8 +355,12 @@ export function NotificationRow({
     <div
       role="listitem"
       className={cn(
-        "group relative flex cursor-pointer items-start rounded-md px-3 transition-colors hover:bg-[var(--color-accent)]/30",
-        compact ? "gap-2 py-1.5" : "gap-3 py-2.5",
+        // items-stretch + min-h give the right column full height so its
+        // bottom-pinned action zone sits well below the top-right dot's band.
+        // 88px floors the shortest (no-body) row so the ~48px bottom-pinned zone
+        // starts at y≈28 — an ~8px cushion below the dot's y=12–20 band, holding
+        // even if the link's line-height grows.
+        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-accent)]/30",
         !isRead && "bg-[var(--color-accent)]/10",
       )}
       data-testid="notification-row"
@@ -326,7 +370,7 @@ export function NotificationRow({
       {/* Per-row selection checkbox — page-mode only; hidden in the bell dropdown */}
       {selectable && (
         <div
-          className="flex shrink-0 items-center self-stretch pr-1"
+          className="flex shrink-0 items-start self-start pt-0.5 pr-1"
           onClick={(e) => {
             e.stopPropagation()
           }}
@@ -344,9 +388,10 @@ export function NotificationRow({
         </div>
       )}
 
-      {/* Read / unread indicator dot — TOP-RIGHT corner (HoneyBook), only when
-          unread. Absolute so it doesn't take a leading slot; the content's right
-          padding keeps the title clear of it. */}
+      {/* Read / unread indicator dot — TOP-RIGHT corner, PERSISTENT (does NOT
+          hide on hover), only when unread. Absolute so it owns the corner; the
+          bottom-right action zone lives in a different vertical band and can't
+          reach it. */}
       {!isRead && (
         <div
           className="absolute top-3 right-3 size-2 rounded-full bg-blue-500"
@@ -355,50 +400,245 @@ export function NotificationRow({
         />
       )}
 
-      {/* Main content — pr-5 reserves the top-right corner for the unread dot */}
-      <div className="min-w-0 flex-1 space-y-0.5 pr-5">
-        {/* Line 1 — headline */}
+      {/* LEFT — category icon, top-aligned with the headline. */}
+      <div
+        className="flex size-8 shrink-0 items-center justify-center self-start rounded-full bg-[var(--color-accent)]/40 text-[var(--color-muted-foreground)]"
+        data-testid="notification-category-icon"
+        data-category={category}
+        aria-hidden="true"
+      >
+        <CategoryIcon className="size-4" />
+      </div>
+
+      {/* CENTER — headline + body preview + context/timestamp line. pr-5 keeps
+          the text clear of the top-right dot. */}
+      <div className="min-w-0 flex-1 self-start space-y-1 pr-5">
+        {/* Headline */}
         <p
-          className={cn("truncate text-sm leading-snug", !isRead && "font-medium")}
+          className={cn("text-sm leading-snug line-clamp-2", !isRead && "font-medium")}
           data-testid="notification-title"
         >
           {n.title}
         </p>
 
-        {/* Line 2 — detail (body). Compact clamps the preview to ONE line
-            (Gmail-style), collapsing the row toward a single scannable line;
-            comfortable keeps two lines. The preview is always shown — it's what
-            signals whether a notification matters without opening it. */}
+        {/* Body preview — the fuller text that signals whether a notification
+            matters without opening it. */}
         {n.body && (
           <p
-            className={cn(
-              "text-xs text-[var(--color-muted-foreground)]",
-              compact ? "line-clamp-1" : "line-clamp-2",
-            )}
+            className="text-xs leading-snug text-[var(--color-muted-foreground)] line-clamp-2"
             data-testid="notification-body"
           >
             {n.body}
           </p>
         )}
 
-        {/* Line 3 — bottom line (HoneyBook): anchor + timestamp on the LEFT
-            (always visible), the read/unread link on the RIGHT (hover-revealed),
-            at OPPOSITE edges so they never crowd. */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]">
-            <span className="truncate" data-testid="notification-anchor">
-              {n.contactName ? (
-                <span className="text-[var(--color-foreground)]">{n.contactName}</span>
-              ) : (
-                <span>{typeLabel}</span>
-              )}
-            </span>
-            <span className="shrink-0 tabular-nums" data-testid="notification-time">
-              {relativeTime(new Date(n.createdAt))}
-            </span>
+        {/* Context (contact / type) + timestamp — always visible, left-aligned. */}
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]">
+          <span className="truncate" data-testid="notification-anchor">
+            {n.contactName ? (
+              <span className="text-[var(--color-foreground)]">{n.contactName}</span>
+            ) : (
+              <span>{typeLabel}</span>
+            )}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="shrink-0 tabular-nums" data-testid="notification-time">
+            {relativeTime(new Date(n.createdAt))}
+          </span>
+        </div>
+
+        {/* Snoozed-until indicator — only shown on the Snoozed tab */}
+        {onUnsnooze && n.snoozedUntil && (
+          <div
+            className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+            data-testid="notification-snooze-until"
+          >
+            <Clock className="size-3 shrink-0" />
+            <span>Wakes {formatSnoozeDate(new Date(n.snoozedUntil), now)}</span>
           </div>
-          {/* Read/unread link — RIGHT edge, hover-revealed. State-dependent;
-              clicking flips read state + the unread dot in lockstep, stopPropagation. */}
+        )}
+      </div>
+
+      {/* RIGHT — full-height column. The action zone is pinned to the BOTTOM
+          (mt-auto) so it occupies a different vertical band than the top-right
+          dot. Hover-revealed; the content reflows so the icons never obscure
+          text (no floating overlay). */}
+      <div
+        className="flex shrink-0 flex-col items-end self-stretch"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+      >
+        <div
+          className="mt-auto hidden flex-col items-end gap-1 group-hover:flex"
+          data-testid="notification-action-zone"
+        >
+          {/* Icon row (top of the zone) */}
+          <div className="flex items-center gap-0.5" data-testid="notification-actions">
+            {/* Wake now (unsnooze) — only shown on the Snoozed tab */}
+            {onUnsnooze && (
+              <Tooltip label="Wake now">
+                <button
+                  type="button"
+                  onClick={onUnsnooze}
+                  className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                  aria-label="Wake now"
+                  data-testid="action-unsnooze"
+                >
+                  <BellRing className="size-3.5" />
+                </button>
+              </Tooltip>
+            )}
+
+            {/* Unarchive (restore) — only shown on the Archive tab */}
+            {onUnarchive && (
+              <Tooltip label="Unarchive">
+                <button
+                  type="button"
+                  onClick={onUnarchive}
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                  aria-label="Unarchive"
+                  data-testid="action-unarchive"
+                >
+                  <ArchiveRestore className="size-3.5" />
+                </button>
+              </Tooltip>
+            )}
+
+            {/* Snooze — hidden on the Archive tab (snoozing an already-archived
+                item is meaningless) AND on the Snoozed tab (the row is already
+                snoozed; "Wake now" is offered there instead). Portaled so it
+                isn't clipped by the dropdown. */}
+            {!onUnarchive && !onUnsnooze && (
+              <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+                <Tooltip label="Snooze">
+                  <RadixPopover.Trigger asChild>
+                    <button
+                      type="button"
+                      className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                      aria-label="Snooze"
+                      data-testid="action-snooze"
+                    >
+                      <Clock className="size-3.5" />
+                    </button>
+                  </RadixPopover.Trigger>
+                </Tooltip>
+
+                <RadixPopover.Portal>
+                  <RadixPopover.Content
+                    align="end"
+                    side="bottom"
+                    collisionPadding={8}
+                    sideOffset={4}
+                    className="z-50 min-w-[220px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 shadow-lg"
+                    data-testid="snooze-menu"
+                    onCloseAutoFocus={(e) => {
+                      e.preventDefault()
+                    }}
+                  >
+                    {/* 4 presets */}
+                    <ul className="space-y-0.5" data-testid="snooze-presets">
+                      {presets.map(({ opt, until }) => (
+                        <li key={opt.label}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleSnoozePreset(opt)
+                            }}
+                            className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                            data-testid={`snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
+                          >
+                            <span className="font-medium">{opt.label}</span>
+                            <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">
+                              {formatSnoozeDate(until, now)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* Divider before custom picker */}
+                    <div className="my-1 border-t border-[var(--color-border)]" />
+
+                    {/* Custom date + time picker */}
+                    <div
+                      className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
+                      data-testid="snooze-custom-row"
+                    >
+                      <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <span className="text-sm font-medium">Pick date &amp; time&hellip;</span>
+                        <input
+                          type="datetime-local"
+                          value={customValue}
+                          onChange={(e) => {
+                            setCustomValue(e.target.value)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSnoozeCustom()
+                          }}
+                          className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 text-xs text-[var(--color-foreground)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
+                          data-testid="snooze-custom-input"
+                          aria-label="Pick snooze date and time"
+                          min={toLocalDatetimeValue(new Date())}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSnoozeCustom}
+                        disabled={!customValue}
+                        className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+                        data-testid="snooze-custom-confirm"
+                      >
+                        Set
+                      </button>
+                    </div>
+                  </RadixPopover.Content>
+                </RadixPopover.Portal>
+              </RadixPopover.Root>
+            )}
+
+            {/* Create task */}
+            <Tooltip label={n.contactId ? "Create task" : "No linked contact"}>
+              <button
+                type="button"
+                onClick={handleCreateTask}
+                disabled={!n.contactId}
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-sm hover:bg-[var(--color-accent)]/40",
+                  n.contactId
+                    ? "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                    : "cursor-not-allowed text-[var(--color-muted-foreground)]/40",
+                )}
+                aria-label="Create task"
+                aria-disabled={!n.contactId}
+                data-testid="action-create-task"
+              >
+                <CheckSquare className="size-3.5" />
+              </button>
+            </Tooltip>
+
+            {/* Archive — hidden on the Archive tab (row is already archived;
+                re-archiving would fire a confusing "Archived 1" undo toast).
+                Unarchive is offered instead, above. */}
+            {!onUnarchive && (
+              <Tooltip label="Archive">
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                  aria-label="Archive"
+                  data-testid="action-archive"
+                >
+                  <Archive className="size-3.5" />
+                </button>
+              </Tooltip>
+            )}
+          </div>
+
+          {/* Read/unread text link — directly BELOW the icon row, right-aligned.
+              State-dependent; clicking flips read state + the unread dot in
+              lockstep, stopPropagation (the zone wrapper also stops it). */}
           <button
             type="button"
             onClick={(e) => {
@@ -408,199 +648,14 @@ export function NotificationRow({
             }}
             aria-label={isRead ? "Mark as unread" : "Mark as read"}
             data-testid="row-read-toggle"
-            className="hidden shrink-0 text-[11px] font-medium text-[var(--color-primary)] hover:underline group-hover:inline"
+            className="text-[11px] font-medium text-[var(--color-primary)] hover:underline"
           >
             {isRead ? "Mark as unread" : "Mark as read"}
           </button>
         </div>
-
-        {/* Snoozed-until indicator — only shown on the Snoozed tab */}
-        {onUnsnooze && n.snoozedUntil && (
-          <div
-            className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
-            data-testid="notification-snooze-until"
-          >
-            <Clock className="size-3 shrink-0" />
-            <span>Wakes {formatSnoozeDate(new Date(n.snoozedUntil), now)}</span>
-          </div>
-        )}
       </div>
 
-      {/* Hover action buttons — rendered INSIDE the row (a right-aligned flex
-          member revealed on hover), NOT a floating bordered overlay. No box,
-          border or shadow; the content reflows so the icons never obscure text. */}
-      <div
-        className="hidden shrink-0 items-center gap-0.5 self-center group-hover:flex"
-        data-testid="notification-actions"
-        onClick={(e) => {
-          e.stopPropagation()
-        }}
-      >
-        {/* Wake now (unsnooze) — only shown on the Snoozed tab */}
-        {onUnsnooze && (
-          <Tooltip label="Wake now">
-            <button
-              type="button"
-              onClick={onUnsnooze}
-              className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-              aria-label="Wake now"
-              data-testid="action-unsnooze"
-            >
-              <BellRing className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
-
-        {/* Unarchive (restore) — only shown on the Archive tab */}
-        {onUnarchive && (
-          <Tooltip label="Unarchive">
-            <button
-              type="button"
-              onClick={onUnarchive}
-              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-              aria-label="Unarchive"
-              data-testid="action-unarchive"
-            >
-              <ArchiveRestore className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
-
-        {/* Mark read/unread lives OUTSIDE this hover cluster — it is a hover-revealed
-            text link on Line 3, by the timestamp (see above). */}
-
-        {/* Snooze — hidden on the Archive tab (snoozing an already-archived
-            item is meaningless) AND on the Snoozed tab (the row is already
-            snoozed; "Wake now" is offered there instead). Portaled so it isn't
-            clipped by the dropdown. */}
-        {!onUnarchive && !onUnsnooze && (
-          <RadixPopover.Root open={snoozeOpen} onOpenChange={setSnoozeOpen}>
-          <Tooltip label="Snooze">
-            <RadixPopover.Trigger asChild>
-              <button
-                type="button"
-                className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-                aria-label="Snooze"
-                data-testid="action-snooze"
-              >
-                <Clock className="size-3.5" />
-              </button>
-            </RadixPopover.Trigger>
-          </Tooltip>
-
-          <RadixPopover.Portal>
-            <RadixPopover.Content
-              align="end"
-              side="bottom"
-              collisionPadding={8}
-              sideOffset={4}
-              className="z-50 min-w-[220px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 shadow-lg"
-              data-testid="snooze-menu"
-              onCloseAutoFocus={(e) => {
-                e.preventDefault()
-              }}
-            >
-              {/* 4 presets */}
-              <ul className="space-y-0.5" data-testid="snooze-presets">
-                {presets.map(({ opt, until }) => (
-                  <li key={opt.label}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSnoozePreset(opt)
-                      }}
-                      className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
-                      data-testid={`snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      <span className="font-medium">{opt.label}</span>
-                      <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">
-                        {formatSnoozeDate(until, now)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              {/* Divider before custom picker */}
-              <div className="my-1 border-t border-[var(--color-border)]" />
-
-              {/* Custom date + time picker */}
-              <div
-                className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
-                data-testid="snooze-custom-row"
-              >
-                <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
-                <div className="flex flex-1 flex-col gap-0.5">
-                  <span className="text-sm font-medium">Pick date &amp; time&hellip;</span>
-                  <input
-                    type="datetime-local"
-                    value={customValue}
-                    onChange={(e) => {
-                      setCustomValue(e.target.value)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSnoozeCustom()
-                    }}
-                    className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 text-xs text-[var(--color-foreground)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
-                    data-testid="snooze-custom-input"
-                    aria-label="Pick snooze date and time"
-                    min={toLocalDatetimeValue(new Date())}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSnoozeCustom}
-                  disabled={!customValue}
-                  className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
-                  data-testid="snooze-custom-confirm"
-                >
-                  Set
-                </button>
-              </div>
-            </RadixPopover.Content>
-          </RadixPopover.Portal>
-          </RadixPopover.Root>
-        )}
-
-        {/* Create task */}
-        <Tooltip label={n.contactId ? "Create task" : "No linked contact"}>
-          <button
-            type="button"
-            onClick={handleCreateTask}
-            disabled={!n.contactId}
-            className={cn(
-              "flex size-7 items-center justify-center rounded-sm hover:bg-[var(--color-accent)]/40",
-              n.contactId
-                ? "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-                : "cursor-not-allowed text-[var(--color-muted-foreground)]/40",
-            )}
-            aria-label="Create task"
-            aria-disabled={!n.contactId}
-            data-testid="action-create-task"
-          >
-            <CheckSquare className="size-3.5" />
-          </button>
-        </Tooltip>
-
-        {/* Archive — hidden on the Archive tab (row is already archived;
-            re-archiving would fire a confusing "Archived 1" undo toast).
-            Unarchive is offered instead, above. */}
-        {!onUnarchive && (
-          <Tooltip label="Archive">
-            <button
-              type="button"
-              onClick={handleArchive}
-              className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
-              aria-label="Archive"
-              data-testid="action-archive"
-            >
-              <Archive className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
-      </div>
-
-      {error && <p className="absolute right-3 bottom-1 text-[10px] text-red-500">{error}</p>}
+      {error && <p className="absolute bottom-1 left-12 text-[10px] text-red-500">{error}</p>}
     </div>
   )
 }

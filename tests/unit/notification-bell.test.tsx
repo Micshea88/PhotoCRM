@@ -500,17 +500,25 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
-  // STEP 2 — HOVER-REVEALED read/unread TEXT link (HoneyBook placement)
-  it("STEP 2: the read control is a hover-revealed text link with a state-dependent label", () => {
+  // HONEYBOOK LAYOUT — read/unread TEXT link in the bottom-right action zone,
+  // below the icon row.
+  it("read control is a hover-revealed text link in the action zone, below the icons, with a state-dependent label", () => {
     render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
     const toggle = screen.getByTestId("row-read-toggle")
+    const zone = screen.getByTestId("notification-action-zone")
+    const icons = screen.getByTestId("notification-actions")
     // Reads as TEXT (not an always-on icon): unread → 'Mark as read'.
     expect(toggle).toHaveTextContent("Mark as read")
-    // Hover-revealed: hidden by default, shown on row (group) hover. jsdom can't
-    // render CSS :hover, so the reveal mechanism is asserted structurally; the
-    // click behavior below is the observable-result test.
-    expect(toggle.className).toContain("hidden")
-    expect(toggle.className).toContain("group-hover:inline")
+    // Lives in the bottom-right action zone WITH the icon row, and renders BELOW
+    // it (icon row precedes the link in DOM order — FOLLOWING === 4).
+    expect(zone.contains(icons)).toBe(true)
+    expect(zone.contains(toggle)).toBe(true)
+    expect(icons.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Hover-revealed: the zone is hidden at rest and shown on row (group) hover.
+    // jsdom can't render CSS :hover, so the reveal is asserted structurally on
+    // the zone; the click behavior below is the observable-result test.
+    expect(zone.className).toContain("hidden")
+    expect(zone.className).toContain("group-hover:flex")
 
     // A read row → 'Mark as unread'.
     render(
@@ -519,23 +527,75 @@ describe("NotificationRow — row click navigation (D2)", () => {
     expect(screen.getAllByTestId("row-read-toggle")[1]).toHaveTextContent("Mark as unread")
   })
 
-  it("STEP 2 layout: timestamp and read link are at OPPOSITE edges of the bottom line (not crowded)", () => {
+  it("HoneyBook layout: the unread dot is PERSISTENT — present when unread and NOT hover-gated (stays visible on hover)", async () => {
+    const user = userEvent.setup()
     render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
-    const time = screen.getByTestId("notification-time")
-    const toggle = screen.getByTestId("row-read-toggle")
-    // The timestamp's group (bottom-LEFT) does NOT contain the read link — the
-    // link is a separate flex child pinned to the bottom-RIGHT (justify-between),
-    // so they can't crowd together in one corner.
-    const leftGroup = time.parentElement
-    expect(leftGroup).not.toBeNull()
-    expect(leftGroup!.contains(toggle)).toBe(false)
-    // Both live in the same bottom line (justify-between row).
-    const bottomLine = leftGroup!.parentElement
-    expect(bottomLine!.contains(time)).toBe(true)
-    expect(bottomLine!.contains(toggle)).toBe(true)
+    const dot = screen.getByTestId("notification-read-dot")
+    expect(dot).toBeInTheDocument()
+    // NOT hidden on hover: unlike the abandoned collision-fix, the dot carries no
+    // hidden / group-hover token — it renders regardless of hover state.
+    expect(dot.className).not.toContain("hidden")
+    expect(dot.className).not.toContain("group-hover")
+    // Still present after actually hovering the row (not conditionally unmounted).
+    await user.hover(screen.getByTestId("notification-row"))
+    expect(screen.getByTestId("notification-read-dot")).toBeInTheDocument()
   })
 
-  it("STEP 2: clicking the toggle flips the row read-state + dot in lockstep, and reverses", async () => {
+  it("HoneyBook layout: the top-right dot and the bottom-right action zone are SEPARATE containers (cannot occupy the same corner)", () => {
+    render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
+    const row = screen.getByTestId("notification-row")
+    const dot = screen.getByTestId("notification-read-dot")
+    const zone = screen.getByTestId("notification-action-zone")
+    // Neither container nests the other — they are distinct subtrees.
+    expect(zone.contains(dot)).toBe(false)
+    expect(dot.contains(zone)).toBe(false)
+    // The dot is a DIRECT child of the row (absolute top-right corner); the
+    // action zone is nested inside the right column, pinned to the bottom band.
+    expect(dot.parentElement).toBe(row)
+    expect(zone.parentElement).not.toBe(row)
+    // Supporting structural evidence of the top vs bottom vertical bands: the dot
+    // is top-anchored, the zone is bottom-pinned (mt-auto), and the row reserves
+    // min height so the bands never meet.
+    expect(dot.className).toContain("top-3")
+    expect(zone.className).toContain("mt-auto")
+    expect(row.className).toContain("min-h-[88px]")
+  })
+
+  it("HoneyBook layout: renders the category icon glyph per registry category (payments → DollarSign, messages → Mail)", () => {
+    // payment.received → category "payments" → DollarSign
+    const { unmount } = render(
+      <NotificationRow notification={makeNotification({ type: "payment.received" })} onRefresh={vi.fn()} />,
+    )
+    const payIcon = screen.getByTestId("notification-category-icon")
+    expect(payIcon).toHaveAttribute("data-category", "payments")
+    expect(payIcon.querySelector(".lucide-dollar-sign")).not.toBeNull()
+    unmount()
+
+    // email.reply_received → category "messages_email" → Mail
+    render(
+      <NotificationRow
+        notification={makeNotification({ type: "email.reply_received" })}
+        onRefresh={vi.fn()}
+      />,
+    )
+    const mailIcon = screen.getByTestId("notification-category-icon")
+    expect(mailIcon).toHaveAttribute("data-category", "messages_email")
+    expect(mailIcon.querySelector(".lucide-mail")).not.toBeNull()
+  })
+
+  it("HoneyBook layout: unknown type keys fall back to the System category icon (Settings)", () => {
+    render(
+      <NotificationRow
+        notification={makeNotification({ type: "totally.unknown_type" })}
+        onRefresh={vi.fn()}
+      />,
+    )
+    const icon = screen.getByTestId("notification-category-icon")
+    expect(icon).toHaveAttribute("data-category", "system")
+    expect(icon.querySelector(".lucide-settings")).not.toBeNull()
+  })
+
+  it("clicking the toggle flips the row read-state + dot in lockstep, and reverses", async () => {
     vi.mocked(markNotificationRead).mockClear()
     vi.mocked(markNotificationUnread).mockClear()
     const user = userEvent.setup()

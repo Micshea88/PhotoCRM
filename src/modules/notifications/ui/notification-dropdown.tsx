@@ -135,7 +135,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
   const loading = items === null
 
   return (
-    <div className="flex w-[400px] flex-col" data-testid="notification-dropdown">
+    <div className="flex w-[448px] flex-col" data-testid="notification-dropdown">
       {/* ── Header ── */}
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
         <span className="text-sm font-semibold">Notifications</span>

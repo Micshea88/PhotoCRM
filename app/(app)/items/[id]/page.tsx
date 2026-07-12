@@ -20,7 +20,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     <PageContainer variant="default" className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">{item.name}</h1>
+          <h1 className="font-serif text-2xl font-semibold">{item.name}</h1>
           <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Status: {item.status}</p>
         </div>
         <div className="flex gap-2">

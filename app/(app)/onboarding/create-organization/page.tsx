@@ -30,7 +30,7 @@ export default async function CreateOrganizationPage() {
             <PendingInvitationsBanner invitations={pendingInvitations} />
           )}
           <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-semibold">Create your studio</h1>
+            <h1 className="font-serif text-2xl font-semibold">Create your studio</h1>
             <p className="text-sm text-[var(--color-muted-foreground)]">
               {pendingInvitations.length > 0
                 ? "Or set up your own studio below."

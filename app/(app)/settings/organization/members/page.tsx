@@ -42,7 +42,7 @@ export default async function OrgMembersPage() {
 
   return (
     <PageContainer variant="default">
-      <h1 className="text-2xl font-semibold">Members</h1>
+      <h1 className="font-serif text-2xl font-semibold">Members</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Invite, manage, and remove members of your organization.
       </p>

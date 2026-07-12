@@ -74,7 +74,7 @@ export default async function NewContactPage() {
     <PageContainer variant="narrow" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">New contact</h1>
+          <h1 className="font-serif text-2xl font-semibold">New contact</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Person record. Permanent details that don&apos;t change between projects.
           </p>

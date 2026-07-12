@@ -6,7 +6,9 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-card-foreground)] shadow-sm",
+        // Reskin: soft, rounded, warm cards — larger radius + a softer/larger
+        // shadow carries the elevation, so the border is lightened to /60.
+        "rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-card)] text-[var(--color-card-foreground)] shadow-[0_1px_3px_rgba(43,39,32,0.06),0_6px_16px_-4px_rgba(43,39,32,0.08)]",
         className,
       )}
       {...props}

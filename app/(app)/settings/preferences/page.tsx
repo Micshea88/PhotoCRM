@@ -14,7 +14,7 @@ export default async function PreferencesSettingsPage() {
 
   return (
     <PageContainer variant="narrow">
-      <h1 className="text-2xl font-semibold">Preferences</h1>
+      <h1 className="font-serif text-2xl font-semibold">Preferences</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Org-wide defaults for sharing and delivery.
       </p>

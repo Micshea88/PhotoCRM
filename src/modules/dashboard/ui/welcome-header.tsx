@@ -11,7 +11,7 @@ export interface WelcomeHeaderProps {
 export function WelcomeHeader({ userFirstName, studioName }: WelcomeHeaderProps) {
   return (
     <header className="space-y-1">
-      <h1 className="text-2xl font-semibold">
+      <h1 className="font-serif text-2xl font-semibold">
         Welcome, {userFirstName} — {studioName}
       </h1>
       <p className="text-sm text-[var(--color-muted-foreground)]">

@@ -68,7 +68,7 @@ export default async function IntegrationsSettingsPage({
   return (
     <PageContainer variant="default" className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Integrations</h1>
+        <h1 className="font-serif text-2xl font-semibold">Integrations</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
           Connect phone, calendar, email, and payment providers so the CRM can talk to the tools you
           already use.

@@ -590,7 +590,7 @@ export function ContactMergeSideBySide({
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" /> Back
           </a>
-          <h1 className="text-xl font-semibold">Merge contacts</h1>
+          <h1 className="font-serif text-xl font-semibold">Merge contacts</h1>
         </div>
         <div className="flex items-center gap-3">
           <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted-foreground)]">

@@ -80,7 +80,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
     <PageContainer variant="narrow" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Edit contact</h1>
+          <h1 className="font-serif text-2xl font-semibold">Edit contact</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Update any field. The full HubSpot-style inline-editing detail page ships later; this
             form is the V1 way to change contact data.

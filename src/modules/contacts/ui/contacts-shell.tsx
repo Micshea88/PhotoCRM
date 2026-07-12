@@ -183,7 +183,7 @@ export function ContactsShell({
        */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Contacts</h1>
+          <h1 className="font-serif text-2xl font-semibold">Contacts</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             People — the permanent record. Switch views to slice the list, customize columns, or
             save a new view.

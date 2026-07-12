@@ -39,7 +39,7 @@ export default async function ContactsArchivedPage() {
         >
           ← Contacts
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Archived</h1>
+        <h1 className="mt-1 font-serif text-2xl font-semibold">Archived</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Contacts you&apos;ve archived. Restore at any time — no auto-purge.
         </p>

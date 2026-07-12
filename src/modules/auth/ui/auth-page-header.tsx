@@ -31,7 +31,9 @@ export function AuthPageHeader({
   const isInviteFlow = typeof redirect === "string" && redirect.startsWith("/accept-invite/")
   return (
     <div className="space-y-2 text-center">
-      <h1 className="text-2xl font-semibold">{isInviteFlow ? inviteTitle : defaultTitle}</h1>
+      <h1 className="font-serif text-2xl font-semibold">
+        {isInviteFlow ? inviteTitle : defaultTitle}
+      </h1>
       <p className="text-sm text-[var(--color-muted-foreground)]">
         {isInviteFlow ? inviteSubtitle : defaultSubtitle}
       </p>

@@ -15,7 +15,7 @@ export default async function OrganizationSettingsPage() {
 
   return (
     <PageContainer variant="narrow">
-      <h1 className="text-2xl font-semibold">Organization</h1>
+      <h1 className="font-serif text-2xl font-semibold">Organization</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Update your organization details.
       </p>

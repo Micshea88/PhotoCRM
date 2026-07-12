@@ -53,7 +53,7 @@ export default async function ContactsImportPage() {
     <PageContainer variant="full" className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Import contacts</h1>
+          <h1 className="font-serif text-2xl font-semibold">Import contacts</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Upload a CSV (max 10,000 rows). We&apos;ll match against existing contacts by email,
             then phone, and let you confirm each action before importing.

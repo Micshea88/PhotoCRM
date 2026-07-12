@@ -52,7 +52,7 @@ export default async function ContactsDeletedPage() {
         >
           ← Contacts
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Deleted contacts</h1>
+        <h1 className="mt-1 font-serif text-2xl font-semibold">Deleted contacts</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Restore within 90 days before permanent purge.
         </p>

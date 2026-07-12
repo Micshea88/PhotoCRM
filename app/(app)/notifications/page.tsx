@@ -18,7 +18,7 @@ export default function NotificationsPage() {
           horizontal gutter (LAW 6 — no page-owned px). */}
       <div className="border-b border-[var(--color-border)] py-4">
         <PageContainer variant="full">
-          <h1 className="text-lg font-semibold">Notifications</h1>
+          <h1 className="font-serif text-lg font-semibold">Notifications</h1>
         </PageContainer>
       </div>
       <div className="flex-1 overflow-y-auto py-6">

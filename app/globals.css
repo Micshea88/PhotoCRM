@@ -3,18 +3,18 @@
 
 @theme {
   /* ========== SURFACES — cream family ========== */
-  --color-background: oklch(0.959 0 0); /* #f4f1ea page cream */
+  --color-background: oklch(0.9585 0.0098 87.5); /* #f4f1ea page cream */
   --color-foreground: oklch(0.275 0.014 81.7); /* #2b2720 warm ink */
-  --color-card: oklch(0.993 0 0); /* #fefdf8 card white */
+  --color-card: oklch(0.9934 0.0067 97.3); /* #fefdf8 card white */
   --color-card-foreground: oklch(0.275 0.014 81.7);
-  --color-popover: oklch(0.993 0 0);
+  --color-popover: oklch(0.9934 0.0067 97.3); /* #fefdf8 */
   --color-popover-foreground: oklch(0.275 0.014 81.7);
   --color-muted: oklch(0.928 0.017 91.6); /* #ebe7db deeper cream */
   --color-muted-foreground: oklch(0.623 0.017 94.3); /* #8a877c warm grey */
   --color-border: oklch(0.882 0.017 91.6); /* #dcd8cc hairline */
   --color-input: oklch(0.882 0.017 91.6);
   --color-sidebar: oklch(0.275 0.014 81.7); /* #2b2720 dark rail/hero */
-  --color-sidebar-foreground: oklch(0.959 0 0);
+  --color-sidebar-foreground: oklch(0.9585 0.0098 87.5); /* #f4f1ea */
 
   /* ========== BRAND ========== */
   --color-primary: oklch(0.415 0.032 151.5); /* #3f5143 forest-olive */

@@ -10,7 +10,7 @@ export default async function NewItemPage() {
 
   return (
     <PageContainer variant="narrow" className="space-y-6">
-      <h1 className="text-2xl font-semibold">New item</h1>
+      <h1 className="font-serif text-2xl font-semibold">New item</h1>
       <ItemForm />
     </PageContainer>
   )

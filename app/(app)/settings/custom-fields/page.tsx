@@ -115,7 +115,7 @@ export default async function CustomFieldsSettingsPage({
         >
           ← Dashboard
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Custom fields</h1>
+        <h1 className="mt-1 font-serif text-2xl font-semibold">Custom fields</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Tailor what data your studio captures on each record type. Custom fields appear in the
           create/edit forms for the matching entity.

@@ -29,7 +29,7 @@ export function CategoryDetail({ category }: { category: IntegrationCategory }) 
       </div>
 
       <header>
-        <h1 className="text-xl font-semibold">{category.name}</h1>
+        <h1 className="font-serif text-xl font-semibold">{category.name}</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
           {category.capabilityDescription}
         </p>

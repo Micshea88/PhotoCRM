@@ -149,7 +149,7 @@ export function ProviderDetail({
         <ProviderIcon iconKey={provider.iconKey} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold">{provider.name}</h1>
+            <h1 className="font-serif text-xl font-semibold">{provider.name}</h1>
             {isConnected ? <ConnectedBadge providerId={provider.id} /> : null}
           </div>
           <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">

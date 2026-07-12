@@ -21,6 +21,7 @@ Phase 4b — the one documented exception to "preserve byte-for-byte.")
 
 NOTIFICATION SPACING IS LOCKED — recolor + reshape buttons only, never touch geometry.
 In `src/modules/notifications/ui/`:
+
 - Dropdown width `w-[448px]` (`notification-dropdown.tsx:138`) — unchanged.
 - Row floor `min-h-[88px]` (`notification-row.tsx:363`) — unchanged; reserves ~8px
   clearance between bottom-right action zone and top-right dot. Don't alter row
@@ -50,6 +51,7 @@ color/radius/type value in a component.
 ## PHASE 0 — Regression guardrails first
 
 Add Playwright specs asserting the observable result (LAW 7):
+
 1. `tests/e2e/notifications-geometry.spec.ts`
    - Open bell dropdown; assert `[data-testid="notification-dropdown"]` computed
      `width === 448px`.
@@ -95,18 +97,18 @@ reference these only.
 
     @theme {
       /* ========== SURFACES — cream family ========== */
-      --color-background:            oklch(0.959 0 0);         /* #f4f1ea page cream */
+      --color-background:            oklch(0.9585 0.0098 87.5); /* #f4f1ea page cream (4c FIX A) */
       --color-foreground:            oklch(0.275 0.014 81.7);  /* #2b2720 warm ink */
-      --color-card:                  oklch(0.993 0 0);         /* #fefdf8 card white */
+      --color-card:                  oklch(0.9934 0.0067 97.3); /* #fefdf8 card white (4c FIX A) */
       --color-card-foreground:       oklch(0.275 0.014 81.7);
-      --color-popover:               oklch(0.993 0 0);
+      --color-popover:               oklch(0.9934 0.0067 97.3); /* #fefdf8 (4c FIX A) */
       --color-popover-foreground:    oklch(0.275 0.014 81.7);
       --color-muted:                 oklch(0.928 0.017 91.6);  /* #ebe7db deeper cream */
       --color-muted-foreground:      oklch(0.623 0.017 94.3);  /* #8a877c warm grey */
       --color-border:                oklch(0.882 0.017 91.6);  /* #dcd8cc hairline */
       --color-input:                 oklch(0.882 0.017 91.6);
       --color-sidebar:               oklch(0.275 0.014 81.7);  /* #2b2720 dark rail/hero */
-      --color-sidebar-foreground:    oklch(0.959 0 0);
+      --color-sidebar-foreground:    oklch(0.9585 0.0098 87.5); /* #f4f1ea (4c FIX A) */
 
       /* ========== BRAND ========== */
       --color-primary:               oklch(0.415 0.032 151.5); /* #3f5143 forest-olive */
@@ -193,10 +195,10 @@ Create in the repo's shared-UI location (e.g. `src/modules/shared/ui/`):
     `w-full px-6 mx-auto max-w-[1100px]`.
   - `variant="narrow"` — fluid up to a tight ~66ch ceiling for single-column forms/text:
     `w-full px-6 mx-auto max-w-[720px]`.
-  Keep both ceilings as named constants (one-line adjustable).
+    Keep both ceilings as named constants (one-line adjustable).
 - `PageHeader` — title / optional description / optional actions slot. Title uses
   `font-serif`; supports an italic emphasis span for a headline word (the wireframe
-  "*Photographer's*" treatment) via `<em>`/`italic` inside the title. Description +
+  "_Photographer's_" treatment) via `<em>`/`italic` inside the title. Description +
   actions use `font-sans`.
 - `PageSection` — grouped block with consistent vertical spacing; optional `font-serif`
   section title.
@@ -277,6 +279,7 @@ Commit: `fix(contacts): container-query reflow for detail 3-column layout`.
 ## PHASE 5 — Hardcoded colors → tokens (one commit per module)
 
 Across the ~49 files:
+
 - `red-*` → `destructive` / `destructive`-tint.
 - `amber-*` / `yellow-*` → `warning` / `warning`-tint.
 - `emerald-*` / `green-*` → `success` / `success`-tint. Includes Task-18 delivery chip
@@ -341,3 +344,61 @@ No `text-[Npx]` remains. Commit: `refactor(type): micro-fonts → scale tokens`.
   `0015_assignment_scoped_rls_overlay.sql` ("relation projects does not exist") — earlier
   than the ~0035 drift previously scoped. Fixing that replay is a SEPARATE workstream; do
   not attempt it here.
+
+---
+
+# Remaining reskin work (appended) — order: 4c → 4b → 4d → 5 → 6 → 7
+
+All part of THIS reskin pass. Re-push the preview after 4c and after 4d.
+
+## PHASE 4c — Palette + type + card corrections (do FIRST; foundation Phase 5 stacks on)
+
+- FIX A — surfaces rendered grey (oklch conversion zeroed the warmth). In
+  `app/globals.css` @theme (and this plan's @theme block, done above):
+  `--color-background: oklch(0.9585 0.0098 87.5)` (#f4f1ea),
+  `--color-card / --color-popover: oklch(0.9934 0.0067 97.3)` (#fefdf8),
+  `--color-sidebar-foreground: oklch(0.9585 0.0098 87.5)` (#f4f1ea).
+- FIX B — nav sidebar was white (wrong token). In `app-sidebar-nav.tsx` recolor ONLY (keep
+  labeled-nav structure, no icon-only rail): container → `bg-[var(--color-sidebar)]` +
+  `border-[var(--color-sidebar-foreground)]/10`; resting text →
+  `text-[var(--color-sidebar-foreground)]/70`; hover →
+  `hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]`;
+  active → `bg-[var(--color-sidebar-foreground)]/15 text-[var(--color-sidebar-foreground)]`;
+  chevron + section labels same. The collapsed-nav flyout stays a light popover
+  (`bg-[var(--color-popover)]`).
+- FIX C — serif display font applied nowhere. Add `font-serif` to PAGE-TITLE h1s app-wide
+  (via PageHeader or directly) + large dashboard KPI numbers. Body/labels/table cells/small
+  section labels stay sans. Do NOT touch the notification dropdown/rows.
+- FIX D — cards flat/sharp. In `components/ui/card.tsx`: `rounded-lg → rounded-xl`,
+  `shadow-sm → softer/larger shadow`, border → `/60` so the shadow carries elevation.
+
+After 4c: build + Phase-0 specs #1/#2 green, then re-push so Mike re-looks.
+
+## PHASE 4b — Contact detail column reflow (as specified above; container queries,
+
+## 3→2→tabbed, floored middle, + the red→green reflow spec). Then push.
+
+## PHASE 4d — Contacts list restructure (INTENTIONAL change to a protected page; own commit,
+
+## own before/after review, behavior preserved). Target `contacts-shell.tsx`:
+
+1. Delete the description `<p>` "People — the permanent record…" (contacts-shell.tsx:188).
+2. Move Saved Views from the top strip (`SavedViewsTabStrip`, ~:207) into a LEFT collapsible
+   panel. New structure: Row 1 title+actions (unchanged); Row 2 search + filter chips +
+   More filters; Row 3 two-column `[ left: collapsible Saved Views panel ][ right:
+ContactsTable ]`. Panel = its own LIGHT card (`bg-[var(--color-card)]`, subtle border,
+   rounded-xl — visually distinct from the dark nav), lists views vertically with active
+   highlighted (`bg-[var(--color-primary)] text-[var(--color-primary-foreground)]`),
+   collapsible with persisted state (independent of the main nav), reusing
+   SavedViewsTabStrip's logic rendered vertically (new SavedViewsPanel / vertical variant —
+   don't reimplement). Fluid (LAW 6): below a narrow breakpoint the panel collapses / becomes
+   a dropdown and the table goes full width.
+3. Shorten the search input (cap ~max-w-md, left-aligned) in ContactsFilterBar; keep chips +
+   More filters in place.
+4. No other button placement changes; do NOT touch the contact card / detail page.
+   Verify build + Phase-0 specs; re-push. Commit:
+   `feat(contacts): saved-views left panel + shortened search + drop description`.
+
+## PHASE 5 → 6 → 7 — as specified above. Phase 5 also covers palette classes introduced by
+
+## the new Saved Views panel (4d) and the scan-diagnostics inline hex.

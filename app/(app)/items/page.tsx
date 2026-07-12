@@ -17,7 +17,7 @@ export default async function ItemsPage() {
     <PageContainer variant="full" className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Items</h1>
+          <h1 className="font-serif text-2xl font-semibold">Items</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Worked-example feature. Copy this module to add new features.
           </p>

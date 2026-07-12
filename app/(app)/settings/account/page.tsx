@@ -9,7 +9,7 @@ export default async function AccountSettingsPage() {
 
   return (
     <PageContainer variant="narrow">
-      <h1 className="text-2xl font-semibold">Account</h1>
+      <h1 className="font-serif text-2xl font-semibold">Account</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Update your name, email, and password.
       </p>

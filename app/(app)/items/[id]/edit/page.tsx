@@ -16,7 +16,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
 
   return (
     <PageContainer variant="narrow" className="space-y-6">
-      <h1 className="text-2xl font-semibold">Edit item</h1>
+      <h1 className="font-serif text-2xl font-semibold">Edit item</h1>
       <ItemForm
         itemId={item.id}
         initial={{

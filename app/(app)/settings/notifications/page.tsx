@@ -21,7 +21,7 @@ export default async function NotificationSettingsPage() {
 
     return (
       <PageContainer variant="narrow">
-        <h1 className="text-2xl font-semibold">Notification settings</h1>
+        <h1 className="font-serif text-2xl font-semibold">Notification settings</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
           Choose how you&apos;re notified for each type. Opens are tracked on your timeline, not
           sent as notifications.

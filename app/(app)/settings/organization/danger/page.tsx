@@ -20,7 +20,7 @@ export default async function DangerPage() {
 
   return (
     <PageContainer variant="narrow">
-      <h1 className="text-2xl font-semibold">Danger zone</h1>
+      <h1 className="font-serif text-2xl font-semibold">Danger zone</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Irreversible actions for owners only.
       </p>

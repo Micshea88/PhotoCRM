@@ -20,7 +20,7 @@ export function CountCard({ label, count, hint, className }: CountCardProps) {
       className={cn("space-y-2 rounded-lg border border-[var(--color-border)] p-4", className)}
     >
       <h2 className="text-sm font-medium text-[var(--color-muted-foreground)]">{label}</h2>
-      <p className="text-3xl font-semibold tabular-nums">{count}</p>
+      <p className="font-serif text-3xl font-semibold tabular-nums">{count}</p>
       {hint ? <p className="text-xs text-[var(--color-muted-foreground)]">{hint}</p> : null}
     </article>
   )

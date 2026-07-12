@@ -53,7 +53,7 @@ export default async function LeadSourcesSettingsPage() {
         >
           ← Contacts
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Lead sources</h1>
+        <h1 className="mt-1 font-serif text-2xl font-semibold">Lead sources</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Manage which lead sources appear in the contact form&apos;s Lead source dropdown. Hidden
           sources stay on existing contacts; deleted custom sources are wiped from every contact in

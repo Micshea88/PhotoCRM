@@ -74,7 +74,7 @@ export default async function IntegrationsCategoryPage({
     return (
       <PageContainer variant="default" className="space-y-6">
         <div>
-          <h1 className="text-xl font-semibold">Email</h1>
+          <h1 className="font-serif text-xl font-semibold">Email</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
             Connect your own mailbox so client email sends from you and replies log to the right
             contact automatically.

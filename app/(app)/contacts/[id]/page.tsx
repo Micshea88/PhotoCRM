@@ -274,7 +274,7 @@ export default async function ContactDetailPage({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold">
+          <h1 className="font-serif text-2xl font-semibold">
             {contactLabel(
               {
                 firstName: contact.firstName,

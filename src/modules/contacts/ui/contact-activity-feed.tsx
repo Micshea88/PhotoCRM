@@ -188,7 +188,7 @@ export function DispositionBadge({ disposition }: { disposition: string | null |
     <span
       data-testid={`disposition-badge-${disposition}`}
       className={cn(
-        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        "text-3xs shrink-0 rounded-full px-2 py-0.5 font-medium",
         DISPOSITION_BADGE_CLASSES[disposition],
       )}
     >
@@ -243,7 +243,7 @@ export function DeliveryStatusChip({
       data-testid={`delivery-status-chip-${status}`}
       title={showReason ? bounceReason : undefined}
       className={cn(
-        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        "text-3xs shrink-0 rounded-full px-2 py-0.5 font-medium",
         DELIVERY_CHIP_CLASSES[status],
       )}
     >
@@ -277,7 +277,7 @@ export function OpensPopout({
           type="button"
           onClick={toggle}
           data-testid="opens-popout-trigger"
-          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="text-3xs shrink-0 rounded px-1.5 py-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
         >
           ⓘ Opens: {openCount}
         </button>
@@ -917,7 +917,7 @@ function TypeChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full border px-2 py-0.5 text-[11px]",
+        "text-2xs rounded-full border px-2 py-0.5",
         active
           ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
           : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",
@@ -1053,7 +1053,7 @@ function EmailAttachments({
             </a>
             {a.deliveryMethod === "link" && (
               <>
-                <span className="text-[10px] text-[var(--color-muted-foreground)]">
+                <span className="text-3xs text-[var(--color-muted-foreground)]">
                   · Sent as link
                 </span>
                 {/* Secondary action: open the exact external URL the recipient
@@ -1063,7 +1063,7 @@ function EmailAttachments({
                     href={shareLinkPath(a.shareLinkToken)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-[var(--color-muted-foreground)] underline hover:text-[var(--color-foreground)]"
+                    className="text-2xs text-[var(--color-muted-foreground)] underline hover:text-[var(--color-foreground)]"
                     data-testid="activity-email-sharelink"
                   >
                     Open share link
@@ -1260,7 +1260,7 @@ export function ActivityCard({
             />
           </>
         )}
-        <time className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
+        <time className="text-2xs shrink-0 text-[var(--color-muted-foreground)]">
           {timeAgo(entry.timestamp)}
         </time>
         {canEdit && !editing && (
@@ -1367,7 +1367,7 @@ export function ActivityCard({
             data-testid={`activity-edit-body-${entry.kind}`}
             className="w-full resize-y border-0 border-b border-[var(--color-primary)] bg-transparent p-1 text-sm focus:outline-none disabled:opacity-50"
           />
-          {saving && <p className="text-[11px] text-[var(--color-muted-foreground)]">Saving…</p>}
+          {saving && <p className="text-2xs text-[var(--color-muted-foreground)]">Saving…</p>}
           {error && (
             <p
               className="text-xs text-[var(--color-destructive)]"

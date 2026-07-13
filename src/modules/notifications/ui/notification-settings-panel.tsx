@@ -207,7 +207,7 @@ export function NotificationSettingsPanel({ prefs }: NotificationSettingsPanelPr
             <h2 className="text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
               {section.label}
             </h2>
-            <div className="flex items-center gap-6 pr-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+            <div className="text-3xs flex items-center gap-6 pr-1 font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
               <span className="w-9 text-center">Bell</span>
               <span className="w-9 text-center">Email</span>
               <span className="w-9 text-center">Mobile</span>
@@ -244,7 +244,7 @@ export function NotificationSettingsPanel({ prefs }: NotificationSettingsPanelPr
                       <span className="mt-0.5 flex items-center gap-1 text-xs text-[var(--color-muted-foreground)]">
                         <span
                           aria-label="Info"
-                          className="flex size-3.5 items-center justify-center rounded-full border border-current text-[9px] leading-none"
+                          className="text-4xs flex size-3.5 items-center justify-center rounded-full border border-current leading-none"
                         >
                           i
                         </span>

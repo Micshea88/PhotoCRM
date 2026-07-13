@@ -67,7 +67,7 @@ export function AiSummaryCard({
           No summary cached yet — click Regenerate to produce one.
         </p>
       )}
-      <footer className="text-[11px] text-[var(--color-muted-foreground)]">
+      <footer className="text-2xs text-[var(--color-muted-foreground)]">
         {generatedAt ? `Updated ${timeAgo(generatedAt)}` : "Not generated yet"}
         {generationModel && <span className="ml-1 opacity-70">· via {generationModel}</span>}
         {refreshing && <span className="ml-1 opacity-70">· Refreshing…</span>}

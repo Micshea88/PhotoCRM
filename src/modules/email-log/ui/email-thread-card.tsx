@@ -99,7 +99,7 @@ function SingleThread({ messages }: { messages: EmailThreadEntry[] }) {
         )}
         <Mail className="text-muted-foreground size-4" aria-hidden="true" />
         <span className="text-sm font-medium">{subject}</span>
-        <span className="bg-muted text-muted-foreground ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium">
+        <span className="bg-muted text-muted-foreground text-3xs ml-auto shrink-0 rounded-full px-2 py-0.5 font-medium">
           Thread ({String(replyCount)} {replyCount === 1 ? "reply" : "replies"})
         </span>
       </button>

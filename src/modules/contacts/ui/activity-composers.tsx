@@ -744,7 +744,7 @@ function ConnectGate({
       >
         Connect
       </Button>
-      <p className="text-[11px] text-[var(--color-muted-foreground)]">{shipTarget}</p>
+      <p className="text-2xs text-[var(--color-muted-foreground)]">{shipTarget}</p>
     </div>
   )
 }

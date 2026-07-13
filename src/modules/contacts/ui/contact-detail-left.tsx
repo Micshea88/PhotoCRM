@@ -494,7 +494,7 @@ export function ContactDetailLeft({
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-medium text-[var(--color-muted-foreground)]">{children}</p>
+  return <p className="text-2xs font-medium text-[var(--color-muted-foreground)]">{children}</p>
 }
 
 function AboutRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -634,8 +634,8 @@ function InlineEditTags({
           void commit(draft)
         }}
       />
-      {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
-      {error && <p className="text-[11px] text-[var(--color-destructive)]">{error}</p>}
+      {saving && <p className="text-3xs text-[var(--color-muted-foreground)]">Saving…</p>}
+      {error && <p className="text-2xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

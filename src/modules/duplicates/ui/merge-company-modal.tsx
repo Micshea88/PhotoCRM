@@ -271,7 +271,7 @@ function CompanyMergeModalBody({
                   <th key={r.id} className="py-1">
                     {r.name}
                     {r.id === primaryId && (
-                      <span className="ml-1 rounded-full bg-[var(--color-muted)] px-1.5 text-[10px]">
+                      <span className="text-3xs ml-1 rounded-full bg-[var(--color-muted)] px-1.5">
                         primary
                       </span>
                     )}

@@ -378,7 +378,7 @@ function BulkEditDrawerBody({
                           />
                           <span>{f.label}</span>
                           {f.destructive && (
-                            <span className="ml-auto text-[10px] text-[var(--color-destructive)]">
+                            <span className="text-3xs ml-auto text-[var(--color-destructive)]">
                               destructive
                             </span>
                           )}

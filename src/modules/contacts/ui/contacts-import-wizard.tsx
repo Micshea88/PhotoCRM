@@ -1160,7 +1160,7 @@ function MapStep({
                       valuePrefix={
                         showAiPill ? (
                           <span
-                            className="inline-flex items-center gap-0.5 rounded-sm bg-[var(--color-primary)]/15 px-1 py-0 text-[10px] font-medium tracking-wide text-[var(--color-primary)]"
+                            className="text-3xs inline-flex items-center gap-0.5 rounded-sm bg-[var(--color-primary)]/15 px-1 py-0 font-medium tracking-wide text-[var(--color-primary)]"
                             title="AI-suggested mapping"
                             data-testid={`csv-v2-ai-pill-${String(i)}`}
                           >
@@ -1398,7 +1398,7 @@ export function PreviewStep({
       >
         {/* Section 1 — Owner */}
         <fieldset className="min-w-[200px] space-y-1.5">
-          <legend className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+          <legend className="text-2xs font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
             Owner
           </legend>
           <label className="flex items-center gap-2">
@@ -1467,7 +1467,7 @@ export function PreviewStep({
 
         {/* Section 2 — Tag every imported contact */}
         <fieldset className="min-w-[220px] space-y-1.5">
-          <legend className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+          <legend className="text-2xs font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
             Tag every imported
           </legend>
           <BulkTagPicker tags={bulkTags} onChange={onBulkTagsChange} existingTags={existingTags} />
@@ -1478,7 +1478,7 @@ export function PreviewStep({
 
         {/* Section 3 — Set all matched rows to */}
         <div className="min-w-[200px] space-y-1.5">
-          <p className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+          <p className="text-2xs font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
             Set all matched rows to
           </p>
           <CompactSetAll
@@ -1493,7 +1493,7 @@ export function PreviewStep({
 
         {/* Section 4 — Set all unmatched rows to */}
         <div className="min-w-[200px] space-y-1.5">
-          <p className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+          <p className="text-2xs font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
             Set all unmatched rows to
           </p>
           <CompactSetAll
@@ -1577,17 +1577,17 @@ export function PreviewStep({
                       <span>
                         {fullName || <em className="text-[var(--color-muted-foreground)]">—</em>}
                       </span>
-                      <span className="text-[10px] text-[var(--color-muted-foreground)]">
+                      <span className="text-3xs text-[var(--color-muted-foreground)]">
                         row {String(c.rowIndex)}
                       </span>
                     </div>
                     {hasError && (
-                      <p className="mt-1 text-[11px] font-medium text-[var(--color-destructive)]">
+                      <p className="text-2xs mt-1 font-medium text-[var(--color-destructive)]">
                         {c.errors.join("; ")}
                       </p>
                     )}
                     {!hasError && hasWarning && (
-                      <p className="mt-1 text-[11px] text-[var(--color-warning)]">
+                      <p className="text-2xs mt-1 text-[var(--color-warning)]">
                         {c.warnings.join("; ")}
                       </p>
                     )}
@@ -1738,7 +1738,7 @@ function MetricCard({
       className={`rounded-md border px-3 py-2 ${toneClasses}`}
       data-testid={`csv-v2-metric-${label.toLowerCase()}`}
     >
-      <p className="text-[10px] font-medium tracking-wide uppercase opacity-70">{label}</p>
+      <p className="text-3xs font-medium tracking-wide uppercase opacity-70">{label}</p>
       <p className="mt-0.5 text-lg leading-tight font-semibold">{String(value)}</p>
     </div>
   )

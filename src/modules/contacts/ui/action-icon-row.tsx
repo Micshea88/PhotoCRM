@@ -261,7 +261,7 @@ function IconButton({
   const inner = (
     <>
       <span className={circleClass}>{icon}</span>
-      <span className="text-[11px] text-[var(--color-muted-foreground)]">{label}</span>
+      <span className="text-2xs text-[var(--color-muted-foreground)]">{label}</span>
     </>
   )
   if (href && !disabled) {

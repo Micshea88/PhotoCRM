@@ -118,7 +118,7 @@ export function CalendarRange({
           <ChevronRight className="size-4" />
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-[var(--color-muted-foreground)]">
+      <div className="text-3xs grid grid-cols-7 gap-0.5 text-center text-[var(--color-muted-foreground)]">
         {WEEKDAY_LABELS.map((w) => (
           <span key={w}>{w}</span>
         ))}

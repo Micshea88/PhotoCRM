@@ -283,7 +283,7 @@ export function AssociationsSection({
                   setPickerOpen(true)
                 }}
                 data-testid="add-association"
-                className="ml-1 rounded border border-dashed border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-primary)] hover:bg-[var(--color-accent)]/30"
+                className="text-2xs ml-1 rounded border border-dashed border-[var(--color-border)] px-2 py-0.5 text-[var(--color-primary)] hover:bg-[var(--color-accent)]/30"
               >
                 + Add association
               </button>
@@ -340,7 +340,7 @@ export function FollowUpTaskAffordance() {
           <option>In 3 months</option>
         </select>
       </label>
-      <p className="text-[10px] text-[var(--color-muted-foreground)]">
+      <p className="text-3xs text-[var(--color-muted-foreground)]">
         Contact-scoped follow-up tasks ship in Push 7.
       </p>
     </div>

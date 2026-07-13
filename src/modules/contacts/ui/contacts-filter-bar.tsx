@@ -403,7 +403,7 @@ function ChipSearchList({
                   <span className="flex flex-col truncate">
                     <span className="truncate">{item.label}</span>
                     {item.description && (
-                      <span className="truncate text-[10px] text-[var(--color-muted-foreground)]">
+                      <span className="text-3xs truncate text-[var(--color-muted-foreground)]">
                         {item.description}
                       </span>
                     )}

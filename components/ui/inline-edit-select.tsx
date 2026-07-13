@@ -206,8 +206,8 @@ export function InlineEditSelect({
           }}
         />
       )}
-      {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
-      {error && <p className="text-[11px] text-[var(--color-destructive)]">{error}</p>}
+      {saving && <p className="text-3xs text-[var(--color-muted-foreground)]">Saving…</p>}
+      {error && <p className="text-2xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

@@ -607,7 +607,7 @@ export function NotificationsPageClient() {
           <div role="list">
             {groups.map((group) => (
               <div key={group.label}>
-                <div className="bg-[var(--color-muted)]/30 px-4 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                <div className="text-3xs bg-[var(--color-muted)]/30 px-4 py-1.5 font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
                   {group.label}
                 </div>
                 {group.items.map((n) => (

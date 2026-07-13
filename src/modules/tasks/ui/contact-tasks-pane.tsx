@@ -555,7 +555,7 @@ function TaskRow({
         <span className={cn(dueStateTextClass(dueState))}>{task.title}</span>
       </span>
       {task.eventName && (
-        <span className="shrink-0 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[10px] text-[var(--color-muted-foreground)]">
+        <span className="text-3xs shrink-0 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[var(--color-muted-foreground)]">
           {task.eventName}
         </span>
       )}
@@ -566,13 +566,13 @@ function TaskRow({
         variant="avatar"
       />
       {done && task.completedAt ? (
-        <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
+        <span className="text-2xs shrink-0 text-[var(--color-muted-foreground)] tabular-nums">
           Completed {formatDate(task.completedAt)}
         </span>
       ) : task.dueDate ? (
         <span
           className={cn(
-            "shrink-0 text-[11px] tabular-nums",
+            "text-2xs shrink-0 tabular-nums",
             dueStateTextClass(dueState) || "text-[var(--color-muted-foreground)]",
           )}
         >
@@ -584,7 +584,7 @@ function TaskRow({
         onClick={() => {
           setEditing(true)
         }}
-        className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--color-foreground)]"
+        className="text-2xs shrink-0 text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--color-foreground)]"
         data-testid="contact-task-edit"
       >
         Edit
@@ -594,7 +594,7 @@ function TaskRow({
         onClick={() => {
           setDeleteOpen(true)
         }}
-        className="shrink-0 text-[11px] text-[var(--color-destructive)] opacity-0 transition group-hover:opacity-100"
+        className="text-2xs shrink-0 text-[var(--color-destructive)] opacity-0 transition group-hover:opacity-100"
         data-testid="contact-task-delete"
       >
         Delete

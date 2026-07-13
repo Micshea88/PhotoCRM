@@ -107,7 +107,7 @@ export function AddNoteModal({
         return window.confirm("Discard this note?")
       }}
       footer={
-        <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="text-2xs flex items-center justify-between gap-2">
           {error ? (
             <span className="text-[var(--color-destructive)]">{error}</span>
           ) : (

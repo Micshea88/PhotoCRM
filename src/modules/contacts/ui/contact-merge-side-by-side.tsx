@@ -832,14 +832,14 @@ function RecordHeader({
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{recordLabel(record)}</p>
-          <p className="truncate text-[11px] text-[var(--color-muted-foreground)]">
+          <p className="text-2xs truncate text-[var(--color-muted-foreground)]">
             {record.primaryEmail ?? "—"}
           </p>
         </div>
       </div>
       {isPrimary ? (
         <span
-          className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2 py-0.5 text-[11px] font-medium text-[var(--color-primary)]"
+          className="text-2xs inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2 py-0.5 font-medium text-[var(--color-primary)]"
           data-testid={`merge-primary-pill-${record.id}`}
         >
           <Crown className="size-3" aria-hidden="true" /> Primary — kept
@@ -848,7 +848,7 @@ function RecordHeader({
         <button
           type="button"
           onClick={onSetPrimary}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[11px] font-medium hover:bg-[var(--color-accent)]/40"
+          className="text-2xs inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 font-medium hover:bg-[var(--color-accent)]/40"
           data-testid={`merge-set-primary-${record.id}`}
         >
           Set as primary
@@ -932,7 +932,7 @@ function ValueCell({
         )}
       </span>
       {edited && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-warning)]">
+        <span className="text-3xs inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/10 px-1.5 py-0.5 font-medium text-[var(--color-warning)]">
           <Pencil className="size-2.5" aria-hidden="true" /> edited
         </span>
       )}

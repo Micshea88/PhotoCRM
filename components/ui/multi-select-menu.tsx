@@ -118,7 +118,7 @@ export function MultiSelectMenu({
         >
           <span>{label}</span>
           {active && (
-            <span className="rounded-full bg-[var(--color-primary)]/10 px-1.5 text-[11px] tabular-nums">
+            <span className="text-2xs rounded-full bg-[var(--color-primary)]/10 px-1.5 tabular-nums">
               {values.length}
             </span>
           )}
@@ -168,22 +168,22 @@ export function MultiSelectMenu({
               shown.map((section, si) => {
                 const headerId = `${groupId}-${String(si)}`
                 return (
-                <div
-                  key={section.label || headerId}
-                  role="group"
-                  aria-labelledby={section.label ? headerId : undefined}
-                  aria-label={section.label ? undefined : label}
-                >
-                  {section.label && (
-                    <div
-                      id={headerId}
-                      className="px-2 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase"
-                    >
-                      {section.label}
-                    </div>
-                  )}
-                  <ul className="space-y-0.5">{section.options.map(renderOption)}</ul>
-                </div>
+                  <div
+                    key={section.label || headerId}
+                    role="group"
+                    aria-labelledby={section.label ? headerId : undefined}
+                    aria-label={section.label ? undefined : label}
+                  >
+                    {section.label && (
+                      <div
+                        id={headerId}
+                        className="text-2xs px-2 pt-1.5 pb-0.5 font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase"
+                      >
+                        {section.label}
+                      </div>
+                    )}
+                    <ul className="space-y-0.5">{section.options.map(renderOption)}</ul>
+                  </div>
                 )
               })
             )}

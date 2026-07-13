@@ -294,7 +294,7 @@ export function ActivityFilterStrip({
             }}
           />
           <span
-            className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
+            className="text-2xs shrink-0 text-[var(--color-muted-foreground)] tabular-nums"
             data-testid="activity-filter-count"
           >
             {shownCount}/{totalCount}

@@ -213,7 +213,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
           <div className="py-1">
             {groups.map((group) => (
               <div key={group.label}>
-                <div className="px-4 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                <div className="text-3xs px-4 py-1.5 font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
                   {group.label}
                 </div>
                 {group.items.map((n) => (

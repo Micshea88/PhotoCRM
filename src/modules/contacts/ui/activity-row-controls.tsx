@@ -73,7 +73,7 @@ function ChipTrigger({
       onClick={toggle}
       data-testid={testId}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+        "text-2xs inline-flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors",
         active
           ? "border-[var(--color-primary)] text-[var(--color-primary)]"
           : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",

@@ -257,7 +257,7 @@ export function ManageViewsDrawer({
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{v.name}</span>
                         {isSystemDefault && (
-                          <span className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)]">
+                          <span className="text-3xs rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[var(--color-muted-foreground)]">
                             System
                           </span>
                         )}

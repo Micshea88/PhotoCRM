@@ -58,7 +58,7 @@ function PlaceholderModal({
       onClose={onClose}
       title={title}
       footer={
-        <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="text-2xs flex items-center justify-between gap-2">
           <span className="text-[var(--color-muted-foreground)]">{shipText}</span>
           <Button type="button" onClick={onClose} variant="outline">
             Close
@@ -227,7 +227,7 @@ export function LogEmailModal({
           return false
         }}
         footer={
-          <div className="flex items-center justify-between gap-2 text-[11px]">
+          <div className="text-2xs flex items-center justify-between gap-2">
             {error ? (
               <span className="text-[var(--color-destructive)]">{error}</span>
             ) : (

@@ -319,7 +319,7 @@ export function SearchableSelect({
                     {showHeader && (
                       <li
                         role="presentation"
-                        className="bg-[var(--color-muted)]/40 px-3 py-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase"
+                        className="text-3xs bg-[var(--color-muted)]/40 px-3 py-1 font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase"
                       >
                         {groupLabel}
                       </li>

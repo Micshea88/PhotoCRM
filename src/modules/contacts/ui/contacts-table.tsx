@@ -534,7 +534,7 @@ function SortableHeaderCell({
       >
         {label}
         {sortArrow && (
-          <span className="ml-1 text-[10px] text-[var(--color-primary)]">{sortArrow}</span>
+          <span className="text-3xs ml-1 text-[var(--color-primary)]">{sortArrow}</span>
         )}
       </span>
       <span

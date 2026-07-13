@@ -45,7 +45,7 @@ export function Avatar({
       aria-hidden
       style={{ width: size, height: size }}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--color-muted)] text-[10px] font-medium text-[var(--color-muted-foreground)]",
+        "text-3xs inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--color-muted)] font-medium text-[var(--color-muted-foreground)]",
         className,
       )}
     >

@@ -349,7 +349,7 @@ export function IncomingCall({
           >
             <PhoneOff className="size-5" aria-hidden="true" />
           </button>
-          <span className="text-[11px] text-[var(--color-muted-foreground)]">Decline</span>
+          <span className="text-2xs text-[var(--color-muted-foreground)]">Decline</span>
         </div>
         <div className="flex flex-col items-center gap-1">
           <button
@@ -362,7 +362,7 @@ export function IncomingCall({
           >
             <Phone className="size-5" aria-hidden="true" />
           </button>
-          <span className="text-[11px] text-[var(--color-muted-foreground)]">Answer</span>
+          <span className="text-2xs text-[var(--color-muted-foreground)]">Answer</span>
         </div>
       </div>
     </div>

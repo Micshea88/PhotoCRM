@@ -41,7 +41,7 @@ export function ContactTypeAvatar({
   return (
     <span
       className={cn(
-        "flex size-[26px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-[var(--color-primary-foreground)]",
+        "text-3xs flex size-[26px] shrink-0 items-center justify-center rounded-full font-medium text-[var(--color-primary-foreground)]",
         className,
       )}
       style={{ backgroundColor: bg }}

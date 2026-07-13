@@ -433,7 +433,7 @@ export function NotificationRow({
         )}
 
         {/* Context (contact / type) + timestamp — always visible, left-aligned. */}
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]">
+        <div className="text-2xs flex min-w-0 items-center gap-1.5 text-[var(--color-muted-foreground)]">
           <span className="truncate" data-testid="notification-anchor">
             {n.contactName ? (
               <span className="text-[var(--color-foreground)]">{n.contactName}</span>
@@ -450,7 +450,7 @@ export function NotificationRow({
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}
         {onUnsnooze && n.snoozedUntil && (
           <div
-            className="flex items-center gap-1 text-[11px] text-[var(--color-warning)]"
+            className="text-2xs flex items-center gap-1 text-[var(--color-warning)]"
             data-testid="notification-snooze-until"
           >
             <Clock className="size-3 shrink-0" />
@@ -648,7 +648,7 @@ export function NotificationRow({
             }}
             aria-label={isRead ? "Mark as unread" : "Mark as read"}
             data-testid="row-read-toggle"
-            className="text-[11px] font-medium text-[var(--color-primary)] hover:underline"
+            className="text-2xs font-medium text-[var(--color-primary)] hover:underline"
           >
             {isRead ? "Mark as unread" : "Mark as read"}
           </button>
@@ -656,7 +656,7 @@ export function NotificationRow({
       </div>
 
       {error && (
-        <p className="absolute bottom-1 left-12 text-[10px] text-[var(--color-destructive)]">
+        <p className="text-3xs absolute bottom-1 left-12 text-[var(--color-destructive)]">
           {error}
         </p>
       )}

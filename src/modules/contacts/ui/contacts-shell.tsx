@@ -261,7 +261,9 @@ export function ContactsShell({
   }
 
   return (
-    <div className="space-y-4">
+    // When the dirty save bar is showing, reserve bottom clearance so the fixed
+    // bar never covers the last row / pagination.
+    <div className={cn("space-y-4", isDirty && "pb-20 lg:pb-16")}>
       {/*
        * Push 2c.2 — page header lifted into the shell so the top-right
        * toolbar (Actions / Import / New contact) can share state with

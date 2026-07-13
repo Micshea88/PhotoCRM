@@ -114,12 +114,30 @@
 }
 
 @layer base {
+  :root {
+    /* Native form controls render in the light/paper scheme (never the OS dark
+       inversion that can reintroduce blue). */
+    color-scheme: light;
+    /* Retint EVERY native control's accent (checkbox / radio / range / progress +
+       the date-picker selection) to the editorial brand accent — a checked/selected
+       control is an emphasis state, which is exactly what --color-brand-accent is
+       for. accent-color inherits, so this one declaration reaches all controls with
+       ZERO behavior change (native keyboard, focus, a11y, and mobile picker intact).
+       Kills the OS-blue leak without replacing any control. */
+    accent-color: var(--color-brand-accent);
+  }
   * {
     border-color: var(--color-border);
   }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+  /* Date/time inputs: quiet the native calendar glyph so it reads as muted ink
+     rather than a bright/blue affordance. Native picker behavior is untouched. */
+  ::-webkit-calendar-picker-indicator {
+    opacity: 0.6;
+    cursor: pointer;
   }
 }
 

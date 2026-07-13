@@ -2,37 +2,37 @@
 @plugin "tailwindcss-animate";
 
 @theme {
-  /* ========== SURFACES — editorial ivory/ink (4c revised) ========== */
-  --color-background: oklch(0.9705 0.0098 87.5); /* #f8f5ee bright ivory */
-  --color-foreground: oklch(0.2298 0.0151 76.1); /* #211c15 espresso ink */
-  --color-card: oklch(0.9907 0.0054 95.1); /* #fdfcf8 */
-  --color-card-foreground: oklch(0.2298 0.0151 76.1);
-  --color-popover: oklch(0.9907 0.0054 95.1); /* #fdfcf8 */
-  --color-popover-foreground: oklch(0.2298 0.0151 76.1);
+  /* ========== SURFACES — editorial COOL near-white / near-black (re-tune 1/3) ========== */
+  --color-background: oklch(
+    0.9848 0.0013 106.4
+  ); /* #fafaf9 cool near-white ground (was warm ivory) */
+  --color-foreground: oklch(0.1913 0 89.9); /* #141414 near-black ink (cooled off espresso) */
+  --color-card: oklch(1 0 89.9); /* #ffffff — pure white, elevated above the cool ground */
+  --color-card-foreground: oklch(0.1913 0 89.9);
+  --color-popover: oklch(1 0 89.9); /* #ffffff */
+  --color-popover-foreground: oklch(0.1913 0 89.9);
   --color-muted: oklch(
-    0.948 0.011 86.5
-  ); /* #f1ede6 cream (nudged lighter/less chroma off #efeadf — was cappuccino) */
-  --color-muted-foreground: oklch(0.619 0.0209 83); /* #8c8578 taupe */
-  --color-border: oklch(0.9101 0.0183 89.4); /* #e6e1d4 divider hairline */
-  --color-input: oklch(
-    0.888 0.022 88.5
-  ); /* #e0daca field edge — split from border so a control reads as a container (was identical to --color-border) */
-  --color-sidebar: oklch(0.1794 0.011 80.5); /* #14110c deepest ink — nav joins the ink family */
-  --color-sidebar-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee */
+    0.9549 0.0013 106.4
+  ); /* #f0f0ef cool muted / hover surface (was warm cream) */
+  --color-muted-foreground: oklch(0.5411 0.0031 106.5); /* #6f6f6d cool grey */
+  --color-border: oklch(0.9244 0.0027 106.5); /* #e6e6e4 cool hairline (was warm taupe) */
+  --color-input: oklch(0.9 0.0027 106.5); /* #dededc cool field edge */
+  --color-sidebar: oklch(0.1794 0.011 80.5); /* #14110c deepest ink — nav STAYS */
+  --color-sidebar-foreground: oklch(0.9848 0.0013 106.4); /* #fafaf9 cool near-white */
 
-  /* ========== BRAND — primary is editorial INK; green is demoted to accent ========== */
-  --color-primary: oklch(0.2298 0.0151 76.1); /* #211c15 ink buttons */
-  --color-primary-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee cream text */
-  /* accent = SUBTLE NEUTRAL SURFACE (shadcn hover/selected bg) → cream, never sage.
-     The refined-green identity lives in --color-brand-accent (accent only). */
-  --color-accent: oklch(
-    0.948 0.011 86.5
-  ); /* #f1ede6 neutral cream — THE hover surface (hover:bg-accent); nudged with muted/secondary */
-  --color-accent-foreground: oklch(0.2298 0.0151 76.1);
-  --color-brand-accent: oklch(0.3805 0.0291 148.7); /* #38473a refined green — ACCENT ONLY */
-  --color-secondary: oklch(0.948 0.011 86.5); /* #f1ede6 cream (nudged with muted/accent) */
-  --color-secondary-foreground: oklch(0.2298 0.0151 76.1);
-  --color-ring: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage focus */
+  /* ========== BRAND — primary is cooled INK; the green accent is swapped in re-tune 2/3 ========== */
+  --color-primary: oklch(0.1913 0 89.9); /* #141414 near-black ink buttons (cooled) */
+  --color-primary-foreground: oklch(0.9848 0.0013 106.4); /* #fafaf9 cool near-white text */
+  /* accent = SUBTLE NEUTRAL SURFACE (hover/selected bg) → cool grey, never the green.
+     The signature-green identity lives in --color-brand-accent (swapped to Pathway green in re-tune 2/3). */
+  --color-accent: oklch(0.9549 0.0013 106.4); /* #f0f0ef cool neutral hover surface */
+  --color-accent-foreground: oklch(0.1913 0 89.9);
+  --color-brand-accent: oklch(
+    0.3805 0.0291 148.7
+  ); /* #38473a sage — → Pathway green #33493a in re-tune 2/3 */
+  --color-secondary: oklch(0.9549 0.0013 106.4); /* #f0f0ef cool neutral */
+  --color-secondary-foreground: oklch(0.1913 0 89.9);
+  --color-ring: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage focus — → green family in re-tune 2/3 */
 
   /* ========== STATES — dusty (info stays DEFINED) ========== */
   --color-destructive: oklch(0.5432 0.1174 37.9); /* #a8543a rust */
@@ -111,21 +111,15 @@
   --space-commit-gap: 2rem; /* 32px — last content block → commit-button container */
   --space-commit-bottom: 1.5rem; /* 24px — button container → page bottom */
 
-  /* ========== SHAPE — token-driven radius scale (element-type mapped) ========== */
-  /* Wired in STEP 3 so the scale is genuinely token-driven (previously only bare
-     `rounded` read --radius; rounded-sm/md/lg/xl used Tailwind's fixed defaults).
-     Element type: sm=inputs/buttons/small controls · md=inner/small containers ·
-     lg=menus/popovers/dropdowns · xl=CARDS/large panels · full=pills/dots/avatars.
-     Shared primitives are reassigned to their element type (button/input→sm,
-     menu/popover→lg, modal→xl, card stays xl); hand-rolled surfaces shift with the
-     scale and are further corrected as they adopt <Card>/<Badge> in the next commit. */
-  --radius-sm: 0.375rem; /* 6px — inputs, buttons, small controls */
-  --radius-md: 0.5rem; /* 8px — inner / small containers */
-  --radius-lg: 0.625rem; /* 10px — menus, popovers, dropdowns */
-  --radius-xl: 0.75rem; /* 12px — cards, large panels */
-  --radius: var(
-    --radius-md
-  ); /* bare `rounded` = md (8px). Badges/dots/avatars stay rounded-full. */
+  /* ========== SHAPE — SQUARED corners (editorial re-tune 1/3) ========== */
+  /* Token-driven radius scale (rounded-sm/md/lg/xl read these). REVERSES the STEP-3
+     6/8/10/12 scale to ~2px across the board — the editorial squared look. Pills /
+     dots / avatars stay rounded-full where they're pills. */
+  --radius-sm: 0.125rem; /* 2px — inputs, buttons, small controls */
+  --radius-md: 0.125rem; /* 2px — inner / small containers */
+  --radius-lg: 0.125rem; /* 2px — menus, popovers, dropdowns */
+  --radius-xl: 0.125rem; /* 2px — cards, large panels (squared) */
+  --radius: var(--radius-md); /* 2px. Badges/dots/avatars stay rounded-full. */
 }
 
 @layer base {

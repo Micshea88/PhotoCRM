@@ -56,7 +56,7 @@ export function PageHeader({
   return (
     <div className={cn("flex flex-wrap items-start justify-between gap-x-4 gap-y-2", className)}>
       <div className="min-w-0 space-y-1">
-        <h1 className="font-serif text-2xl leading-tight text-[var(--color-foreground)]">
+        <h1 className="font-serif text-2xl leading-tight tracking-tight text-[var(--color-foreground)]">
           {title}
         </h1>
         {description && (
@@ -85,7 +85,11 @@ export function PageSection({
 }) {
   return (
     <section className={cn("space-y-4", className)}>
-      {title && <h2 className="font-serif text-lg text-[var(--color-foreground)]">{title}</h2>}
+      {title && (
+        <h2 className="font-serif text-lg tracking-tight text-[var(--color-foreground)]">
+          {title}
+        </h2>
+      )}
       {children}
     </section>
   )

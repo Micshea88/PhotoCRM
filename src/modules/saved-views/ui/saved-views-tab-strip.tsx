@@ -710,7 +710,7 @@ function TabButton({
           <span
             aria-label="Your default view"
             title="Your default view"
-            className="ml-1 text-amber-500"
+            className="ml-1 text-[var(--color-warning)]"
           >
             ★
           </span>

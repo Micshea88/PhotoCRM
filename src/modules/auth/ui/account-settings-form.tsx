@@ -97,7 +97,9 @@ export function AccountSettingsForm({
             <Label htmlFor="name">Name</Label>
             <Input id="name" {...profile.register("name")} />
             {profile.formState.errors.name && (
-              <p className="text-xs text-red-600">{profile.formState.errors.name.message}</p>
+              <p className="text-xs text-[var(--color-destructive)]">
+                {profile.formState.errors.name.message}
+              </p>
             )}
           </div>
           {profileErr && (
@@ -137,7 +139,9 @@ export function AccountSettingsForm({
               {...pw.register("newPassword")}
             />
             {pw.formState.errors.newPassword && (
-              <p className="text-xs text-red-600">{pw.formState.errors.newPassword.message}</p>
+              <p className="text-xs text-[var(--color-destructive)]">
+                {pw.formState.errors.newPassword.message}
+              </p>
             )}
           </div>
           <div className="space-y-2">
@@ -148,7 +152,9 @@ export function AccountSettingsForm({
               {...pw.register("confirmPassword")}
             />
             {pw.formState.errors.confirmPassword && (
-              <p className="text-xs text-red-600">{pw.formState.errors.confirmPassword.message}</p>
+              <p className="text-xs text-[var(--color-destructive)]">
+                {pw.formState.errors.confirmPassword.message}
+              </p>
             )}
           </div>
           {pwErr && (

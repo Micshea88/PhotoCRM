@@ -109,12 +109,16 @@ export function SignInForm() {
             send a new invitation.
           </p>
         )}
-        {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+        {errors.email && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
         <PasswordInput id="password" autoComplete="current-password" {...register("password")} />
-        {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+        {errors.password && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
+        )}
       </div>
       {error && (
         <Alert variant="destructive">

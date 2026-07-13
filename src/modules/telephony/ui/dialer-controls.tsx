@@ -358,7 +358,7 @@ export function IncomingCall({
             onClick={onAnswer}
             title="Answer"
             data-testid="incoming-call-answer"
-            className="flex size-12 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+            className="flex size-12 items-center justify-center rounded-full bg-[var(--color-success)] text-white hover:bg-[var(--color-success)]"
           >
             <Phone className="size-5" aria-hidden="true" />
           </button>

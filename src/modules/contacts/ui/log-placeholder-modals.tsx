@@ -229,7 +229,7 @@ export function LogEmailModal({
         footer={
           <div className="flex items-center justify-between gap-2 text-[11px]">
             {error ? (
-              <span className="text-red-600">{error}</span>
+              <span className="text-[var(--color-destructive)]">{error}</span>
             ) : (
               <span className="text-[var(--color-muted-foreground)]">
                 Saved to this contact&apos;s activity feed.

@@ -12,9 +12,9 @@ import type { TaskDueState } from "@/modules/tasks/task-due-state"
 export function dueStateTextClass(state: TaskDueState): string {
   switch (state) {
     case "overdue":
-      return "text-red-600"
+      return "text-[var(--color-destructive)]"
     case "due_soon":
-      return "text-amber-600"
+      return "text-[var(--color-warning)]"
     default:
       return ""
   }

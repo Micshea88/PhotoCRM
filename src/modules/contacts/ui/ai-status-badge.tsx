@@ -18,10 +18,12 @@ import { leadStatusCategory, type LeadStatusCategory } from "@/modules/contacts/
  * hover surfaces it without needing a dedicated tooltip primitive.
  */
 const CATEGORY_CLASSES: Record<LeadStatusCategory, string> = {
-  client: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
-  lead: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  client:
+    "bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/30",
+  lead: "bg-[var(--color-info)]/10 text-[var(--color-info)] border-[var(--color-info)]/30",
   referral_partner: "bg-violet-500/10 text-violet-700 border-violet-500/30",
-  vendor: "bg-amber-500/10 text-amber-700 border-amber-500/30",
+  vendor:
+    "bg-[var(--color-warning)]/10 text-[var(--color-warning)] border-[var(--color-warning)]/30",
   other:
     "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] border-[var(--color-border)]",
 }

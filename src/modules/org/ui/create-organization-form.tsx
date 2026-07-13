@@ -75,12 +75,16 @@ export function CreateOrganizationForm() {
       <div className="space-y-2">
         <Label htmlFor="name">Studio name</Label>
         <Input id="name" {...register("name")} />
-        {errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}
+        {errors.name && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.name.message}</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="slug">URL slug</Label>
         <Input id="slug" {...register("slug")} />
-        {errors.slug && <p className="text-xs text-red-600">{errors.slug.message}</p>}
+        {errors.slug && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.slug.message}</p>
+        )}
         <p className="text-xs text-[var(--color-muted-foreground)]">
           Used in URLs and uniquely identifies your org.
         </p>

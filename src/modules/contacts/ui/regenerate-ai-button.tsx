@@ -57,7 +57,7 @@ export function RegenerateAiButton({ contactId }: { contactId: string }) {
         />
         {busy || pending ? "Regenerating…" : "Regenerate"}
       </Button>
-      {error && <span className="text-[11px] text-red-600">{error}</span>}
+      {error && <span className="text-[11px] text-[var(--color-destructive)]">{error}</span>}
     </div>
   )
 }

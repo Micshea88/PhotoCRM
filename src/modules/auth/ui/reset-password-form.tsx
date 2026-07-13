@@ -78,12 +78,16 @@ export function ResetPasswordForm() {
       <div className="space-y-2">
         <Label htmlFor="password">New password</Label>
         <PasswordInput id="password" autoComplete="new-password" {...register("password")} />
-        {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+        {errors.password && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirm">Confirm password</Label>
         <PasswordInput id="confirm" autoComplete="new-password" {...register("confirm")} />
-        {errors.confirm && <p className="text-xs text-red-600">{errors.confirm.message}</p>}
+        {errors.confirm && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.confirm.message}</p>
+        )}
       </div>
       {error && (
         <Alert variant="destructive">

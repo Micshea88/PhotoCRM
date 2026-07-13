@@ -274,7 +274,7 @@ export function ManageViewsDrawer({
                           </span>
                         )}
                         {isDefault && (
-                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700">
+                          <span className="rounded bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[var(--color-warning)]">
                             Default
                           </span>
                         )}

@@ -81,7 +81,9 @@ export function InviteMemberForm() {
         <div className="flex flex-col gap-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" {...register("email")} />
-          {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+          {errors.email && (
+            <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
+          )}
         </div>
         {/*
          * Push 2c.6.5 — explicit flex-row with gap. The prior layout

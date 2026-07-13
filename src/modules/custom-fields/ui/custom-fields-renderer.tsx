@@ -141,7 +141,7 @@ function FieldInput({
   const label = (
     <Label htmlFor={inputId}>
       {definition.name}
-      {definition.required && <span className="text-red-600"> *</span>}
+      {definition.required && <span className="text-[var(--color-destructive)]"> *</span>}
     </Label>
   )
 
@@ -306,7 +306,7 @@ function FieldInput({
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">
             {definition.name}
-            {definition.required && <span className="text-red-600"> *</span>}
+            {definition.required && <span className="text-[var(--color-destructive)]"> *</span>}
           </legend>
           <div className="space-y-1">
             {choices.map((c) => (
@@ -335,7 +335,7 @@ function FieldInput({
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">
             {definition.name}
-            {definition.required && <span className="text-red-600"> *</span>}
+            {definition.required && <span className="text-[var(--color-destructive)]"> *</span>}
           </legend>
           <div className="space-y-1">
             {choices.map((c) => {
@@ -373,7 +373,7 @@ function FieldInput({
             }}
           />
           {definition.name}
-          {definition.required && <span className="text-red-600"> *</span>}
+          {definition.required && <span className="text-[var(--color-destructive)]"> *</span>}
         </label>
       )
 
@@ -487,7 +487,11 @@ function FieldInput({
 
     default: {
       const exhaustive: never = fieldType
-      return <div className="text-sm text-red-600">Unknown field type: {String(exhaustive)}</div>
+      return (
+        <div className="text-sm text-[var(--color-destructive)]">
+          Unknown field type: {String(exhaustive)}
+        </div>
+      )
     }
   }
 }
@@ -553,7 +557,12 @@ function renderReadOnlyValue(
     case "url":
       if (typeof value !== "string") return EMPTY
       return (
-        <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+        <a
+          href={value}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[var(--color-info)] underline"
+        >
           {value}
         </a>
       )
@@ -578,7 +587,12 @@ function renderReadOnlyValue(
     case "file":
       if (typeof value !== "string") return EMPTY
       return (
-        <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+        <a
+          href={value}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[var(--color-info)] underline"
+        >
           Download file
         </a>
       )
@@ -600,7 +614,7 @@ function renderReadOnlyValue(
       const label = u ? u.name : value
       const href = linkRef?.("user", value)
       return href ? (
-        <a href={href} className="text-blue-600 underline">
+        <a href={href} className="text-[var(--color-info)] underline">
           {label}
         </a>
       ) : (
@@ -613,7 +627,7 @@ function renderReadOnlyValue(
       const label = c ? `${c.firstName} ${c.lastName}`.trim() : value
       const href = linkRef?.("contact", value)
       return href ? (
-        <a href={href} className="text-blue-600 underline">
+        <a href={href} className="text-[var(--color-info)] underline">
           {label}
         </a>
       ) : (
@@ -624,7 +638,7 @@ function renderReadOnlyValue(
       if (typeof value !== "string") return EMPTY
       const href = linkRef?.("event", value)
       return href ? (
-        <a href={href} className="text-blue-600 underline">
+        <a href={href} className="text-[var(--color-info)] underline">
           {value}
         </a>
       ) : (
@@ -639,7 +653,11 @@ function renderReadOnlyValue(
       return <span className="text-[var(--color-muted-foreground)]">(formula)</span>
     default: {
       const exhaustive: never = fieldType
-      return <span className="text-red-600">Unknown field type: {String(exhaustive)}</span>
+      return (
+        <span className="text-[var(--color-destructive)]">
+          Unknown field type: {String(exhaustive)}
+        </span>
+      )
     }
   }
 }
@@ -695,7 +713,12 @@ function BlobUploadField({
       {label}
       {value && (
         <div className="rounded-md border border-[var(--color-border)] p-2 text-xs">
-          <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+          <a
+            href={value}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--color-info)] underline"
+          >
             {value}
           </a>
           <Button
@@ -722,7 +745,7 @@ function BlobUploadField({
         }}
       />
       {busy && <p className="text-xs text-[var(--color-muted-foreground)]">Uploading…</p>}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

@@ -96,7 +96,7 @@ function ShareLinkRow({
         <ShieldCheck className="text-muted-foreground size-4" aria-hidden="true" />
         <span className="text-sm font-medium">{expiryLabel(link, now)}</span>
         {locked ? (
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[var(--color-destructive)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-destructive)]">
             <Lock className="size-3" aria-hidden="true" />
             Locked {String(lockoutMinutesRemaining(asDate(link.lockedUntil), now))}m
           </span>

@@ -95,7 +95,7 @@ function ComposerShell({
       </div>
       {children}
       {error && (
-        <p className="text-xs text-red-600" data-testid="composer-error">
+        <p className="text-xs text-[var(--color-destructive)]" data-testid="composer-error">
           {error}
         </p>
       )}

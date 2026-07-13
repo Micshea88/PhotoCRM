@@ -52,7 +52,7 @@ export function DeleteContactButton({ id }: { id: string }) {
         body={BODY}
         submitting={busy}
       />
-      {error && <div className="text-xs text-red-600">{error}</div>}
+      {error && <div className="text-xs text-[var(--color-destructive)]">{error}</div>}
     </>
   )
 }

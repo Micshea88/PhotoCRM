@@ -289,7 +289,7 @@ function ContactMergeModalBody({
           sure?
         </p>
         {error && (
-          <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-3 rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
             {error}
           </div>
         )}
@@ -333,7 +333,7 @@ function ContactMergeModalBody({
       </p>
 
       {error && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-3 rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
           {error}
         </div>
       )}

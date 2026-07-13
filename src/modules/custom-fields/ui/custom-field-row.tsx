@@ -108,7 +108,7 @@ export function CustomFieldRow({
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">
             {definition.name}
-            {definition.required && <span className="ml-2 text-red-600">*</span>}
+            {definition.required && <span className="ml-2 text-[var(--color-destructive)]">*</span>}
             {isArchived && (
               <span className="ml-2 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs font-normal text-[var(--color-muted-foreground)]">
                 Archived
@@ -155,14 +155,14 @@ export function CustomFieldRow({
                 e.preventDefault()
                 setConfirmDelete(true)
               }}
-              className="text-red-600 focus:text-red-600"
+              className="text-[var(--color-destructive)] focus:text-[var(--color-destructive)]"
             >
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {error && <p className="px-3 py-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="px-3 py-1 text-xs text-[var(--color-destructive)]">{error}</p>}
       <DeleteConfirmModal
         open={confirmDelete}
         onClose={() => {

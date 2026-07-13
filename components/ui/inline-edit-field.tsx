@@ -206,7 +206,7 @@ export function InlineEditField({
         )}
       />
       {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
-      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      {error && <p className="text-[11px] text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

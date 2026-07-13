@@ -56,7 +56,9 @@ export function OrganizationSettingsForm({
       <div className="space-y-2">
         <Label htmlFor="name">Name</Label>
         <Input id="name" {...register("name")} />
-        {errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}
+        {errors.name && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.name.message}</p>
+        )}
       </div>
       {err && (
         <Alert variant="destructive">

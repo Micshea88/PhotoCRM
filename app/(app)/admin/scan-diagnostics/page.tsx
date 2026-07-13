@@ -35,7 +35,7 @@ function DiagTable({ rows }: { rows: FileScanDiagnostic[] }) {
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
       <thead>
-        <tr style={{ textAlign: "left", borderBottom: "2px solid #ccc" }}>
+        <tr style={{ textAlign: "left", borderBottom: "2px solid var(--color-border)" }}>
           <th style={{ padding: "4px 8px" }}>Time</th>
           <th style={{ padding: "4px 8px" }}>Step</th>
           <th style={{ padding: "4px 8px" }}>Status</th>
@@ -56,12 +56,20 @@ function DiagTable({ rows }: { rows: FileScanDiagnostic[] }) {
             metadata: r.metadata,
           }
           return (
-            <tr key={r.id} style={{ borderBottom: "1px solid #eee", verticalAlign: "top" }}>
+            <tr
+              key={r.id}
+              style={{ borderBottom: "1px solid var(--color-border)", verticalAlign: "top" }}
+            >
               <td style={{ padding: "4px 8px", whiteSpace: "nowrap" }}>{fmtTs(r.createdAt)}</td>
               <td style={{ padding: "4px 8px", fontFamily: "monospace" }}>{r.step}</td>
               <td style={{ padding: "4px 8px" }}>{r.status ?? ""}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{r.durationMs ?? ""}</td>
-              <td style={{ padding: "4px 8px", color: r.errorMessage ? "#c00" : undefined }}>
+              <td
+                style={{
+                  padding: "4px 8px",
+                  color: r.errorMessage ? "var(--color-destructive)" : undefined,
+                }}
+              >
                 {r.errorMessage ?? ""}
               </td>
               <td style={{ padding: "4px 8px" }}>
@@ -120,14 +128,17 @@ export default async function ScanDiagnosticsPage() {
     <PageContainer variant="default" className="font-sans">
       <div style={{ display: "flex", alignItems: "baseline", gap: "16px" }}>
         <h1 style={{ fontSize: "20px", fontWeight: 600 }}>Scan diagnostics</h1>
-        <a href="/admin/scan-diagnostics" style={{ color: "#06c" }}>
+        <a href="/admin/scan-diagnostics" style={{ color: "var(--color-primary)" }}>
           ↻ Refresh
         </a>
-        <Link href="/dashboard" style={{ color: "#888", fontSize: "13px" }}>
+        <Link
+          href="/dashboard"
+          style={{ color: "var(--color-muted-foreground)", fontSize: "13px" }}
+        >
           ← Dashboard
         </Link>
       </div>
-      <p style={{ color: "#666", fontSize: "13px", margin: "4px 0 20px" }}>
+      <p style={{ color: "var(--color-muted-foreground)", fontSize: "13px", margin: "4px 0 20px" }}>
         Last {String(rows.length)} steps (newest first within each section). Temporary diagnostic —
         delete once scan timing is understood.
       </p>

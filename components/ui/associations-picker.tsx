@@ -230,7 +230,7 @@ export function AssociationsPicker({
 
         <footer className="space-y-2 border-t border-[var(--color-border)] px-3 py-2">
           {(showMultiContactWarn || showCompanyWarn) && (
-            <p className="text-[11px] text-amber-700">
+            <p className="text-[11px] text-[var(--color-warning)]">
               Multi-record associations ship in Push 3.5+. Selections beyond the primary contact
               will not save in this version.
             </p>

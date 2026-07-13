@@ -394,7 +394,7 @@ export function NotificationRow({
           reach it. */}
       {!isRead && (
         <div
-          className="absolute top-3 right-3 size-2 rounded-full bg-blue-500"
+          className="absolute top-3 right-3 size-2 rounded-full bg-[var(--color-cat-lead)]"
           data-testid="notification-read-dot"
           aria-label="Unread"
         />
@@ -450,7 +450,7 @@ export function NotificationRow({
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}
         {onUnsnooze && n.snoozedUntil && (
           <div
-            className="flex items-center gap-1 text-[11px] text-amber-600"
+            className="flex items-center gap-1 text-[11px] text-[var(--color-warning)]"
             data-testid="notification-snooze-until"
           >
             <Clock className="size-3 shrink-0" />
@@ -481,7 +481,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={onUnsnooze}
-                  className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-warning)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-warning)]"
                   aria-label="Wake now"
                   data-testid="action-unsnooze"
                 >
@@ -655,7 +655,11 @@ export function NotificationRow({
         </div>
       </div>
 
-      {error && <p className="absolute bottom-1 left-12 text-[10px] text-red-500">{error}</p>}
+      {error && (
+        <p className="absolute bottom-1 left-12 text-[10px] text-[var(--color-destructive)]">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

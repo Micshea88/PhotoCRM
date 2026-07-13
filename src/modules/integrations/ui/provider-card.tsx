@@ -70,8 +70,8 @@ function ConnectStateBadge({ state }: { state: IntegrationProvider["connectState
   const label = CONNECT_STATE_LABELS[state]
   const classes = cn(
     "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
-    state === "connected" && "bg-emerald-100 text-emerald-800",
-    state === "always_available" && "bg-sky-100 text-sky-800",
+    state === "connected" && "bg-[var(--color-success)]/10 text-[var(--color-success)]",
+    state === "always_available" && "bg-[var(--color-info)]/10 text-[var(--color-info)]",
     state === "not_connected" && "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
   )
   return <span className={classes}>{label}</span>

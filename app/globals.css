@@ -9,10 +9,14 @@
   --color-card-foreground: oklch(0.2298 0.0151 76.1);
   --color-popover: oklch(0.9907 0.0054 95.1); /* #fdfcf8 */
   --color-popover-foreground: oklch(0.2298 0.0151 76.1);
-  --color-muted: oklch(0.9379 0.0156 86.4); /* #efeadf */
+  --color-muted: oklch(
+    0.948 0.011 86.5
+  ); /* #f1ede6 cream (nudged lighter/less chroma off #efeadf — was cappuccino) */
   --color-muted-foreground: oklch(0.619 0.0209 83); /* #8c8578 taupe */
-  --color-border: oklch(0.9101 0.0183 89.4); /* #e6e1d4 hairline */
-  --color-input: oklch(0.9101 0.0183 89.4);
+  --color-border: oklch(0.9101 0.0183 89.4); /* #e6e1d4 divider hairline */
+  --color-input: oklch(
+    0.888 0.022 88.5
+  ); /* #e0daca field edge — split from border so a control reads as a container (was identical to --color-border) */
   --color-sidebar: oklch(0.1794 0.011 80.5); /* #14110c deepest ink — nav joins the ink family */
   --color-sidebar-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee */
 
@@ -21,10 +25,12 @@
   --color-primary-foreground: oklch(0.9705 0.0098 87.5); /* #f8f5ee cream text */
   /* accent = SUBTLE NEUTRAL SURFACE (shadcn hover/selected bg) → cream, never sage.
      The refined-green identity lives in --color-brand-accent (accent only). */
-  --color-accent: oklch(0.9379 0.0156 86.4); /* #efeadf neutral cream */
+  --color-accent: oklch(
+    0.948 0.011 86.5
+  ); /* #f1ede6 neutral cream — THE hover surface (hover:bg-accent); nudged with muted/secondary */
   --color-accent-foreground: oklch(0.2298 0.0151 76.1);
   --color-brand-accent: oklch(0.3805 0.0291 148.7); /* #38473a refined green — ACCENT ONLY */
-  --color-secondary: oklch(0.9379 0.0156 86.4); /* #efeadf */
+  --color-secondary: oklch(0.948 0.011 86.5); /* #f1ede6 cream (nudged with muted/accent) */
   --color-secondary-foreground: oklch(0.2298 0.0151 76.1);
   --color-ring: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage focus */
 
@@ -69,8 +75,42 @@
   --text-4xs: 0.5625rem;
   --text-4xs--line-height: 0.75rem; /* 9px  → text-4xs */
 
+  /* Semantic type aliases (values match the Tailwind steps 1:1 — names read by ROLE,
+     not by number; see docs/pathway-design-system.md → Type scale). The micro tier is
+     the existing text-4xs/3xs/2xs. */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem; /* 12px — meta / chip labels (= text-xs) */
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.25rem; /* 14px — default UI/body (= text-sm) */
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.5rem; /* 16px — emphasized body (= text-base) */
+  --text-heading-sm: 1.125rem;
+  --text-heading-sm--line-height: 1.5rem; /* 18px — sub-heads / card titles (= text-lg) */
+  --text-heading: 1.5rem;
+  --text-heading--line-height: 2rem; /* 24px — page/section headings (= text-2xl) */
+  --text-display: 1.875rem;
+  --text-display--line-height: 2.25rem; /* 30px — display / large KPI (= text-3xl) */
+
+  /* ========== MOTION ========== */
+  /* Functional standard: 150ms ease-out (up to 200ms for larger surfaces). Every
+     transition uses motion-safe: + honors prefers-reduced-motion. Replaces bare
+     `transition` / browser-default timing. */
+  --motion-duration: 150ms;
+  --motion-duration-lg: 200ms;
+  --motion-ease: cubic-bezier(0, 0, 0.2, 1); /* ease-out */
+
+  /* ========== COMMIT SPACING (named exceptions on the 8px grid) ========== */
+  --space-commit-gap: 2rem; /* 32px — last content block → commit-button container */
+  --space-commit-bottom: 1.5rem; /* 24px — button container → page bottom */
+
   /* ========== SHAPE ========== */
-  --radius: 0.5rem; /* 8px — wireframe buttons. Badges/dots/avatars stay rounded-full. */
+  --radius: 0.5rem; /* 8px — bare `rounded`. Badges/dots/avatars stay rounded-full. */
+  /* NOTE — radius SCALE APPROVED (sm 6px · md 8px · lg 10px · xl 12px; full=pills).
+     WIRING DEFERRED TO STEP 3: in Tailwind v4, defining --radius-sm/md/lg/xl here would
+     instantly remap every rounded-md/lg/sm surface app-wide (md 6→8, lg 8→10, sm →6) —
+     an unreviewed global shift. So the tokens are wired together with the element-type
+     class migration in STEP 3, where each CHANGED surface (menus/popovers/dropdowns off
+     rounded-md/lg) gets an explicit before/after review. Cards already read 12px. */
 }
 
 @layer base {

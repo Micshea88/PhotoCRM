@@ -108,6 +108,124 @@ wireframe/UI checklist:
 
 ---
 
+## Design system standard (LOCKED — HOW editorial-ink is tokenized, componentized, enforced)
+
+This section is the **enforced law** for how the look below is built. The **Visual language**
+section governs _what_ editorial-ink looks like (colors, register, feel); **this** section governs
+_how_ it is expressed: the token scales, the shared primitives every surface composes, the
+designed micro-states no screen skips, and the guards that keep it from drifting. The bar is not
+"clean" (absence of mess) — it is **considered**: every element has a decision behind it, and the
+same decision repeats everywhere.
+
+Healthy foundation this standard builds on (do not regress): color is fully tokenized + guarded,
+spacing is 8px-clean, and the shadcn primitive layer is 100% tuned to editorial-ink. This is a
+naming + adoption + missing-families + micro-states + enforcement standard, **not** a rebuild.
+
+### Token scales — the single source for every dimension
+
+- **Spacing — 8px grid, 4px sub-grid.** Use Tailwind's default spacing scale (`0.25rem` step) as
+  the grid: `1`/`1.5`/`2`/`3`/`4`/`6`/`8`… No `@theme` spacing tokens are needed for the grid
+  itself. **Named exceptions** (defined as tokens): the commit-spacing pair below. **No arbitrary
+  padding/gap/margin** (`p-[18px]`, `gap-[13px]`) — enforced. Internal spacing ≤ the external
+  spacing of the container that holds it (nesting reads inward-tighter).
+- **Type — semantic names over raw sizes.** The px/rem values are unchanged; these are aliases so
+  code reads by role, not by number:
+
+  | Name         | Size    | Token / utility                      | Use                                                         |
+  | ------------ | ------- | ------------------------------------ | ----------------------------------------------------------- |
+  | `micro`      | 9–11px  | `text-4xs` / `text-3xs` / `text-2xs` | field/column/section micro-labels (uppercase tracking-wide) |
+  | `caption`    | 12px    | `text-xs`                            | secondary/meta text, chip labels                            |
+  | `body`       | 14px    | `text-sm`                            | default UI/body text                                        |
+  | `body-lg`    | 16px    | `text-base`                          | emphasized body                                             |
+  | `heading-sm` | 18–20px | `text-lg` / `text-xl`                | sub-headings, card titles                                   |
+  | `heading`    | 24px    | `text-2xl`                           | page/section headings (serif)                               |
+  | `display`    | 30px+   | `text-3xl`+                          | display / large KPI figures (serif)                         |
+
+  Line-heights stay on the 4/8px grid; **font sizes are NOT force-rounded to the grid.**
+
+- **Radius — token-driven scale by element type** (APPROVED **sm 6px · md 8px · lg 10px · xl 12px**;
+  `rounded-full` = pills/badges/dots/avatars): `--radius-sm` (inputs/buttons/small controls) ·
+  `--radius-md` (inner/small containers) · `--radius-lg` (menus/popovers/dropdowns) · `--radius-xl`
+  (**cards + large panels**). The Tailwind radius utilities are wired to these tokens so the scale
+  is genuinely token-driven (previously `--radius` only fed bare `rounded`; `rounded-md/lg/xl` used
+  Tailwind defaults). **Cards are always `xl`.** _(Token WIRING lands in STEP 3 with the element-type
+  migration — defining the tokens instantly remaps existing `rounded-md/lg/sm` surfaces app-wide, so
+  the shift is reviewed per-surface there, not applied blind in STEP 1.)_
+- **Color corrections** (see Visual language for the full palette):
+  - `--color-muted` / `--color-accent` / `--color-secondary` nudged **lighter toward ivory, lower
+    chroma** — `#efeadf` → **`#f1ede6`** (`oklch(0.948 0.011 86.5)`), a quiet hover/muted accent,
+    never a surface fill. (`--color-accent` is the hover-surface token, so it moves with the pair.)
+  - `--color-input` **split from `--color-border`** — `#e0daca` (`oklch(0.888 0.022 88.5)`) vs the
+    `#e6e1d4` divider hairline — so a field edge reads as a container.
+- **Motion tokens.** `--motion-duration` (functional standard **150ms**, up to 200ms for larger
+  surfaces) · `--motion-ease` (`ease-out`). Every transition uses `motion-safe:` and honors
+  `prefers-reduced-motion`. Replaces bare `transition` / browser-default timing.
+- **Commit-spacing tokens.** `--space-commit-gap` (last content block → commit-button container) and
+  `--space-commit-bottom` (button container → page bottom), both 8px-grid steps. Owned by
+  `<CommitBar>`.
+
+### Shared primitives — build once, compose everywhere
+
+A hand-rolled instance of any of these, where the primitive exists, is a lint error (or a
+documented reviewed exception).
+
+- **`<PageContainer>` / `<PageHeader>` / `<PageSection>`** — the layout spine (see the PageContainer
+  contract below). Single owner of width + gutters (LAW 6).
+- **`<Card>`** — THE container: `rounded-xl` + hairline `border/60` + `bg-card`, **no shadow**,
+  `p-6`. Elevation from border + whitespace. All card-shaped surfaces compose this (no hand-rolled
+  `border + rounded-md/lg + p-*`).
+- **`<Badge>`** — THE pill: one padding, one font (`micro`/`caption`), `rounded-full`, `tint`-bg +
+  **saturated** category/state fg. Variants `category` / `state` / `neutral`. All type/status
+  badges, filter chips, and sort chips compose this.
+- **`<Skeleton>`** — content-shaped placeholder, subtle shimmer, editorial-ink. Used wherever a view
+  loads async (not spinners; spinners are for in-button busy states only).
+- **`<EmptyState>`** — quiet icon + considered title + supporting line + a **real CTA button** where
+  an action makes sense (never a bare "No data" line or a text-only hint).
+- **`<CommitBar>`** — the one bottom-commit container, using the commit-spacing tokens. Reused by
+  merge + the sticky save bar.
+- **Control primitives** — headless, token-styled `select` / `checkbox` / `radio` / `switch` /
+  `textarea`. Native controls leak OS defaults (e.g. the OS-blue date-range highlight); selection +
+  focus must use **sage/ink tokens, never OS blue**, via the split control tokens.
+
+### Density (named)
+
+- **comfortable** — default for client-facing-minimal surfaces and forms (`p-6`, roomy rhythm).
+- **compact** — internal-dense surfaces (lists, tables, board cards): tighter row height + `p-3`/
+  `p-4`, still on the grid. Density is a named choice per surface (LAW 1 persona), not ad hoc.
+
+### Designed micro-states — REQUIRED on every interactive surface
+
+Generic SaaS skips these; Pathway does not. Every new surface is checked against this list the same
+way it's checked against the RLS rules:
+
+1. **Focus** — ONE canonical ring: sage `--color-ring`, single width, `focus-visible` (not `focus`),
+   never bare `outline-none` with no replacement. Applied to every interactive element.
+2. **Hover** — consolidated: `hover:bg-accent` (surfaces) · `hover:text-foreground` (muted controls)
+   · `hover:underline` (links only). No `hover:opacity-*` / `hover:brightness-*` one-offs.
+3. **Loading** — content-shaped `<Skeleton>` (matching the view's layout) wherever a view would
+   otherwise render nothing; `loading.tsx` for server-rendered routes. Spinners only inside busy
+   buttons.
+4. **Empty** — `<EmptyState>` with icon + CTA button; considered copy, never a bare one-liner.
+5. **Motion** — the motion tokens (150–200ms `ease-out`, `motion-safe:`), never browser-default
+   timing.
+
+### Enforcement (extends the palette guard)
+
+`pnpm verify` runs, at the same pre-commit/pre-push tier as the color guard, in addition to
+`check-no-raw-palette.mjs`:
+
+- **Ban arbitrary spacing** (`p-[..]`/`m-[..]`/`gap-[..]`). Dimensional width/height brackets are
+  allowed, but recurring ones are flagged for tokenizing (named column-width tokens).
+- **Ban arbitrary radius** (`rounded-[..]`); flag off-scale `rounded-md`/`rounded-lg` on **cards**
+  (cards must be `xl`).
+- **Primitive-adoption rule** — a hand-rolled card/badge/dropdown where a primitive exists is an
+  error unless it carries a documented reviewed-exception marker.
+- Keeps the existing raw-palette + bracket-font bans.
+
+An un-enforced standard drifts back; the push is not done until these guards are live.
+
+---
+
 ## Visual language (LOCKED — editorial-ink)
 
 Pathway's look is **warm editorial × premium restraint**: the calm, high-contrast feel of a

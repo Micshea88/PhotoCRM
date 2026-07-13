@@ -1,8 +1,10 @@
 "use client"
 
+import { Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/format"
 import { Avatar } from "@/components/ui/avatar"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Tooltip } from "@/components/ui/tooltip"
 import { taskDueState } from "@/modules/tasks/task-due-state"
 import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
@@ -49,7 +51,12 @@ export function TasksDueList({ topTasks, totalCount, members }: TasksDueListProp
         <span className="text-2xl font-semibold tabular-nums">{totalCount}</span>
       </div>
       {topTasks.length === 0 ? (
-        <p className="text-sm">No tasks due this week. Add a task to get started.</p>
+        <EmptyState
+          className="px-4 py-8"
+          icon={<Calendar className="size-6" />}
+          title="No tasks due this week"
+          description="Add a task to get started."
+        />
       ) : (
         <ul className="space-y-1">
           {topTasks.map((task) => {

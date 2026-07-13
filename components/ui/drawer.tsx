@@ -57,7 +57,7 @@ export function Drawer({
     >
       <aside
         className={cn(
-          "flex h-full flex-col border-l border-[var(--color-border)] bg-[var(--color-background)] shadow-xl",
+          "flex h-full flex-col border-l border-[var(--color-border)] bg-[var(--color-popover)] shadow-xl",
           widthClass,
         )}
         onClick={(e) => {

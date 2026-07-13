@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Modal } from "@/components/ui/modal"
 import type { Visibility } from "../types"
 
@@ -120,9 +122,12 @@ function VisibilityModalBody({
           <div className="space-y-2 rounded-md border border-[var(--color-border)] p-3">
             <div className="text-sm font-medium">Share with</div>
             {eligibleMembers.length === 0 ? (
-              <p className="text-xs text-[var(--color-muted-foreground)]">
-                No other teammates in this org yet.
-              </p>
+              <EmptyState
+                className="px-4 py-6"
+                icon={<Users className="size-6" />}
+                title="No teammates yet"
+                description="Invite people to your org to share views with them."
+              />
             ) : (
               <div className="max-h-48 space-y-1 overflow-y-auto">
                 {eligibleMembers.map((m) => (

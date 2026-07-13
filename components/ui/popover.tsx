@@ -29,6 +29,7 @@ export function Popover({
   children,
   align = "start",
   className,
+  wrapperClassName,
 }: {
   /** Function invoked with the current open state + a toggle callback.
    * Use to render any kind of trigger element (chip, button, icon). */
@@ -40,6 +41,9 @@ export function Popover({
   children: ReactNode | ((state: { close: () => void }) => ReactNode)
   align?: "start" | "end"
   className?: string
+  /** Classes for the outer wrapper (default `relative inline-block`). Pass
+   *  `block w-full` for a full-width trigger (e.g. a select-style control). */
+  wrapperClassName?: string
 }) {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -73,13 +77,13 @@ export function Popover({
   }
 
   return (
-    <div ref={wrapperRef} className="relative inline-block">
+    <div ref={wrapperRef} className={cn("relative inline-block", wrapperClassName)}>
       {trigger({ open, toggle })}
       {open && (
         <div
           ref={contentRef}
           className={cn(
-            "absolute top-full z-20 mt-1 min-w-[240px] rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3 shadow-md",
+            "absolute top-full z-20 mt-1 min-w-[240px] rounded-lg border border-[var(--color-border)] bg-[var(--color-popover)] p-3 shadow-md",
             align === "end" ? "right-0" : "left-0",
             className,
           )}

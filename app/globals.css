@@ -99,6 +99,14 @@
   --motion-duration-lg: 200ms;
   --motion-ease: cubic-bezier(0, 0, 0.2, 1); /* ease-out */
 
+  /* DELIGHT MOTION (reserved) — signature/personality animation, DISTINCT from the
+     functional motion above. Reserved now so the later Voice & Delight pass is pure
+     fill-in (no rework). Convention: signature motion uses the `delight-*` class
+     prefix + these tokens; functional UI motion stays on --motion-duration/-ease.
+     Unused until the delight pass. */
+  --motion-delight-duration: 400ms;
+  --motion-delight-ease: cubic-bezier(0.34, 1.56, 0.64, 1); /* gentle overshoot — signature feel */
+
   /* ========== COMMIT SPACING (named exceptions on the 8px grid) ========== */
   --space-commit-gap: 2rem; /* 32px — last content block → commit-button container */
   --space-commit-bottom: 1.5rem; /* 24px — button container → page bottom */

@@ -2,8 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, ListTodo } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { cn } from "@/lib/utils"
@@ -240,9 +241,11 @@ export function ContactTasksPane({
       {anyActive ? (
         <section className="space-y-2" data-testid="contact-tasks-flat">
           {flatList.length === 0 ? (
-            <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
-              No tasks match these filters.
-            </p>
+            <EmptyState
+              icon={<ListTodo className="size-6" />}
+              title="No matching tasks"
+              description="No tasks match these filters. Try clearing or adjusting them."
+            />
           ) : (
             <TaskList
               tasks={flatList}
@@ -264,9 +267,11 @@ export function ContactTasksPane({
             testId="contact-tasks-open"
           >
             {openTasks.length === 0 ? (
-              <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
-                No open tasks. Use “Create a task” to add one.
-              </p>
+              <EmptyState
+                icon={<ListTodo className="size-6" />}
+                title="No open tasks"
+                description="Use “Create a task” above to add one."
+              />
             ) : (
               <TaskList
                 tasks={openTasks}

@@ -296,7 +296,7 @@ export function SearchableMultiSelect({
       </div>
 
       <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
-        <div className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] shadow-md">
+        <div className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-popover)] shadow-md">
           {visibleItems.length === 0 && !showCreate ? (
             <div className="p-3 text-center text-xs text-[var(--color-muted-foreground)]">
               {emptyMessage}

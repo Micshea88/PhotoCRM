@@ -267,7 +267,7 @@ export function SearchableSelect({
 
       <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
         <div
-          className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] shadow-md"
+          className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-popover)] shadow-md"
           onKeyDown={onPanelKeyDown}
         >
           <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-2 py-1.5">

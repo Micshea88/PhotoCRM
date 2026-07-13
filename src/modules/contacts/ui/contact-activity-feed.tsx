@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
+  Activity,
   Calendar,
   ChevronDown,
   ChevronRight,
@@ -22,11 +23,13 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Card } from "@/components/ui/card"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import { SingleSelectMenu } from "@/components/ui/single-select-menu"
 import { cn } from "@/lib/utils"
 import { detectUrls } from "@/lib/linkify"
 import { useDialer } from "@/modules/telephony/ui/dialer-context"
@@ -381,6 +384,25 @@ export function entryTitleText(e: ActivityEntry): string {
 }
 
 type DatePreset = "all" | "today" | "week" | "month" | "custom"
+
+// Date-range presets — a headless SingleSelectMenu (not a native <select>) so the
+// open list retints cream-hover / sage-selected like the Assigned-to dropdown,
+// instead of the OS-blue a native select's OS-drawn list shows (accent-color can't
+// reach it). Same value/onChange contract; "custom" still reveals the date inputs.
+const DATE_PRESET_OPTIONS: { value: DatePreset; label: string }[] = [
+  { value: "all", label: "All time" },
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "custom", label: "Custom range" },
+]
+const DATE_PRESET_LABEL: Record<DatePreset, string> = {
+  all: "All time",
+  today: "Today",
+  week: "This week",
+  month: "This month",
+  custom: "Custom range",
+}
 
 interface FeedFilters {
   date: DatePreset
@@ -829,11 +851,19 @@ export function ContactActivityFeed({
 
       {/* Empty state. */}
       {visible.length === 0 ? (
-        <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
-          {entries.length === 0
-            ? "No activity yet — use the create/log buttons above to start the feed."
-            : `No ${FILTER_LABEL[activeTab].toLowerCase()} entries match the current filters.`}
-        </p>
+        entries.length === 0 ? (
+          <EmptyState
+            icon={<Activity className="size-6" />}
+            title="No activity yet"
+            description="Log a call, note, email, meeting, or SMS with the buttons above to start the feed."
+          />
+        ) : (
+          <EmptyState
+            icon={<Activity className="size-6" />}
+            title="No matching activity"
+            description={`No ${FILTER_LABEL[activeTab].toLowerCase()} entries match the current filters.`}
+          />
+        )
       ) : (
         <ul className="space-y-3">
           {visible.map((e) => (
@@ -942,19 +972,26 @@ function FiltersPanel({
     <div className="space-y-3 text-xs" data-testid="activity-filters-panel">
       <div className="space-y-1">
         <label className="font-medium text-[var(--color-muted-foreground)]">Date range</label>
-        <select
+        <SingleSelectMenu
+          ariaLabel="Date range"
+          options={DATE_PRESET_OPTIONS}
           value={filters.date}
-          onChange={(e) => {
-            onChange({ ...filters, date: e.target.value as DatePreset })
+          onChange={(v) => {
+            onChange({ ...filters, date: v as DatePreset })
           }}
-          className="h-7 w-full rounded-md border border-[var(--color-border)] bg-transparent px-2 text-xs"
-        >
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="month">This month</option>
-          <option value="custom">Custom range</option>
-        </select>
+          wrapperClassName="block w-full"
+          trigger={({ open, toggle }) => (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-expanded={open}
+              className="flex h-7 w-full items-center justify-between gap-2 rounded-sm border border-[var(--color-input)] bg-transparent px-2 text-xs focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
+            >
+              <span>{DATE_PRESET_LABEL[filters.date]}</span>
+              <ChevronDown className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+            </button>
+          )}
+        />
         {filters.date === "custom" && (
           <div className="mt-1 grid grid-cols-2 gap-1">
             <Input

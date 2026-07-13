@@ -233,6 +233,17 @@ Native controls (checkbox/radio/range/date/`<select>`) get **selected** consiste
 headless selected are identical by construction. Their open-list hover + focus stay OS-drawn (not
 CSS-reachable); per the standing decision, no native control is replaced to chase that.
 
+### Delight-readiness (reserved API — content comes later)
+
+The structure ships delight-ready so the later Voice & Delight pass is pure fill-in, no rework:
+
+- **`<EmptyState>` `icon` slot accepts ANY `ReactNode`** — a lucide icon today, or an illustration /
+  animated component later. No hardcoded copy: `title`/`description`/`action` are always props.
+- **Signature motion has its own reserved slot**, DISTINCT from functional motion:
+  `--motion-delight-duration` / `--motion-delight-ease` (gentle overshoot) + the `delight-*` class
+  prefix convention. Functional UI motion stays on `--motion-duration`/`--motion-ease`. Unused until
+  the delight pass, but reserved so signature animation never gets tangled with functional transitions.
+
 ### Enforcement (extends the palette guard)
 
 `pnpm verify` runs, at the same pre-commit/pre-push tier as the color guard, in addition to

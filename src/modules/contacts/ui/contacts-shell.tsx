@@ -3,8 +3,9 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowUpDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react"
+import { ArrowUpDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { exportContactsCsv, exportContactsXlsx, type ExportColumn } from "./export-contacts"
 import {
@@ -481,11 +482,24 @@ export function ContactsShell({
                 </p>
               </div>
             ) : contacts.length === 0 ? (
-              <div className="p-10 text-center">
-                <p className="text-sm text-[var(--color-muted-foreground)]">
-                  No contacts match the current filters.
-                </p>
-              </div>
+              filterChipCount > 0 || params.get("q") ? (
+                <EmptyState
+                  icon={<Users className="size-6" />}
+                  title="No contacts found"
+                  description="No contacts match the current filters. Try clearing or adjusting them."
+                />
+              ) : (
+                <EmptyState
+                  icon={<Users className="size-6" />}
+                  title="No contacts yet"
+                  description="Add your first contact to start building your list."
+                  action={
+                    <Button asChild>
+                      <Link href="/contacts/new">New contact</Link>
+                    </Button>
+                  }
+                />
+              )
             ) : (
               <>
                 <ContactsTable

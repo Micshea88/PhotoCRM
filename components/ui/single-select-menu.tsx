@@ -31,6 +31,7 @@ export function SingleSelectMenu({
   trigger,
   align = "start",
   className,
+  wrapperClassName,
   ariaLabel,
 }: {
   options: SingleSelectOption[]
@@ -40,10 +41,17 @@ export function SingleSelectMenu({
   trigger: (state: { open: boolean; toggle: () => void }) => ReactNode
   align?: "start" | "end"
   className?: string
+  /** Outer wrapper classes — pass `block w-full` for a full-width select trigger. */
+  wrapperClassName?: string
   ariaLabel?: string
 }) {
   return (
-    <Popover align={align} className={cn("min-w-[200px] p-1", className)} trigger={trigger}>
+    <Popover
+      align={align}
+      className={cn("min-w-[200px] p-1", className)}
+      wrapperClassName={wrapperClassName}
+      trigger={trigger}
+    >
       {({ close }) => (
         <ul role="listbox" aria-label={ariaLabel} className="space-y-0.5">
           {options.map((o) => {

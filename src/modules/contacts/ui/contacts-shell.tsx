@@ -3,9 +3,10 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ArrowUpDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { exportContactsCsv, exportContactsXlsx, type ExportColumn } from "./export-contacts"
 import {
   SavedViewsTabStrip,
   type SavedViewTab,
@@ -19,7 +20,7 @@ import { ContactsTable, type ContactRow } from "./contacts-table"
 import { EditColumnsDrawer } from "./edit-columns-drawer"
 import { MoreFiltersDrawer, type CustomFieldDef } from "./more-filters-drawer"
 import { SelectionBanner } from "./selection-banner"
-import { CONTACT_COLUMN_REGISTRY, type ColumnConfigItem } from "./columns"
+import { CONTACT_COLUMN_REGISTRY, resolveContactColumns, type ColumnConfigItem } from "./columns"
 import type { ContactsPageSize } from "../pagination"
 
 /**
@@ -85,6 +86,19 @@ interface ContactsShellProps {
   hiddenLeadSources: string[]
   customFieldDefs: CustomFieldDef[]
 }
+
+// Sort pop-out options — a sensible subset of the sortable columns. Each wraps
+// the SAME URL sortBy/sortDir logic the header-click sort uses.
+const SORT_OPTIONS: { label: string; field: string }[] = [
+  { label: "Name", field: "lastName" },
+  { label: "Email", field: "primaryEmail" },
+  { label: "Phone", field: "primaryPhone" },
+  { label: "Type", field: "contactType" },
+  { label: "Status", field: "lifecycleStatus" },
+  { label: "Company", field: "companyName" },
+  { label: "Created", field: "createdAt" },
+  { label: "Updated", field: "updatedAt" },
+]
 
 export function ContactsShell({
   contacts,
@@ -196,6 +210,55 @@ export function ContactsShell({
     return n
   }, [params])
 
+  // ── Toolbar: Filter + Sort pop-outs (reshape only — wrap existing logic) ──
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [sortOpen, setSortOpen] = useState(false)
+
+  const activeSortBy = params.get("sortBy")
+  const activeSortDir = params.get("sortDir") === "desc" ? "desc" : "asc"
+
+  const filterChipCount = useMemo(() => {
+    let n = 0
+    for (const key of [
+      "contactType",
+      "lifecycleStatus",
+      "tags",
+      "ownerUserId",
+      "companyId",
+      "leadSource",
+    ]) {
+      if (params.get(key)) n++
+    }
+    if (params.get("createdFrom") || params.get("createdTo")) n++
+    return n + morePanelCount
+  }, [params, morePanelCount])
+
+  function applySort(field: string) {
+    const url = new URLSearchParams(params)
+    // Same field → toggle direction; new field → ascending. Page resets.
+    const nextDir = activeSortBy === field && activeSortDir === "asc" ? "desc" : "asc"
+    url.set("sortBy", field)
+    url.set("sortDir", nextDir)
+    url.delete("page")
+    router.push(`${pathname}?${url.toString()}`)
+  }
+
+  // Export the CURRENT view — the loaded (filtered) rows + the visible columns —
+  // client-side as CSV or XLSX. Function-declaration so the header's onExport can
+  // reference it (hoisted).
+  function handleExport(format: "csv" | "xlsx") {
+    const resolved = resolveContactColumns(columnConfig, customFieldDefs)
+    const cols: ExportColumn[] = resolved.visible.map((col) => ({
+      label: col.label,
+      value: (row) => col.render(row),
+    }))
+    if (format === "csv") {
+      exportContactsCsv(contacts, cols)
+    } else {
+      void exportContactsXlsx(contacts, cols)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/*
@@ -213,34 +276,22 @@ export function ContactsShell({
             onOpenEditColumns={() => {
               setEditColumnsOpen(true)
             }}
+            onExport={handleExport}
           />
-          <Link href="/contacts/import">
-            <Button variant="outline">Import</Button>
-          </Link>
           <Link href="/contacts/new">
             <Button>New contact</Button>
           </Link>
         </div>
       </div>
 
+      {/* Search stays under the title (not in the list frame). */}
       <ContactsFilterBar
+        variant="search"
         tagOptions={tagOptions}
         ownerOptions={ownerOptions}
         companyOptions={companyOptions}
         leadSourceOptions={leadSourceOptions}
         hiddenLeadSources={hiddenLeadSources}
-        trailingChips={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setMoreFiltersOpen(true)
-            }}
-          >
-            + More filters{morePanelCount > 0 ? ` (${String(morePanelCount)})` : ""}
-          </Button>
-        }
       />
 
       {/* Two-column: collapsible Saved Views panel (left) + the table (right).
@@ -302,65 +353,161 @@ export function ContactsShell({
           )}
         </div>
 
-        {/* Table area (right column). */}
-        <div className="min-w-0 flex-1 space-y-4">
-          <SelectionBanner
-            selectedIds={[...selectedIds]}
-            ownerOptions={ownerOptions}
-            tagOptions={tagOptions}
-            companyOptions={companyOptions}
-            leadSourceOptions={leadSourceOptions}
-            hiddenLeadSources={hiddenLeadSources}
-            onClear={() => {
-              setSelectedIds(new Set())
-            }}
-          />
-          {selectedIds.size === 0 && (
-            <p className="text-xs text-[var(--color-muted-foreground)]">
-              {String(totalCount)} contact{totalCount === 1 ? "" : "s"}
-            </p>
-          )}
+        {/* Table area (right column) — ONE contained list card. */}
+        <div className="min-w-0 flex-1">
+          <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            {/* Toolbar row (card top): Filter + Sort pop-outs on the left (they
+                expand to the right and the row scrolls horizontally), the count
+                on the right behind a hairline. */}
+            <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-expanded={filterOpen}
+                  onClick={() => {
+                    setFilterOpen((o) => !o)
+                  }}
+                  className={cn(
+                    "shrink-0",
+                    (filterOpen || filterChipCount > 0) &&
+                      "border-[var(--color-primary)] text-[var(--color-primary)]",
+                  )}
+                >
+                  <SlidersHorizontal className="size-4" /> Filter
+                  {filterChipCount > 0 ? ` (${String(filterChipCount)})` : ""}
+                </Button>
+                {filterOpen && (
+                  <ContactsFilterBar
+                    variant="chips"
+                    tagOptions={tagOptions}
+                    ownerOptions={ownerOptions}
+                    companyOptions={companyOptions}
+                    leadSourceOptions={leadSourceOptions}
+                    hiddenLeadSources={hiddenLeadSources}
+                    trailingChips={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setMoreFiltersOpen(true)
+                        }}
+                      >
+                        + More filters{morePanelCount > 0 ? ` (${String(morePanelCount)})` : ""}
+                      </Button>
+                    }
+                  />
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-expanded={sortOpen}
+                  onClick={() => {
+                    setSortOpen((o) => !o)
+                  }}
+                  className={cn(
+                    "shrink-0",
+                    (sortOpen || activeSortBy) &&
+                      "border-[var(--color-primary)] text-[var(--color-primary)]",
+                  )}
+                >
+                  <ArrowUpDown className="size-4" /> Sort
+                </Button>
+                {sortOpen && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {SORT_OPTIONS.map((opt) => {
+                      const active = activeSortBy === opt.field
+                      return (
+                        <button
+                          key={opt.field}
+                          type="button"
+                          onClick={() => {
+                            applySort(opt.field)
+                          }}
+                          className={cn(
+                            "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs whitespace-nowrap transition-colors",
+                            active
+                              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                              : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]",
+                          )}
+                        >
+                          {opt.label}
+                          {active ? (activeSortDir === "asc" ? " ↑" : " ↓") : ""}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="text-2xs shrink-0 border-l border-[var(--color-border)] pl-3 tracking-wide text-[var(--color-muted-foreground)] uppercase tabular-nums">
+                {String(totalCount)} {totalCount === 1 ? "contact" : "contacts"}
+              </div>
+            </div>
 
-          {cappedOut ? (
-            <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/5 p-6 text-sm">
-              <p className="font-medium text-[var(--color-warning)]">Too many matches to display</p>
-              <p className="mt-1 text-[var(--color-warning)]">
-                More than 10,000 contacts match the current filters. Refine your filters (or pick a
-                narrower saved view) to bring the list under the cap, or export your full dataset
-                from Settings.
-              </p>
-            </div>
-          ) : contacts.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                No contacts match the current filters.
-              </p>
-            </div>
-          ) : (
-            <>
-              <ContactsTable
-                rows={contacts}
-                columnConfig={columnConfig}
-                onColumnConfigChange={setColumnConfig}
-                selectedIds={selectedIds}
-                onSelectedIdsChange={setSelectedIds}
-                customFieldDefs={customFieldDefs}
-                sortField={params.get("sortBy")}
-                sortDir={params.get("sortDir") === "desc" ? "desc" : "asc"}
-                onSortChange={(next) => {
-                  // P3 (C6c followup) — push sort into the URL so the server
-                  // re-renders with the new sort applied. Page resets to 1
-                  // since sort changes the row order.
-                  const url = new URLSearchParams(params)
-                  url.set("sortBy", next.field)
-                  url.set("sortDir", next.direction)
-                  url.delete("page")
-                  router.push(`${pathname}?${url.toString()}`)
-                }}
-              />
-              <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
-            </>
-          )}
+            {/* Bulk-action banner — only when rows are selected. */}
+            {selectedIds.size > 0 && (
+              <div className="border-b border-[var(--color-border)] px-3 py-2">
+                <SelectionBanner
+                  selectedIds={[...selectedIds]}
+                  ownerOptions={ownerOptions}
+                  tagOptions={tagOptions}
+                  companyOptions={companyOptions}
+                  leadSourceOptions={leadSourceOptions}
+                  hiddenLeadSources={hiddenLeadSources}
+                  onClear={() => {
+                    setSelectedIds(new Set())
+                  }}
+                />
+              </div>
+            )}
+
+            {cappedOut ? (
+              <div className="m-3 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/5 p-6 text-sm">
+                <p className="font-medium text-[var(--color-warning)]">
+                  Too many matches to display
+                </p>
+                <p className="mt-1 text-[var(--color-warning)]">
+                  More than 10,000 contacts match the current filters. Refine your filters (or pick
+                  a narrower saved view) to bring the list under the cap, or export your full
+                  dataset from Settings.
+                </p>
+              </div>
+            ) : contacts.length === 0 ? (
+              <div className="p-10 text-center">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  No contacts match the current filters.
+                </p>
+              </div>
+            ) : (
+              <>
+                <ContactsTable
+                  rows={contacts}
+                  columnConfig={columnConfig}
+                  onColumnConfigChange={setColumnConfig}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  customFieldDefs={customFieldDefs}
+                  sortField={params.get("sortBy")}
+                  sortDir={params.get("sortDir") === "desc" ? "desc" : "asc"}
+                  onSortChange={(next) => {
+                    // Header-click sort still works (kept as an entry point
+                    // alongside the Sort pop-out). Page resets on sort change.
+                    const url = new URLSearchParams(params)
+                    url.set("sortBy", next.field)
+                    url.set("sortDir", next.direction)
+                    url.delete("page")
+                    router.push(`${pathname}?${url.toString()}`)
+                  }}
+                />
+                <div className="border-t border-[var(--color-border)] px-3 py-2">
+                  <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

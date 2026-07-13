@@ -24,6 +24,13 @@ export interface FilterBarProps {
    * own row).
    */
   trailingChips?: React.ReactNode
+  /**
+   * Which half to render. "full" = search + chips (legacy). The contacts
+   * toolbar renders "search" under the title and "chips" inside the Filter
+   * pop-out — both instances share the same URL-param logic, so nothing is
+   * reimplemented; only the rendered half differs.
+   */
+  variant?: "full" | "search" | "chips"
 }
 
 /**
@@ -128,202 +135,213 @@ export function ContactsFilterBar(props: FilterBarProps) {
     })
   }
 
+  const variant = props.variant ?? "full"
+  const showSearch = variant !== "chips"
+  const showChips = variant !== "search"
+
   return (
-    <div className="space-y-3">
-      {/* Search */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          // No-op equivalent: typing already pushes the URL via the
-          // debounce effect. The button exists as a visual + a11y
-          // affordance; pressing it re-asserts the current value
-          // (and clears any pending debounce timer by calling
-          // updateParam immediately).
-          updateParam("q", searchInput.trim() || null)
-        }}
-        className="flex items-center gap-2"
-      >
-        <Input
-          type="search"
-          placeholder="Search name, email, phone, or company…"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value)
+    <div className={cn(showSearch && showChips && "space-y-3")}>
+      {showSearch && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            // No-op equivalent: typing already pushes the URL via the
+            // debounce effect. The button exists as a visual + a11y
+            // affordance; pressing it re-asserts the current value
+            // (and clears any pending debounce timer by calling
+            // updateParam immediately).
+            updateParam("q", searchInput.trim() || null)
           }}
-          className="max-w-md flex-1"
-        />
-        <Button type="submit" variant="outline" size="sm">
-          Search
-        </Button>
-        {hasAnyFilter && (
-          <Button type="button" variant="outline" size="sm" onClick={clearAll}>
-            Clear all
-          </Button>
-        )}
-      </form>
-
-      {/* Filter chips */}
-      <div className="flex flex-wrap items-start gap-2">
-        <FilterChip label="Contact type" value={activeContactType}>
-          <ChipSearchList
-            items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
-            value={activeContactType || null}
-            onChange={(v) => {
-              updateParam("contactType", v)
-            }}
-          />
-        </FilterChip>
-
-        <FilterChip label="Lifecycle status" value={activeLifecycle}>
-          <ChipSearchList
-            items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
-            value={activeLifecycle || null}
-            onChange={(v) => {
-              updateParam("lifecycleStatus", v)
-            }}
-          />
-        </FilterChip>
-
-        <FilterChip
-          label="Tags"
-          value={activeTags.length > 0 ? `${String(activeTags.length)} selected` : ""}
+          className="flex items-center gap-2"
         >
-          {props.tagOptions.length === 0 ? (
-            <p className="text-xs text-[var(--color-muted-foreground)]">
-              No tags yet. Add tags on a contact to filter by them.
-            </p>
-          ) : (
-            <ChipSearchMultiList
-              items={props.tagOptions.map((t) => ({ value: t, label: t }))}
-              values={activeTags}
-              onChange={(next) => {
-                updateParam("tags", next)
+          <Input
+            type="search"
+            placeholder="Search name, email, phone, or company…"
+            value={searchInput}
+            onChange={(e) => {
+              setSearchInput(e.target.value)
+            }}
+            className="max-w-md flex-1"
+          />
+          <Button type="submit" variant="outline" size="sm">
+            Search
+          </Button>
+          {hasAnyFilter && (
+            <Button type="button" variant="outline" size="sm" onClick={clearAll}>
+              Clear all
+            </Button>
+          )}
+        </form>
+      )}
+
+      {showChips && (
+        <div
+          className={cn(
+            "flex items-start gap-2",
+            variant === "chips" ? "flex-nowrap" : "flex-wrap",
+          )}
+        >
+          <FilterChip label="Contact type" value={activeContactType}>
+            <ChipSearchList
+              items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
+              value={activeContactType || null}
+              onChange={(v) => {
+                updateParam("contactType", v)
               }}
             />
-          )}
-        </FilterChip>
+          </FilterChip>
 
-        <FilterChip
-          label="Owner"
-          value={(() => {
-            if (!activeOwner) return ""
-            const m = props.ownerOptions.find((o) => o.id === activeOwner)
-            return m?.name ?? m?.email ?? activeOwner
-          })()}
-        >
-          <ChipSearchList
-            items={props.ownerOptions.map((o) => ({
-              value: o.id,
-              label: o.name ?? o.email,
-              description: o.name ? o.email : undefined,
-            }))}
-            value={activeOwner || null}
-            onChange={(v) => {
-              updateParam("ownerUserId", v)
-            }}
-            emptyMessage="No team members"
-          />
-        </FilterChip>
+          <FilterChip label="Lifecycle status" value={activeLifecycle}>
+            <ChipSearchList
+              items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
+              value={activeLifecycle || null}
+              onChange={(v) => {
+                updateParam("lifecycleStatus", v)
+              }}
+            />
+          </FilterChip>
 
-        <FilterChip
-          label="Company"
-          value={
-            activeCompany
-              ? (props.companyOptions.find((c) => c.id === activeCompany)?.name ?? activeCompany)
-              : ""
-          }
-        >
-          <ChipSearchList
-            items={props.companyOptions.map((c) => ({ value: c.id, label: c.name }))}
-            value={activeCompany || null}
-            onChange={(v) => {
-              updateParam("companyId", v)
-            }}
-            emptyMessage="No companies yet"
-          />
-        </FilterChip>
-
-        <FilterChip label="Lead source" value={activeLeadSource}>
-          <LeadSourceCombobox
-            value={activeLeadSource}
-            onChange={(v) => {
-              updateParam("leadSource", v || null)
-            }}
-            existingValues={props.leadSourceOptions}
-            hiddenSources={props.hiddenLeadSources}
-            allowAnyOption
-            anyLabel="— Any —"
-          />
-        </FilterChip>
-
-        <FilterChip
-          label="Date created"
-          value={createdFrom || createdTo ? `${createdFrom || "…"} → ${createdTo || "…"}` : ""}
-        >
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  selectPreset(7)
+          <FilterChip
+            label="Tags"
+            value={activeTags.length > 0 ? `${String(activeTags.length)} selected` : ""}
+          >
+            {props.tagOptions.length === 0 ? (
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                No tags yet. Add tags on a contact to filter by them.
+              </p>
+            ) : (
+              <ChipSearchMultiList
+                items={props.tagOptions.map((t) => ({ value: t, label: t }))}
+                values={activeTags}
+                onChange={(next) => {
+                  updateParam("tags", next)
                 }}
-              >
-                Last 7 days
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  selectPreset(30)
-                }}
-              >
-                Last 30 days
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  selectPreset(90)
-                }}
-              >
-                Last 90 days
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs">From</label>
-                <Input
-                  type="date"
-                  value={createdFrom}
-                  onChange={(e) => {
-                    updateParam("createdFrom", e.target.value || null)
-                  }}
-                />
-              </div>
-              <div>
-                <label className="text-xs">To</label>
-                <Input
-                  type="date"
-                  value={createdTo}
-                  onChange={(e) => {
-                    updateParam("createdTo", e.target.value || null)
-                  }}
-                />
-              </div>
-            </div>
-            {(createdFrom || createdTo) && (
-              <Button type="button" variant="outline" size="sm" onClick={clearDateRange}>
-                Clear date range
-              </Button>
+              />
             )}
-          </div>
-        </FilterChip>
-        {props.trailingChips}
-      </div>
+          </FilterChip>
+
+          <FilterChip
+            label="Owner"
+            value={(() => {
+              if (!activeOwner) return ""
+              const m = props.ownerOptions.find((o) => o.id === activeOwner)
+              return m?.name ?? m?.email ?? activeOwner
+            })()}
+          >
+            <ChipSearchList
+              items={props.ownerOptions.map((o) => ({
+                value: o.id,
+                label: o.name ?? o.email,
+                description: o.name ? o.email : undefined,
+              }))}
+              value={activeOwner || null}
+              onChange={(v) => {
+                updateParam("ownerUserId", v)
+              }}
+              emptyMessage="No team members"
+            />
+          </FilterChip>
+
+          <FilterChip
+            label="Company"
+            value={
+              activeCompany
+                ? (props.companyOptions.find((c) => c.id === activeCompany)?.name ?? activeCompany)
+                : ""
+            }
+          >
+            <ChipSearchList
+              items={props.companyOptions.map((c) => ({ value: c.id, label: c.name }))}
+              value={activeCompany || null}
+              onChange={(v) => {
+                updateParam("companyId", v)
+              }}
+              emptyMessage="No companies yet"
+            />
+          </FilterChip>
+
+          <FilterChip label="Lead source" value={activeLeadSource}>
+            <LeadSourceCombobox
+              value={activeLeadSource}
+              onChange={(v) => {
+                updateParam("leadSource", v || null)
+              }}
+              existingValues={props.leadSourceOptions}
+              hiddenSources={props.hiddenLeadSources}
+              allowAnyOption
+              anyLabel="— Any —"
+            />
+          </FilterChip>
+
+          <FilterChip
+            label="Date created"
+            value={createdFrom || createdTo ? `${createdFrom || "…"} → ${createdTo || "…"}` : ""}
+          >
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectPreset(7)
+                  }}
+                >
+                  Last 7 days
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectPreset(30)
+                  }}
+                >
+                  Last 30 days
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectPreset(90)
+                  }}
+                >
+                  Last 90 days
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs">From</label>
+                  <Input
+                    type="date"
+                    value={createdFrom}
+                    onChange={(e) => {
+                      updateParam("createdFrom", e.target.value || null)
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs">To</label>
+                  <Input
+                    type="date"
+                    value={createdTo}
+                    onChange={(e) => {
+                      updateParam("createdTo", e.target.value || null)
+                    }}
+                  />
+                </div>
+              </div>
+              {(createdFrom || createdTo) && (
+                <Button type="button" variant="outline" size="sm" onClick={clearDateRange}>
+                  Clear date range
+                </Button>
+              )}
+            </div>
+          </FilterChip>
+          {props.trailingChips}
+        </div>
+      )}
     </div>
   )
 }

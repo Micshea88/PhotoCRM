@@ -213,7 +213,7 @@ describe("NotificationRow", () => {
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
     const dot = screen.getByTestId("notification-read-dot")
     expect(dot).toBeInTheDocument()
-    expect(dot.classList.contains("bg-blue-500")).toBe(true)
+    expect(dot.classList.contains("bg-[var(--color-cat-lead)]")).toBe(true)
   })
 
   it("renders NO dot element when readAt is set (read)", () => {
@@ -616,7 +616,7 @@ describe("NotificationRow — row click navigation (D2)", () => {
     await user.click(screen.getByTestId("row-read-toggle"))
     expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
     const dot = screen.getByTestId("notification-read-dot")
-    expect(dot.classList.contains("bg-blue-500")).toBe(true)
+    expect(dot.classList.contains("bg-[var(--color-cat-lead)]")).toBe(true)
     expect(screen.getByTestId("row-read-toggle")).toHaveTextContent("Mark as read")
   })
 })

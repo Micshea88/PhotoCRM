@@ -236,7 +236,7 @@ export function SearchableMultiSelect({
           "flex min-h-7 w-full flex-wrap items-center gap-1 bg-transparent text-sm",
           inlineMode
             ? "border-0 border-b border-[var(--color-primary)] px-0 py-0.5"
-            : "min-h-9 rounded-md border border-[var(--color-input)] px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-[var(--color-ring)]",
+            : "min-h-9 rounded-sm border border-[var(--color-input)] px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-[var(--color-ring)]",
           disabled && "cursor-not-allowed opacity-50",
         )}
         onClick={() => {
@@ -296,7 +296,7 @@ export function SearchableMultiSelect({
       </div>
 
       <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
-        <div className="max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md">
+        <div className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] shadow-md">
           {visibleItems.length === 0 && !showCreate ? (
             <div className="p-3 text-center text-xs text-[var(--color-muted-foreground)]">
               {emptyMessage}

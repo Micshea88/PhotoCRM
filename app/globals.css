@@ -103,14 +103,21 @@
   --space-commit-gap: 2rem; /* 32px — last content block → commit-button container */
   --space-commit-bottom: 1.5rem; /* 24px — button container → page bottom */
 
-  /* ========== SHAPE ========== */
-  --radius: 0.5rem; /* 8px — bare `rounded`. Badges/dots/avatars stay rounded-full. */
-  /* NOTE — radius SCALE APPROVED (sm 6px · md 8px · lg 10px · xl 12px; full=pills).
-     WIRING DEFERRED TO STEP 3: in Tailwind v4, defining --radius-sm/md/lg/xl here would
-     instantly remap every rounded-md/lg/sm surface app-wide (md 6→8, lg 8→10, sm →6) —
-     an unreviewed global shift. So the tokens are wired together with the element-type
-     class migration in STEP 3, where each CHANGED surface (menus/popovers/dropdowns off
-     rounded-md/lg) gets an explicit before/after review. Cards already read 12px. */
+  /* ========== SHAPE — token-driven radius scale (element-type mapped) ========== */
+  /* Wired in STEP 3 so the scale is genuinely token-driven (previously only bare
+     `rounded` read --radius; rounded-sm/md/lg/xl used Tailwind's fixed defaults).
+     Element type: sm=inputs/buttons/small controls · md=inner/small containers ·
+     lg=menus/popovers/dropdowns · xl=CARDS/large panels · full=pills/dots/avatars.
+     Shared primitives are reassigned to their element type (button/input→sm,
+     menu/popover→lg, modal→xl, card stays xl); hand-rolled surfaces shift with the
+     scale and are further corrected as they adopt <Card>/<Badge> in the next commit. */
+  --radius-sm: 0.375rem; /* 6px — inputs, buttons, small controls */
+  --radius-md: 0.5rem; /* 8px — inner / small containers */
+  --radius-lg: 0.625rem; /* 10px — menus, popovers, dropdowns */
+  --radius-xl: 0.75rem; /* 12px — cards, large panels */
+  --radius: var(
+    --radius-md
+  ); /* bare `rounded` = md (8px). Badges/dots/avatars stay rounded-full. */
 }
 
 @layer base {

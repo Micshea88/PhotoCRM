@@ -229,7 +229,7 @@ export function SearchableSelect({
           "flex w-full items-center justify-between gap-2 text-left text-sm",
           inlineMode
             ? "h-7 border-0 border-b border-[var(--color-primary)] bg-transparent px-0"
-            : "h-9 rounded-md border border-[var(--color-input)] bg-transparent px-2 shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+            : "h-9 rounded-sm border border-[var(--color-input)] bg-transparent px-2 shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
@@ -267,7 +267,7 @@ export function SearchableSelect({
 
       <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
         <div
-          className="max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md"
+          className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] shadow-md"
           onKeyDown={onPanelKeyDown}
         >
           <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-2 py-1.5">

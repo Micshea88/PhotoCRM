@@ -46,7 +46,7 @@ export function Modal({
     >
       <div
         className={cn(
-          "w-full max-w-md rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-6 shadow-lg",
+          "w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] p-6 shadow-lg",
           className,
         )}
         onClick={(e) => {

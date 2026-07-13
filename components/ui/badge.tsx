@@ -35,6 +35,8 @@ export type BadgeState = "destructive" | "warning" | "success" | "info"
 type BadgeProps = {
   className?: string
   children: ReactNode
+  /** Optional native tooltip (e.g. the AI reasoning behind a classification). */
+  title?: string
 } & (
   | { variant: "category"; category: BadgeCategory }
   | { variant: "state"; state: BadgeState }
@@ -67,6 +69,7 @@ export function Badge(props: BadgeProps) {
         props.className,
       )}
       style={badgeStyle(props)}
+      title={props.title}
     >
       {props.children}
     </span>

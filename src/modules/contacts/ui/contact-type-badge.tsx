@@ -1,79 +1,60 @@
-import type { CSSProperties } from "react"
+import { Badge, type BadgeCategory, type BadgeState } from "@/components/ui/badge"
 
-// Shared pill base classes — structure only, no color.
-// Static string so Tailwind JIT can scan it.
-const BADGE_BASE =
-  "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium"
+/**
+ * Contact Type / lifecycle Status pills — thin mappers onto the shared <Badge>
+ * primitive (one padding, one font, tint bg + SATURATED fg per the category tier).
+ * The taxonomy→token mapping lives here; all pill styling lives in <Badge>.
+ */
 
-// Neutral variant — muted bg + muted fg via token Tailwind classes.
-// Also static so the scanner picks up bg-[var(…)] and text-[var(…)].
-const NEUTRAL_CLASS =
-  "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+type BadgeSpec =
+  | { variant: "category"; category: BadgeCategory }
+  | { variant: "state"; state: BadgeState }
+  | { variant: "neutral" }
 
-interface BadgeConfig {
-  className: string
-  style?: CSSProperties
-}
+const NEUTRAL: BadgeSpec = { variant: "neutral" }
 
-/** Build a category badge config using tint bg + saturated fg from tokens. */
-function catBadge(token: string): BadgeConfig {
-  return {
-    className: BADGE_BASE,
-    style: {
-      backgroundColor: `var(--color-cat-${token}-tint)`,
-      color: `var(--color-cat-${token})`,
-    },
-  }
-}
-
-const NEUTRAL: BadgeConfig = { className: NEUTRAL_CLASS }
-
-const TYPE_MAP: Record<string, BadgeConfig> = {
-  Lead: catBadge("lead"),
-  "Active Client": catBadge("referral"),
-  "Past Client": catBadge("payment"),
+const TYPE_MAP: Record<string, BadgeSpec> = {
+  Lead: { variant: "category", category: "lead" },
+  "Active Client": { variant: "category", category: "referral" },
+  "Past Client": { variant: "category", category: "payment" },
   Vendor: NEUTRAL,
   Contractor: NEUTRAL,
-  "Referral Partner": catBadge("blush"),
+  "Referral Partner": { variant: "category", category: "blush" },
 }
 
-const STATUS_MAP: Record<string, BadgeConfig> = {
-  Active: catBadge("referral"),
-  VIP: catBadge("payment"),
+const STATUS_MAP: Record<string, BadgeSpec> = {
+  Active: { variant: "category", category: "referral" },
+  VIP: { variant: "category", category: "payment" },
   Inactive: NEUTRAL,
-  "Do Not Contact": {
-    className: BADGE_BASE,
-    style: {
-      backgroundColor: "color-mix(in srgb, var(--color-destructive) 15%, transparent)",
-      color: "var(--color-destructive)",
-    },
-  },
+  "Do Not Contact": { variant: "state", state: "destructive" },
 }
 
-/**
- * Quiet category pill for the contact Type column.
- * Null / empty → renders nothing (blank cell).
- */
+function renderBadge(spec: BadgeSpec, label: string) {
+  if (spec.variant === "category") {
+    return (
+      <Badge variant="category" category={spec.category}>
+        {label}
+      </Badge>
+    )
+  }
+  if (spec.variant === "state") {
+    return (
+      <Badge variant="state" state={spec.state}>
+        {label}
+      </Badge>
+    )
+  }
+  return <Badge>{label}</Badge>
+}
+
+/** Quiet category pill for the contact Type column. Null/empty → nothing. */
 export function ContactTypeBadge({ type }: { type: string | null }) {
   if (!type) return null
-  const badge = TYPE_MAP[type] ?? NEUTRAL
-  return (
-    <span className={badge.className} style={badge.style}>
-      {type}
-    </span>
-  )
+  return renderBadge(TYPE_MAP[type] ?? NEUTRAL, type)
 }
 
-/**
- * Quiet category pill for the lifecycle Status column.
- * Null / empty → renders nothing (blank cell).
- */
+/** Quiet category pill for the lifecycle Status column. Null/empty → nothing. */
 export function StatusBadge({ status }: { status: string | null }) {
   if (!status) return null
-  const badge = STATUS_MAP[status] ?? NEUTRAL
-  return (
-    <span className={badge.className} style={badge.style}>
-      {status}
-    </span>
-  )
+  return renderBadge(STATUS_MAP[status] ?? NEUTRAL, status)
 }

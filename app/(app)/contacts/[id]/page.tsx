@@ -35,6 +35,7 @@ import { RegenerateAiButton } from "@/modules/contacts/ui/regenerate-ai-button"
 import { isSummaryStale } from "@/modules/contacts/ai/summary-freshness"
 import type { AiInsight } from "@/modules/contacts/ai/insights-detector"
 import { PageContainer } from "@/modules/shared/ui/page-container"
+import { Card } from "@/components/ui/card"
 
 /**
  * Push 3 (C6c) — contact detail page rebuild.
@@ -386,7 +387,7 @@ export default async function ContactDetailPage({
                 ContactDetailLeft panes=["info","about"] so the desktop
                 card styling is preserved without the action row dup. */}
             <div className="space-y-4 lg:hidden" data-testid="contact-detail-mobile-shell">
-              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-2 py-3">
+              <Card className="px-2 py-3">
                 <ActionIconRow
                   contactId={contact.id}
                   contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
@@ -396,7 +397,7 @@ export default async function ContactDetailPage({
                   contactOptions={associationContactOptions}
                   companyOptions={associationCompanyOptions}
                 />
-              </div>
+              </Card>
               <ContactDetailMobile
                 initialTab={mobileInitialTab}
                 activity={

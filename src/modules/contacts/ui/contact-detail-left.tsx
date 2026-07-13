@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { User as UserIcon } from "lucide-react"
+import { Card } from "@/components/ui/card"
 import { InlineEditField } from "@/components/ui/inline-edit-field"
 import { InlineEditSelect } from "@/components/ui/inline-edit-select"
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
@@ -245,8 +246,8 @@ export function ContactDetailLeft({
 
   return (
     <aside className="space-y-4 lg:h-full">
-      <section
-        className="flex flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] lg:h-full"
+      <Card
+        className="flex flex-col overflow-hidden lg:h-full"
         data-testid="contact-detail-left-card"
       >
         {/* 1. Identity */}
@@ -488,7 +489,7 @@ export function ContactDetailLeft({
             </AboutRow>
           </div>
         )}
-      </section>
+      </Card>
     </aside>
   )
 }

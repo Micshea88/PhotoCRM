@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Settings } from "lucide-react"
+import { Card } from "@/components/ui/card"
 import { Modal } from "@/components/ui/modal"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -29,8 +30,8 @@ export function ContactDetailRight({
   hasEventsModule?: boolean
 }) {
   return (
-    <aside
-      className="divide-y divide-[var(--color-border)] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] lg:h-full"
+    <Card
+      className="divide-y divide-[var(--color-border)] overflow-hidden lg:h-full"
       data-testid="contact-detail-right"
     >
       <CollapsibleSection
@@ -102,7 +103,7 @@ export function ContactDetailRight({
           body="Contracts, mood boards, and asset deliveries attach here once the Files module ships."
         />
       </CollapsibleSection>
-    </aside>
+    </Card>
   )
 }
 

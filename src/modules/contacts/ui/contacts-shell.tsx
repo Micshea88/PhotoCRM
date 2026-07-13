@@ -417,9 +417,12 @@ export function ContactsShell({
                   <ArrowUpDown className="size-4" /> Sort
                 </Button>
                 {sortOpen && (
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     {SORT_OPTIONS.map((opt) => {
                       const active = activeSortBy === opt.field
+                      // Sort options are toggle chips that match the Filter chips:
+                      // a <Badge>-style pill in the shared state language (sage
+                      // --state-selected when active, quiet hover otherwise).
                       return (
                         <button
                           key={opt.field}
@@ -427,11 +430,13 @@ export function ContactsShell({
                           onClick={() => {
                             applySort(opt.field)
                           }}
+                          aria-pressed={active}
                           className={cn(
-                            "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs whitespace-nowrap transition-colors",
+                            "text-2xs flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors",
+                            "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
                             active
-                              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
-                              : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]",
+                              ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
+                              : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]",
                           )}
                         >
                           {opt.label}

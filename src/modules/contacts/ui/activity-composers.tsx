@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Calendar, Mail, Paperclip, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
 import { SearchableSelect } from "@/components/ui/searchable-select"
@@ -78,10 +79,7 @@ function ComposerShell({
   onCancel: () => void
 }) {
   return (
-    <div
-      className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-      data-testid="activity-composer"
-    >
+    <Card className="space-y-3 p-4" data-testid="activity-composer">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
         <button
@@ -113,7 +111,7 @@ function ComposerShell({
           {saving ? "Saving…" : saveLabel}
         </Button>
       </div>
-    </div>
+    </Card>
   )
 }
 

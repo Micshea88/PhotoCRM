@@ -6,6 +6,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -54,20 +57,25 @@ export function ContactsActionsDropdown({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onOpenEditColumns}>Edit columns</DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => {
-            onExport("csv")
-          }}
-        >
-          Export CSV
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => {
-            onExport("xlsx")
-          }}
-        >
-          Export Excel (XLSX)
-        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem
+              onSelect={() => {
+                onExport("csv")
+              }}
+            >
+              CSV (.csv)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                onExport("xlsx")
+              }}
+            >
+              Excel (.xlsx)
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuItem asChild>
           <Link href="/contacts/import">Import contacts</Link>
         </DropdownMenuItem>

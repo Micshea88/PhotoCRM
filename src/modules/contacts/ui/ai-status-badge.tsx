@@ -2,39 +2,29 @@
 
 import { Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Badge, type BadgeCategory } from "@/components/ui/badge"
 import { leadStatusCategory, type LeadStatusCategory } from "@/modules/contacts/ai/lead-status-enum"
 
 /**
- * Push 3 (C6c) — AI lead-status badge.
+ * Push 3 (C6c) — AI lead-status badge, on the shared <Badge> primitive.
  *
- * Renders the cached `ai_lead_status` value with a small sparkles
- * marker (so users can tell at a glance which fields are AI-derived
- * vs human-entered). Color comes from the category map in
- * lead-status-enum.ts when the value matches one of the canonical 19;
- * otherwise the badge uses the neutral "other" palette since C6b
- * classifier output is free-form (Haiku may return anything reasonable).
- *
- * The reasoning string lives in the badge's `title` attribute so
- * hover surfaces it without needing a dedicated tooltip primitive.
+ * A category pill with a small sparkles marker so users can tell AI-derived
+ * fields from human-entered ones; the reasoning string surfaces via the badge's
+ * native `title` tooltip. The free-form classifier output maps to the category
+ * tier (canonical 19 → their category; anything else → neutral).
  */
-const CATEGORY_CLASSES: Record<LeadStatusCategory, string> = {
-  client:
-    "bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/30",
-  lead: "bg-[var(--color-info)]/10 text-[var(--color-info)] border-[var(--color-info)]/30",
-  referral_partner: "bg-violet-500/10 text-violet-700 border-violet-500/30",
-  vendor:
-    "bg-[var(--color-warning)]/10 text-[var(--color-warning)] border-[var(--color-warning)]/30",
-  other:
-    "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] border-[var(--color-border)]",
+const CATEGORY_TO_BADGE: Record<LeadStatusCategory, BadgeCategory | null> = {
+  client: "client",
+  lead: "lead",
+  referral_partner: "blush",
+  vendor: "vendor",
+  other: null, // neutral
 }
 
 function pickCategory(status: string): LeadStatusCategory {
-  // The classifier is free-form — try the canonical mapping first;
-  // free-form output flows through `other`.
+  // The classifier is free-form — try the canonical mapping first; free-form
+  // output flows through `other`.
   try {
-    // leadStatusCategory expects a LeadStatus type narrow; we cast at
-    // the boundary and rely on the function's exhaustive switch to
-    // return "other" only if it hits the explicit Uncategorized case.
     return leadStatusCategory(status as Parameters<typeof leadStatusCategory>[0])
   } catch {
     return "other"
@@ -50,33 +40,25 @@ export function AiStatusBadge({
   reasoning: string | null
   className?: string
 }) {
-  if (!status) {
+  const label = status ?? "No classification yet"
+  const category = status ? CATEGORY_TO_BADGE[pickCategory(status)] : null
+  const content = (
+    <>
+      <Sparkles className="size-3" aria-hidden="true" />
+      <span className="font-medium">{label}</span>
+    </>
+  )
+  const cls = cn("gap-1", className)
+  if (category) {
     return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-          CATEGORY_CLASSES.other,
-          className,
-        )}
-      >
-        <Sparkles className="size-3" aria-hidden="true" />
-        <span>No classification yet</span>
-      </span>
+      <Badge variant="category" category={category} className={cls} title={reasoning ?? undefined}>
+        {content}
+      </Badge>
     )
   }
-  const category = pickCategory(status)
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-        CATEGORY_CLASSES[category],
-        className,
-      )}
-      title={reasoning ?? undefined}
-      data-testid="ai-status-badge"
-    >
-      <Sparkles className="size-3" aria-hidden="true" />
-      <span className="font-medium">{status}</span>
-    </span>
+    <Badge className={cls} title={reasoning ?? undefined}>
+      {content}
+    </Badge>
   )
 }

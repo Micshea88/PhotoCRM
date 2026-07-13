@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { formatPhoneDisplay } from "@/lib/format/phone"
 import type { ListCustomFieldDef } from "@/modules/custom-fields/ui/column-helpers"
 import { scanCompanyDuplicates, type CompanyDuplicateGroupView } from "../actions"
@@ -75,21 +77,13 @@ export function CompanyDuplicatesShell() {
       )}
 
       {groups && groups.length > 0 && (
-        <ul className="space-y-3">
+        <div className="space-y-3">
           {groups.map((g, i) => (
-            <li
-              key={i}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-            >
+            <Card key={i} className="p-4">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex flex-wrap gap-1.5">
                   {g.reasons.map((r) => (
-                    <span
-                      key={r}
-                      className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs"
-                    >
-                      {REASON_LABEL[r]}
-                    </span>
+                    <Badge key={r}>{REASON_LABEL[r]}</Badge>
                   ))}
                 </div>
                 <Button
@@ -123,9 +117,9 @@ export function CompanyDuplicatesShell() {
                   </li>
                 ))}
               </ul>
-            </li>
+            </Card>
           ))}
-        </ul>
+        </div>
       )}
 
       <CompanyMergeModal

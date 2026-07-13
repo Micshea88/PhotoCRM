@@ -22,6 +22,7 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
@@ -1224,10 +1225,7 @@ export function ActivityCard({
   }
 
   return (
-    <article
-      className="group space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3"
-      data-testid={`activity-entry-${entry.kind}`}
-    >
+    <Card className="group space-y-2 px-4 py-3" data-testid={`activity-entry-${entry.kind}`}>
       <header className="flex items-center gap-2">
         <button
           type="button"
@@ -1399,7 +1397,7 @@ export function ActivityCard({
         destructive
         submitting={deleting}
       />
-    </article>
+    </Card>
   )
 }
 

@@ -47,7 +47,7 @@ describe("ContactsActionsDropdown", () => {
     expect(screen.getByRole("button", { name: /actions/i })).toBeInTheDocument()
   })
 
-  it("opens to exactly the 7 org-level items in order", async () => {
+  it("opens to exactly the 6 top-level items in order (Export is a submenu)", async () => {
     const user = userEvent.setup()
     render(
       <ContactsActionsDropdown onOpenEditColumns={() => undefined} onExport={() => undefined} />,
@@ -56,8 +56,7 @@ describe("ContactsActionsDropdown", () => {
     const items = screen.getAllByRole("menuitem")
     expect(items.map((el) => el.textContent.trim())).toEqual([
       "Edit columns",
-      "Export CSV",
-      "Export Excel (XLSX)",
+      "Export",
       "Import contacts",
       "Restore records",
       "View archived",
@@ -74,15 +73,23 @@ describe("ContactsActionsDropdown", () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
-  it("Export CSV and Export Excel trigger the host callback with the format", async () => {
+  it("Export submenu → CSV / Excel trigger the host callback with the format", async () => {
     const user = userEvent.setup()
     const onExport = vi.fn()
     render(<ContactsActionsDropdown onOpenEditColumns={() => undefined} onExport={onExport} />)
     await user.click(screen.getByRole("button", { name: /actions/i }))
-    await user.click(screen.getByRole("menuitem", { name: "Export CSV" }))
+    // Open the Export submenu (SubTrigger opens on ArrowRight / Enter).
+    const exportTrigger = screen.getByRole("menuitem", { name: "Export" })
+    exportTrigger.focus()
+    await user.keyboard("{ArrowRight}")
+    await user.click(screen.getByRole("menuitem", { name: "CSV (.csv)" }))
     expect(onExport).toHaveBeenCalledWith("csv")
+
     await user.click(screen.getByRole("button", { name: /actions/i }))
-    await user.click(screen.getByRole("menuitem", { name: "Export Excel (XLSX)" }))
+    const exportTrigger2 = screen.getByRole("menuitem", { name: "Export" })
+    exportTrigger2.focus()
+    await user.keyboard("{ArrowRight}")
+    await user.click(screen.getByRole("menuitem", { name: "Excel (.xlsx)" }))
     expect(onExport).toHaveBeenCalledWith("xlsx")
   })
 

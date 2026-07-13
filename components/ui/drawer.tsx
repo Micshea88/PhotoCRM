@@ -71,7 +71,7 @@ export function Drawer({
               type="button"
               aria-label="Close"
               onClick={onClose}
-              className="rounded-md p-1 text-base hover:bg-[var(--color-accent)]"
+              className="rounded-md p-1 text-base hover:bg-[var(--state-hover)]"
             >
               ✕
             </button>

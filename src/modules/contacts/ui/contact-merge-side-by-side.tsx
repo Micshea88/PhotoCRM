@@ -848,7 +848,7 @@ function RecordHeader({
         <button
           type="button"
           onClick={onSetPrimary}
-          className="text-2xs inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 font-medium hover:bg-[var(--color-accent)]/40"
+          className="text-2xs inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 font-medium hover:bg-[var(--state-hover)]"
           data-testid={`merge-set-primary-${record.id}`}
         >
           Set as primary
@@ -907,7 +907,7 @@ function ValueCell({
         divider && "border-t border-[var(--color-border)]",
         picked
           ? "bg-[var(--color-info)]/10 ring-1 ring-[var(--color-primary)]/30 ring-inset"
-          : "hover:bg-[var(--color-accent)]/30",
+          : "hover:bg-[var(--state-hover)]",
         disabled && !picked && "cursor-default opacity-60",
       )}
     >

@@ -125,6 +125,27 @@
        ZERO behavior change (native keyboard, focus, a11y, and mobile picker intact).
        Kills the OS-blue leak without replacing any control. */
     accent-color: var(--color-brand-accent);
+
+    /* ===== INTERACTION-STATE TOKENS — one token per state, applied IDENTICALLY to
+       every control (Carbon/Material model). "selected" and "interactive state" are
+       two SEPARATE axes that combine — a hovered-selected item shows BOTH. See
+       docs/pathway-design-system.md → Interaction states. Focus + disabled are
+       conventions (below), not color vars: focus = --color-ring at ring-1 via
+       focus-visible; disabled = opacity-50 + not-allowed + pointer-events-none. */
+    --state-hover: var(
+      --color-accent
+    ); /* cream fill — quietest emphasis (retires /40,/50,brightness-95 on fill controls) */
+    --state-selected: var(
+      --color-brand-accent
+    ); /* sage — MATCHES what native controls already got via accent-color */
+    --state-selected-foreground: var(
+      --color-primary-foreground
+    ); /* cream text/check ON the sage selected fill */
+    --state-active: color-mix(
+      in oklab,
+      var(--color-accent),
+      var(--color-foreground) 10%
+    ); /* pressed — one notch stronger than hover */
   }
   * {
     border-color: var(--color-border);

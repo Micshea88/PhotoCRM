@@ -223,7 +223,7 @@ function Item({
     "block w-full rounded px-2 py-1.5 text-left",
     destructive
       ? "text-[var(--color-destructive)] hover:bg-[var(--color-destructive)]/10"
-      : "hover:bg-[var(--color-accent)]/40",
+      : "hover:bg-[var(--state-hover)]",
     disabled && "cursor-not-allowed opacity-50",
   )
   if (href && !disabled) {

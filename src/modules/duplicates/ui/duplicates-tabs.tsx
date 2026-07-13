@@ -35,9 +35,9 @@ function TabLink({ href, label, active }: { href: string; label: string; active:
       aria-selected={active}
       href={href}
       className={cn(
-        "border-b-2 px-4 py-2 text-sm transition-colors",
+        "border-b-2 px-4 py-2 text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
         active
-          ? "border-[var(--color-primary)] font-medium text-[var(--color-foreground)]"
+          ? "border-[var(--state-selected)] font-medium text-[var(--color-foreground)]"
           : "border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]",
       )}
     >

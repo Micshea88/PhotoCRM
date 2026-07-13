@@ -412,10 +412,10 @@ function ChipSearchList({
                     onChange(selected ? null : item.value)
                   }}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs",
+                    "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
                     selected
-                      ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-                      : "hover:bg-[var(--color-accent)]/50",
+                      ? "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)]"
+                      : "hover:bg-[var(--state-hover)]",
                   )}
                 >
                   <span className="flex flex-col truncate">
@@ -426,7 +426,9 @@ function ChipSearchList({
                       </span>
                     )}
                   </span>
-                  {selected && <Check className="size-3.5 shrink-0 text-[var(--color-primary)]" />}
+                  {selected && (
+                    <Check className="size-3.5 shrink-0 text-[var(--state-selected-foreground)]" />
+                  )}
                 </button>
               </li>
             )
@@ -492,7 +494,7 @@ function ChipSearchMultiList({
                 <label
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs",
-                    "hover:bg-[var(--color-accent)]/50",
+                    "hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]",
                   )}
                 >
                   <input

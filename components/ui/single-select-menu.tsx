@@ -61,14 +61,15 @@ export function SingleSelectMenu({
                       close()
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40",
-                      selected && "font-medium",
+                      "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)] focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
+                      selected &&
+                        "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)]",
                     )}
                   >
                     {o.leading}
                     <span className="flex-1 truncate">{o.label}</span>
                     {selected && (
-                      <Check className="size-3.5 shrink-0 text-[var(--color-primary)]" />
+                      <Check className="size-3.5 shrink-0 text-[var(--state-selected-foreground)]" />
                     )}
                   </button>
                 </li>

@@ -117,7 +117,7 @@ export function AssociationsPicker({
             onClick={() => {
               onOpenChange(false)
             }}
-            className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+            className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -278,7 +278,7 @@ function CategoryTab({
           "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs",
           active
             ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
-            : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",
+            : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]",
         )}
       >
         <span>{label}</span>
@@ -320,7 +320,7 @@ function CheckboxList({
             <label
               className={cn(
                 "flex cursor-pointer items-start gap-2 rounded px-2 py-1 text-sm",
-                "hover:bg-[var(--color-accent)]/30",
+                "hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]",
                 isPrimary && "cursor-not-allowed opacity-80",
               )}
             >

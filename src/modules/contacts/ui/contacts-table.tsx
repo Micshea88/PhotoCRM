@@ -330,7 +330,7 @@ export function ContactsTable({
             {rows.map((row) => (
               <tr
                 key={row.id}
-                className={`cursor-pointer hover:bg-[var(--color-accent)]/30 ${
+                className={`cursor-pointer hover:bg-[var(--state-hover)] active:bg-[var(--state-active)] ${
                   selectedIds.has(row.id) ? "bg-[var(--color-primary)]/5" : ""
                 }`}
                 onClick={() => {
@@ -417,7 +417,7 @@ export function ContactsTable({
                         onClick={(e) => {
                           e.stopPropagation()
                         }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                       >
                         <MoreVertical className="h-4 w-4" aria-hidden="true" />
                       </DropdownMenuTrigger>

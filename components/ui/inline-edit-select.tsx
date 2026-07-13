@@ -161,7 +161,7 @@ export function InlineEditSelect({
         aria-label={ariaLabel ?? "Edit field"}
         className={cn(
           "group flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left text-sm",
-          !disabled && "hover:bg-[var(--color-accent)]/30",
+          !disabled && "hover:bg-[var(--state-hover)]",
           disabled && "cursor-default",
           className,
         )}

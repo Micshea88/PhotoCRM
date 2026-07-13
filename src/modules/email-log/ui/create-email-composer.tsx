@@ -537,7 +537,7 @@ function ChooseExistingButton({
                   onPick(f)
                   setOpenList(false)
                 }}
-                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)]"
               >
                 <span className="truncate">{f.pathname}</span>
                 <span className="text-2xs shrink-0 text-[var(--color-muted-foreground)]">

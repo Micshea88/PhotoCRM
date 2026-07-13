@@ -80,7 +80,7 @@ export function MultiSelectMenu({
       <Fragment key={o.value}>
         {o.dividerBefore && <li className="my-1 border-t border-[var(--color-border)]" />}
         <li>
-          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-[var(--color-accent)]/40">
+          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]">
             <input
               type="checkbox"
               checked={values.includes(o.value)}
@@ -113,7 +113,7 @@ export function MultiSelectMenu({
             "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
             active
               ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
           )}
         >
           <span>{label}</span>

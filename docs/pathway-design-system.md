@@ -209,6 +209,30 @@ way it's checked against the RLS rules:
 5. **Motion** — the motion tokens (150–200ms `ease-out`, `motion-safe:`), never browser-default
    timing.
 
+### Interaction states (LOCKED — one token per state, identical on every control)
+
+Interaction states are a defined, ordered set; **each state = ONE token = applied IDENTICALLY across
+every control** (native + headless). This is the Carbon/IBM + Material 3 model. It exists because the
+same state used to render differently per control (date-picker highlight blue, "Assigned to" dropdown
+hover tan, "selected" was five different things).
+
+**Two axes that combine.** "Selected/checked" and "interactive state" (hover/active/focus) are
+SEPARATE axes — an option can be selected AND hovered and shows BOTH. Hover ≠ selected (they differ on
+purpose), but hover is identical across all controls, selected is identical across all controls, etc.
+
+| State                  | Token / convention                                                                                                                | Treatment                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hover**              | `--state-hover` (= `--color-accent`, cream, one opacity)                                                                          | quiet cream fill — the quietest emphasis. Retire `/40`, `/50`, `brightness-95` on fill controls. Solid buttons (colored bg) hover via `brightness-95` since a cream fill can't apply over them. Muted text controls / links use `hover:text-foreground` / `hover:underline`.                               |
+| **Selected / checked** | `--state-selected` (= `--color-brand-accent`, sage) + `--state-selected-foreground` (cream) + a Check where the control shows one | stronger **sage** fill + cream text/check. This is what native controls already get via `accent-color` — **headless controls MUST match it** (no more cream-fill / ink-border / check-only selected). A control whose selected shape is a border (tabs) keeps the border but colors it `--state-selected`. |
+| **Active (pressed)**   | `--state-active` (fill controls) / `active:brightness-95` (solid buttons)                                                         | momentary, one notch stronger than hover.                                                                                                                                                                                                                                                                  |
+| **Focus**              | `--color-ring`, **one width (`ring-1`)**, via `focus-visible` (never `focus:`, never bare `outline-none`)                         | a ring/border, **never a fill**. On every interactive control — including the ones that had none (tabs, listbox options, pill remove buttons).                                                                                                                                                             |
+| **Disabled**           | `disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none` (Radix: `data-[disabled]:`)                        | one opacity (retire the 40/60/70 grab-bag), not-allowed cursor, no hover/focus.                                                                                                                                                                                                                            |
+
+Native controls (checkbox/radio/range/date/`<select>`) get **selected** consistency for free via
+`accent-color: var(--color-brand-accent)` — the SAME token as `--state-selected`, so native and
+headless selected are identical by construction. Their open-list hover + focus stay OS-drawn (not
+CSS-reachable); per the standing decision, no native control is replaced to chase that.
+
 ### Enforcement (extends the palette guard)
 
 `pnpm verify` runs, at the same pre-commit/pre-push tier as the color guard, in addition to
@@ -220,6 +244,10 @@ way it's checked against the RLS rules:
   (cards must be `xl`).
 - **Primitive-adoption rule** — a hand-rolled card/badge/dropdown where a primitive exists is an
   error unless it carries a documented reviewed-exception marker.
+- **Interaction-state rule** — ban raw state classes that bypass the state tokens: `bg-accent/40`,
+  `bg-accent/50` and `brightness-95` as hover on fill controls (use `--state-hover`); cream-fill or
+  ink-border **selected** (use `--state-selected`); `ring-2`/`ring-0`/`focus:` for focus (use
+  `focus-visible:ring-1 ring-[--color-ring]`); `opacity-40/60/70` as disabled (use the disabled trio).
 - Keeps the existing raw-palette + bracket-font bans.
 
 An un-enforced standard drifts back; the push is not done until these guards are live.

@@ -166,7 +166,7 @@ export function TaskFilterStrip({
               "rounded-md border px-2.5 py-1 text-sm transition-colors",
               state.sortByPriority
                 ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-                : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+                : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
             )}
             data-testid="task-sort-priority"
           >
@@ -269,7 +269,7 @@ function DateRangeMenu({
             "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
             active
               ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
           )}
         >
           <span>{activeLabel}</span>
@@ -286,7 +286,7 @@ function DateRangeMenu({
                 selectPreset(o.value)
               }}
               className={cn(
-                "flex w-full items-center rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40",
+                "flex w-full items-center rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)]",
                 state.due === o.value && "font-medium text-[var(--color-primary)]",
               )}
             >

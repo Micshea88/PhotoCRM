@@ -153,7 +153,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
           <Link
             href="/settings/notifications"
             onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+            className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
             aria-label="Notification settings"
             data-testid="notification-settings-link"
           >

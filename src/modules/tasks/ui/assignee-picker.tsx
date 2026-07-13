@@ -91,7 +91,7 @@ export function AssigneePicker({
           <button
             type="button"
             onClick={toggle}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-input)] px-2 text-sm hover:bg-[var(--color-accent)]/40"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-input)] px-2 text-sm hover:bg-[var(--state-hover)]"
             data-testid="task-assignee-trigger"
           >
             <AssigneeAvatar member={selected} size={avatarSize} />

@@ -536,7 +536,7 @@ function TaskRow({
   return (
     <li
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-[var(--color-accent)]/30",
+        "group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-[var(--state-hover)]",
         done && "opacity-50",
       )}
       data-testid="contact-task-row"

@@ -88,7 +88,7 @@ function ComposerShell({
           type="button"
           aria-label="Cancel"
           onClick={onCancel}
-          className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           <X className="size-3.5" aria-hidden="true" />
         </button>

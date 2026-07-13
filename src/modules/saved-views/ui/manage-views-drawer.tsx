@@ -251,7 +251,7 @@ export function ManageViewsDrawer({
                 return (
                   <tr
                     key={v.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-accent)]/20"
+                    className="border-t border-[var(--color-border)] hover:bg-[var(--state-hover)]"
                   >
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -284,7 +284,7 @@ export function ManageViewsDrawer({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           aria-label={`Actions for ${v.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-[var(--color-accent)]"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-[var(--state-hover)]"
                           disabled={busy}
                         >
                           ⋮

@@ -54,7 +54,7 @@ export function NotificationBell({ initialUnreadCount }: { initialUnreadCount: n
         aria-expanded={open}
         aria-haspopup="dialog"
         data-testid="notification-bell"
-        className="relative flex size-8 items-center justify-center rounded-md text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-accent)]/40"
+        className="relative flex size-8 items-center justify-center rounded-md text-[var(--color-foreground)] transition-colors hover:bg-[var(--state-hover)]"
       >
         <Bell className="size-4" />
         {unreadCount > 0 && (

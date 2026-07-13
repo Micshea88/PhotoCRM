@@ -696,7 +696,7 @@ function TabButton({
             : "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium"
           : isVertical
             ? "border-transparent hover:bg-[var(--color-muted)]"
-            : "border-transparent hover:bg-[var(--color-accent)]"
+            : "border-transparent hover:bg-[var(--state-hover)]"
       }`}
     >
       {dragHandle}
@@ -720,7 +720,7 @@ function TabButton({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Actions for ${tab.name}`}
-            className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-[var(--color-accent)]"
+            className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-[var(--state-hover)]"
             onClick={(e) => {
               e.stopPropagation()
             }}

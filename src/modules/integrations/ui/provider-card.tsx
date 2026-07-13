@@ -91,7 +91,7 @@ export function ProviderCard({ provider }: { provider: IntegrationProvider }) {
       data-testid={`integration-provider-card-${provider.id}`}
       className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
     >
-      <Card className="h-full p-4 transition-colors hover:bg-[var(--color-accent)]/30">
+      <Card className="h-full p-4 transition-colors hover:bg-[var(--state-hover)]">
         <div className="flex items-start gap-3">
           <ProviderIcon iconKey={provider.iconKey} />
           <div className="min-w-0 flex-1">

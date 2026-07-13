@@ -605,7 +605,7 @@ function InlineEditTags({
         aria-label="Edit tags"
         className={cn(
           "group flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left text-xs",
-          "hover:bg-[var(--color-accent)]/30",
+          "hover:bg-[var(--state-hover)]",
         )}
       >
         <span

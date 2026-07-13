@@ -277,7 +277,7 @@ export function OpensPopout({
           type="button"
           onClick={toggle}
           data-testid="opens-popout-trigger"
-          className="text-3xs shrink-0 rounded px-1.5 py-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="text-3xs shrink-0 rounded px-1.5 py-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           ⓘ Opens: {openCount}
         </button>
@@ -920,7 +920,7 @@ function TypeChip({
         "text-2xs rounded-full border px-2 py-0.5",
         active
           ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
-          : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",
+          : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]",
       )}
     >
       {label}
@@ -1236,7 +1236,7 @@ export function ActivityCard({
           }}
           aria-expanded={isOpen}
           aria-label={isOpen ? "Collapse entry" : "Expand entry"}
-          className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           {isOpen ? (
             <ChevronDown className="size-3.5" aria-hidden="true" />
@@ -1274,7 +1274,7 @@ export function ActivityCard({
               }}
               aria-label="Edit entry"
               data-testid={`activity-edit-${entry.kind}`}
-              className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
+              className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--state-hover)]"
             >
               <Pencil className="size-3" aria-hidden="true" />
             </button>
@@ -1286,7 +1286,7 @@ export function ActivityCard({
                   onClick={toggle}
                   aria-label="More actions"
                   data-testid={`activity-kebab-${entry.kind}`}
-                  className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
+                  className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--state-hover)]"
                 >
                   <MoreHorizontal className="size-3" aria-hidden="true" />
                 </button>

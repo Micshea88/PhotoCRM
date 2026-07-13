@@ -41,7 +41,7 @@ export function FilterPills({
             type="button"
             onClick={p.onRemove}
             aria-label={`Remove filter ${p.label}`}
-            className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+            className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
           >
             <X className="size-3" />
           </button>
@@ -51,7 +51,7 @@ export function FilterPills({
         <button
           type="button"
           onClick={onClearAll}
-          className="text-2xs text-[var(--color-primary)] hover:underline"
+          className="text-2xs text-[var(--color-primary)] hover:underline focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
           data-testid="filter-clear-all"
         >
           Clear all filters

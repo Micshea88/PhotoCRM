@@ -360,7 +360,7 @@ export function NotificationRow({
         // 88px floors the shortest (no-body) row so the ~48px bottom-pinned zone
         // starts at y≈28 — an ~8px cushion below the dot's y=12–20 band, holding
         // even if the link's line-height grows.
-        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-accent)]/30",
+        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--state-hover)]",
         !isRead && "bg-[var(--color-accent)]/10",
       )}
       data-testid="notification-row"
@@ -481,7 +481,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={onUnsnooze}
-                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-warning)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-warning)]"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-warning)] hover:bg-[var(--state-hover)] hover:text-[var(--color-warning)]"
                   aria-label="Wake now"
                   data-testid="action-unsnooze"
                 >
@@ -496,7 +496,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={onUnarchive}
-                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                   aria-label="Unarchive"
                   data-testid="action-unarchive"
                 >
@@ -515,7 +515,7 @@ export function NotificationRow({
                   <RadixPopover.Trigger asChild>
                     <button
                       type="button"
-                      className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                      className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                       aria-label="Snooze"
                       data-testid="action-snooze"
                     >
@@ -545,7 +545,7 @@ export function NotificationRow({
                             onClick={() => {
                               handleSnoozePreset(opt)
                             }}
-                            className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                            className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--state-hover)]"
                             data-testid={`snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
                           >
                             <span className="font-medium">{opt.label}</span>
@@ -562,7 +562,7 @@ export function NotificationRow({
 
                     {/* Custom date + time picker */}
                     <div
-                      className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
+                      className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--state-hover)]"
                       data-testid="snooze-custom-row"
                     >
                       <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
@@ -605,7 +605,7 @@ export function NotificationRow({
                 onClick={handleCreateTask}
                 disabled={!n.contactId}
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-sm hover:bg-[var(--color-accent)]/40",
+                  "flex size-7 items-center justify-center rounded-sm hover:bg-[var(--state-hover)]",
                   n.contactId
                     ? "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
                     : "cursor-not-allowed text-[var(--color-muted-foreground)]/40",
@@ -626,7 +626,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={handleArchive}
-                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                   aria-label="Archive"
                   data-testid="action-archive"
                 >

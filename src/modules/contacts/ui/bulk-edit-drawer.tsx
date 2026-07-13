@@ -345,7 +345,7 @@ function BulkEditDrawerBody({
                 onClick={() => {
                   toggleGroup(group)
                 }}
-                className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium hover:bg-[var(--color-accent)]/30"
+                className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium hover:bg-[var(--state-hover)]"
                 aria-expanded={!collapsed}
               >
                 <span>{group}</span>
@@ -367,7 +367,7 @@ function BulkEditDrawerBody({
                           onClick={() => {
                             setSelectedField(isActive ? null : f)
                           }}
-                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--color-accent)]/30 ${
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--state-hover)] ${
                             isActive ? "bg-[var(--color-primary)]/10" : ""
                           }`}
                           aria-expanded={isActive}

@@ -355,7 +355,7 @@ function SidebarParentRow({
                       "flex items-center gap-2 px-3 py-2 text-sm",
                       childActive
                         ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-                        : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+                        : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-accent-foreground)]",
                     )}
                   >
                     <ChildIcon className="size-4 shrink-0" />

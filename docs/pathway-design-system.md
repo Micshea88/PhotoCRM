@@ -160,6 +160,62 @@ or category hue. Hover backgrounds are neutral muted, never sage. Decorative col
 
 ---
 
+## Token catalog + usage rules (LOCKED — developer reference)
+
+Every color, type step, and radius comes from a token in `app/globals.css` `@theme`.
+Components reference the **semantic name only** (`var(--color-*)`, `text-2xs`, `rounded-*`) —
+**never a raw Tailwind palette class** (`bg-red-500`, `text-neutral-700`) and **never a bracket
+size** (`text-[11px]`). The token layer is the single source of truth; the reskin migrated the
+whole product UI onto it (Phases 5–6).
+
+### The four token families
+
+- **Surfaces** (neutral cream/ink — the ONLY colors on chrome/surfaces): `--color-background`
+  (ivory paper) · `--color-foreground` (espresso text) · `--color-card` / `--color-popover`
+  (warm white) · `--color-muted` / `--color-muted-foreground` (taupe) · `--color-border` /
+  `--color-input` (hairline) · `--color-sidebar` (deepest ink) / `--color-sidebar-foreground`.
+- **Brand**: `--color-primary` (ink — buttons/primary actions) / `--color-primary-foreground` ·
+  `--color-brand-accent` (sage-green — accent/emphasis ONLY, never a fill) · `--color-ring`
+  (sage focus) · `--color-accent` / `--color-secondary` (NEUTRAL cream hover surface, never sage).
+- **State** (status only): `--color-destructive` · `--color-warning` · `--color-success` ·
+  `--color-info` (+ `-foreground`, + `--color-destructive-tint`). Light state surface = the base
+  token at `/10`; light state border = `/40`.
+- **Category** (taxonomy — badges/dots/26px avatars ONLY, NEVER chrome/surfaces): `--color-cat-lead`
+  · `-client` · `-referral` · `-vendor` · `-payment` · `-scheduling` · `-blush` (+ each `-tint`).
+- **Type**: `--font-sans` (Open Sans) · `--font-serif` (Bodoni Moda) · `--font-mono`; sub-xs steps
+  `--text-2xs` (11px) / `--text-3xs` (10px) / `--text-4xs` (9px). **Shape**: `--radius` (8px).
+
+### The rules
+
+- **Color = signal only, two tiers.** BRAND tier (ink/ivory/espresso/sage) is the only palette on
+  chrome, surfaces, buttons, nav, primary actions, focus — green appears as accent/ring, never a
+  fill. CATEGORY + state tokens are for badges/dots/avatars/status ONLY, never a surface/card/nav/
+  button/hover. Surfaces stay neutral; hover bg = neutral muted, never sage. Decorative color is
+  not allowed.
+- **Restraint + motion (Phase 4e):** cards are `rounded-xl` + hairline border, NO shadow (elevation
+  from border + whitespace); lists/tables use `divide-y` hairlines, not per-row boxes; all data
+  figures use `tabular-nums`; field/column/section labels are `text-2xs uppercase tracking-wide`
+  muted. Motion is functional and restrained — 150ms ease-out, `motion-safe:` (respects
+  prefers-reduced-motion), sage `focus-visible` ring; it lives in the shared Button/Input primitives.
+- **EXCEPTIONS (structural, not shortcuts):** `src/emails/**` (React-Email templates) and
+  `app/api/share-link/[token]/route.ts` render OUTSIDE `app/globals.css`, so `@theme` tokens don't
+  exist there — those keep raw values. Everything else is token-only.
+
+### PageContainer variant contract (LAW 6 — fluid-first, no islands)
+
+Every `app/(app)` page composes `PageContainer` (`src/modules/shared/ui/`), the single owner of
+horizontal gutter + max-width; `main` owns vertical rhythm only (one owner per axis, no doubled
+gutters). Variants — all fluid, none a pinned/centered island:
+
+- `full` — no max width (default posture; lists, dashboards, contact detail).
+- `default` — fluid up to `PAGE_MAX_DEFAULT` (~1100px), centered only past it (settings).
+- `narrow` — fluid up to `PAGE_MAX_NARROW` (~720px), single-column forms/text.
+
+Enforcement: `pnpm verify` runs `scripts/check-no-raw-palette.mjs`, which fails the build on any
+raw palette class or bracket font size in product UI (emails + share-link excluded).
+
+---
+
 ## 1. Inline edit + autosave UX contract
 
 **Every editable field in Pathway uses `InlineEditField` or

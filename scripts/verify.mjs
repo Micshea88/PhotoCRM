@@ -30,6 +30,9 @@ const TIER1 = [
   { name: "lint", cmd: "pnpm", args: ["lint"] },
   { name: "check-actions", cmd: "node", args: ["scripts/check-actions.mjs"] },
   { name: "check-rls-force", cmd: "node", args: ["scripts/check-rls-force.mjs"] },
+  // Reskin governance — product UI must be token-only (no raw palette classes
+  // or bracket font sizes). See docs/pathway-design-system.md → Token catalog.
+  { name: "check-no-raw-palette", cmd: "node", args: ["scripts/check-no-raw-palette.mjs"] },
   // Snapshot-drift guard — journal/snapshot integrity + sandbox generate.
   // VERIFY PATH ONLY. NEVER add to the Vercel build command — a false
   // positive there would block prod deploys. See AGENTS.md hard-rule 10a.

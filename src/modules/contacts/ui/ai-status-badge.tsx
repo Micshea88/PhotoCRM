@@ -16,7 +16,7 @@ import { leadStatusCategory, type LeadStatusCategory } from "@/modules/contacts/
 const CATEGORY_TO_BADGE: Record<LeadStatusCategory, BadgeCategory | null> = {
   client: "client",
   lead: "lead",
-  referral_partner: "blush",
+  referral_partner: "lead",
   vendor: "vendor",
   other: null, // neutral
 }

@@ -15,18 +15,20 @@ const NEUTRAL: BadgeSpec = { variant: "neutral" }
 
 const TYPE_MAP: Record<string, BadgeSpec> = {
   Lead: { variant: "category", category: "lead" },
-  "Active Client": { variant: "category", category: "referral" },
-  "Past Client": { variant: "category", category: "payment" },
-  Vendor: NEUTRAL,
-  Contractor: NEUTRAL,
-  "Referral Partner": { variant: "category", category: "blush" },
+  "Active Client": { variant: "category", category: "client" },
+  "Past Client": { variant: "category", category: "past" },
+  Vendor: { variant: "category", category: "vendor" },
+  Contractor: { variant: "category", category: "vendor" },
+  "Referral Partner": { variant: "category", category: "lead" },
 }
 
 const STATUS_MAP: Record<string, BadgeSpec> = {
-  Active: { variant: "category", category: "referral" },
-  VIP: { variant: "category", category: "payment" },
-  Inactive: NEUTRAL,
-  "Do Not Contact": { variant: "state", state: "destructive" },
+  Active: { variant: "category", category: "client" },
+  VIP: { variant: "category", category: "vip" },
+  Inactive: { variant: "category", category: "past" },
+  // NOTE: Do Not Contact → graphite (retired) per the 5-jewel family. It was
+  // previously the destructive/rust alert; flagged for review.
+  "Do Not Contact": { variant: "category", category: "past" },
 }
 
 function renderBadge(spec: BadgeSpec, label: string) {

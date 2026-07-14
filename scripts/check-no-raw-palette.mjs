@@ -24,8 +24,11 @@ import { join } from "node:path"
 const ROOTS = ["src", "app", "components"]
 const EXCLUDE = ["src/emails/", "app/api/share-link/"]
 
+// FULL Tailwind color palette (all 22 hues). violet/purple/fuchsia/pink were the
+// gap that let bg-violet-500 slip past into the AI badge earlier — now covered so
+// no off-palette color can slip in again.
 const PALETTE =
-  /\b(text|bg|border|ring|from|to|via|divide|fill|stroke|outline|decoration|placeholder|caret|accent)-(red|rose|orange|amber|yellow|lime|green|emerald|teal|blue|sky|cyan|indigo|gray|slate|zinc|neutral|stone)-\d{2,3}\b/
+  /\b(text|bg|border|ring|from|to|via|divide|fill|stroke|outline|decoration|placeholder|caret|accent)-(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d{2,3}\b/
 const BRACKET_FONT = /text-\[\d+px\]/
 
 function* walk(dir) {

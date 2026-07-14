@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils"
 const TYPE_COLOR: Record<string, string> = {
   Lead: "var(--color-cat-lead)",
   "Active Client": "var(--color-cat-client)",
-  "Past Client": "var(--color-cat-client)",
+  "Past Client": "var(--color-cat-past)",
   Vendor: "var(--color-cat-vendor)",
-  Contractor: "var(--color-cat-payment)",
-  "Referral Partner": "var(--color-cat-referral)",
+  Contractor: "var(--color-cat-vendor)",
+  "Referral Partner": "var(--color-cat-lead)",
 }
 
 function initials(firstName: string, lastName: string): string {

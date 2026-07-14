@@ -16,15 +16,24 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { CommitBar } from "@/components/ui/commit-bar"
 
 describe("Badge", () => {
-  it("category variant uses the -tint bg + SATURATED category fg (not a dimmed fg)", () => {
+  it("category variant uses a SOLID jewel fill + white text (strongest scan)", () => {
     render(
       <Badge variant="category" category="lead">
         Lead
       </Badge>,
     )
     const el = screen.getByText("Lead")
-    expect(el.style.backgroundColor).toBe("var(--color-cat-lead-tint)")
-    expect(el.style.color).toBe("var(--color-cat-lead)")
+    expect(el.style.backgroundColor).toBe("var(--color-cat-lead)")
+    expect(el.style.color).toBe("var(--color-primary-foreground)")
+  })
+
+  it("category variant renders a ~3px soft-rectangle corner (not full-round)", () => {
+    render(
+      <Badge variant="category" category="client">
+        Client
+      </Badge>,
+    )
+    expect(screen.getByText("Client").className).toContain("rounded-[var(--radius-pill)]")
   })
 
   it("state variant tints the bg from the state token and keeps the fg saturated", () => {
@@ -50,7 +59,13 @@ describe("Badge", () => {
   it("every variant shares the one canonical padding + font + shape", () => {
     render(<Badge>Neutral</Badge>)
     const el = screen.getByText("Neutral")
-    for (const cls of ["rounded-full", "px-2", "py-0.5", "text-2xs", "font-medium"]) {
+    for (const cls of [
+      "rounded-[var(--radius-pill)]",
+      "px-2",
+      "py-0.5",
+      "text-2xs",
+      "font-medium",
+    ]) {
       expect(el.className).toContain(cls)
     }
   })

@@ -46,23 +46,22 @@
   --color-info: oklch(0.4832 0.0464 248.8); /* #4a6178 dusty blue — FIXES undefined bug */
   --color-info-foreground: oklch(0.9705 0.0098 87.5);
 
-  /* ========== CATEGORY (dots · AI badges · dispositions · calendar) — dustier ========== */
-  --color-cat-lead: oklch(0.4832 0.0464 248.8); /* #4a6178 dusty blue */
-  --color-cat-client: oklch(0.3805 0.0291 148.7); /* #38473a green */
-  --color-cat-referral: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage */
-  --color-cat-vendor: oklch(0.711 0.029 226.9); /* #90a6b0 steel */
-  --color-cat-payment: oklch(0.6751 0.095 84.6); /* #b2924e clay-gold (foil, not web-gold) */
-  --color-cat-scheduling: oklch(0.5838 0.0931 49); /* #a86a48 terracotta */
-  --color-cat-blush: oklch(0.7155 0.0536 36.5); /* #c2988c blush — wedding accent */
-  /* pale tints (badge/pill bg). DERIVED at tint lightness (~0.925 L) from each hue. */
-  --color-cat-lead-tint: oklch(0.924 0.019 248.8); /* derived */
-  --color-cat-client-tint: oklch(0.925 0.02 148.7); /* derived */
-  --color-cat-referral-tint: oklch(0.925 0.014 132.3); /* derived */
-  --color-cat-vendor-tint: oklch(0.925 0.015 226.9); /* derived */
-  --color-cat-payment-tint: oklch(0.932 0.04 84.6); /* derived */
-  --color-cat-scheduling-tint: oklch(0.907 0.037 49); /* derived */
-  --color-cat-blush-tint: oklch(0.925 0.025 36.5); /* derived */
-  --color-destructive-tint: oklch(0.898 0.022 42.6); /* #ebd9d2 */
+  /* ========== CATEGORY / STATUS pill family — solid-fill derived-jewel (re-tune 3/3) ==========
+     SOLID fill + WHITE text (via --color-primary-foreground); ~3px soft-rectangle corners.
+     Five colors derived from the accent at matched depth/muted-saturation so they read as ONE
+     family. All hold white text at AA on solid fill. (Replaces the old category band.) */
+  --color-cat-client: oklch(
+    0.395 0.0412 153.4
+  ); /* #354d3c green — Client / Active (= the accent) */
+  --color-cat-lead: oklch(0.4275 0.0444 244.2); /* #3a5266 slate blue — Lead / Referral Partner */
+  --color-cat-vendor: oklch(0.4585 0.0775 50.1); /* #7a4a2e terracotta — Vendor / Contractor */
+  --color-cat-vip: oklch(0.44 0.0947 355.1); /* #7a3a55 wine — VIP */
+  --color-cat-past: oklch(
+    0.4527 0.0103 67.6
+  ); /* #5a5550 warm graphite — Past / Inactive / retired */
+  --color-destructive-tint: oklch(
+    0.898 0.022 42.6
+  ); /* #ebd9d2 — kept (light destructive surface) */
 
   /* ========== TYPE ========== */
   --font-sans: var(--font-sans-loaded), system-ui, sans-serif;
@@ -121,7 +120,8 @@
   --radius-md: 0.125rem; /* 2px — inner / small containers */
   --radius-lg: 0.125rem; /* 2px — menus, popovers, dropdowns */
   --radius-xl: 0.125rem; /* 2px — cards, large panels (squared) */
-  --radius: var(--radius-md); /* 2px. Badges/dots/avatars stay rounded-full. */
+  --radius-pill: 0.1875rem; /* 3px — category/status pills (gentle soft rectangle, not full-round) */
+  --radius: var(--radius-md); /* 2px. Dots/avatars stay rounded-full. */
 }
 
 @layer base {

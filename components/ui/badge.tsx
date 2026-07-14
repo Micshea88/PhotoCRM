@@ -4,31 +4,23 @@ import { cn } from "@/lib/utils"
 /**
  * Badge — THE canonical pill (design-system standard → Shared primitives).
  *
- * ONE padding, ONE font (micro / `text-2xs`), `rounded-full`. This is the single
- * source that retires the pill drift (padding px-1.5/2/3/4, font 2xs/xs/sm, fill
- * muted/secondary/cat-tint/bordered). Three variants:
- *   - `category` — pale category `-tint` bg + SATURATED category fg (taxonomy: type,
- *     status, tags). The restraint is in the tint bg, NOT a dimmed fg.
- *   - `state`    — state token @15% bg + SATURATED state fg (destructive/warning/
- *     success/info).
- *   - `neutral`  — muted bg + muted-foreground fg (the default).
+ * ONE padding, ONE font (micro / `text-2xs`), ~3px soft-rectangle corner
+ * (`--radius-pill`). The single source that retires the pill drift. Variants:
+ *   - `category` — SOLID derived-jewel fill + WHITE text (the editorial pill family:
+ *     Client=green, Vendor=terracotta, Lead=slate, VIP=wine, Past=graphite).
+ *   - `state`    — state token @15% bg + saturated state fg (destructive/warning/
+ *     success/info) — delivery/disposition states, not lifecycle taxonomy.
+ *   - `neutral`  — muted bg + muted-foreground fg (the default; tags, counts).
  *
- * Colors come from `@theme` tokens via inline `style` because the token name is
- * dynamic (can't be a static Tailwind class); the structure is a static class so
- * the JIT scans it. `interactive` adds the canonical hover/focus for clickable
- * chips (filter/sort) — pair it with an `onClick` via `asButton`.
+ * Category colors come from `@theme` tokens via inline `style` (dynamic token name
+ * can't be a static Tailwind class); the structure is a static class so the JIT
+ * scans it.
  */
 
-const BADGE_BASE = "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium"
+const BADGE_BASE =
+  "inline-flex items-center rounded-[var(--radius-pill)] px-2 py-0.5 text-2xs font-medium"
 
-export type BadgeCategory =
-  | "lead"
-  | "client"
-  | "referral"
-  | "vendor"
-  | "payment"
-  | "scheduling"
-  | "blush"
+export type BadgeCategory = "client" | "lead" | "vendor" | "vip" | "past"
 
 export type BadgeState = "destructive" | "warning" | "success" | "info"
 
@@ -43,11 +35,24 @@ type BadgeProps = {
   | { variant?: "neutral" }
 )
 
+// STATIC literal var() map (NOT `var(--color-cat-${category})`) so Tailwind v4's
+// source scanner sees every token literally and emits it — a dynamically-built name
+// gets tree-shaken (that's how cat-vip went missing/invisible).
+const CATEGORY_BG: Record<BadgeCategory, string> = {
+  client: "var(--color-cat-client)",
+  lead: "var(--color-cat-lead)",
+  vendor: "var(--color-cat-vendor)",
+  vip: "var(--color-cat-vip)",
+  past: "var(--color-cat-past)",
+}
+
 function badgeStyle(props: BadgeProps): CSSProperties | undefined {
   if (props.variant === "category") {
+    // SOLID fill + white text — strongest scan (the mockup's pale tints were the
+    // light-tint version; the decision is solid).
     return {
-      backgroundColor: `var(--color-cat-${props.category}-tint)`,
-      color: `var(--color-cat-${props.category})`,
+      backgroundColor: CATEGORY_BG[props.category],
+      color: "var(--color-primary-foreground)",
     }
   }
   if (props.variant === "state") {

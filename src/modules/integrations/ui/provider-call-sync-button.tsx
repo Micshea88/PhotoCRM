@@ -70,7 +70,7 @@ export function ProviderCallSyncButton({
               type="button"
               onClick={handleClick}
               disabled={pending}
-              className="text-xs font-medium text-[var(--color-primary)] hover:underline disabled:opacity-60"
+              className="text-xs font-medium text-[var(--color-primary)] hover:underline disabled:opacity-50"
               data-testid={`integrations-provider-${providerId}-call-sync-refresh`}
             >
               {pending ? "Refreshing…" : "Refresh"}

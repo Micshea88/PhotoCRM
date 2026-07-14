@@ -85,7 +85,7 @@ export function NoPhoneProviderPicker({
                   }}
                   disabled={telDisabled}
                   data-testid={`no-phone-picker-option-${provider.id}`}
-                  className="w-full rounded-md border border-[var(--color-border)] p-3 text-left transition-colors hover:bg-[var(--state-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-md border border-[var(--color-border)] p-3 text-left transition-colors hover:bg-[var(--state-hover)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="block text-sm font-medium">{provider.name}</span>
                   <span className="block text-xs text-[var(--color-muted-foreground)]">

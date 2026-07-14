@@ -145,7 +145,7 @@ export function AddNoteModal({
           disabled={busy}
           aria-label="Note body"
           data-testid="add-note-body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
 
         {/* Formatting toolbar — display-only V1 (rich-text pipeline

@@ -297,7 +297,7 @@ export function CreateEmailComposer({
           placeholder="Write your message…"
           spellCheck
           data-testid="email-composer-body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
         />
 
         {/* Attachments */}

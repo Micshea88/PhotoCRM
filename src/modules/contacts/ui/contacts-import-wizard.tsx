@@ -1649,7 +1649,7 @@ export function PreviewStep({
                       <select
                         disabled
                         value="skip-error"
-                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs text-[var(--color-destructive)] disabled:opacity-70"
+                        className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs text-[var(--color-destructive)] disabled:opacity-50"
                         aria-label={`Action for row ${String(c.rowIndex)} — disabled because the row has errors`}
                       >
                         <option value="skip-error">Skip — has errors</option>

@@ -91,7 +91,7 @@ function ToggleSwitch({
       data-testid={testId}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200",
-        "focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:outline-none",
+        "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:outline-none",
         checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-muted)]",
         disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
       )}

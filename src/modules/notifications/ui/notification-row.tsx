@@ -587,7 +587,7 @@ export function NotificationRow({
                         type="button"
                         onClick={handleSnoozeCustom}
                         disabled={!customValue}
-                        className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+                        className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
                         data-testid="snooze-custom-confirm"
                       >
                         Set

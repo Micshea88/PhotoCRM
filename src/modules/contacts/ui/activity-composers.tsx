@@ -197,7 +197,7 @@ export function NoteComposer({ contactId, onSaved, onCancel, eventOptions }: Com
         disabled={saving}
         aria-label="Note body"
         data-testid="note-composer-body"
-        className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+        className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
       />
       <EventSelect
         value={projectId}
@@ -377,7 +377,7 @@ export function CallLogComposer({ contactId, onSaved, onCancel, eventOptions }: 
           disabled={saving}
           placeholder="Notes about the call"
           data-testid="call-composer-notes"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
       <EventSelect
@@ -496,7 +496,7 @@ export function EmailLogComposer({
           maxLength={10_000}
           disabled={saving}
           placeholder="What did the email say?"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
       <EventSelect
@@ -595,7 +595,7 @@ export function MeetingLogComposer({
           maxLength={10_000}
           disabled={saving}
           placeholder="What did you discuss?"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
       <Field label="Outcome">
@@ -673,7 +673,7 @@ export function SmsLogComposer({ contactId, onSaved, onCancel }: ComposerBasePro
           maxLength={10_000}
           disabled={saving}
           placeholder="Type the SMS body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
     </ComposerShell>

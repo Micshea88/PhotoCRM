@@ -246,22 +246,30 @@ The structure ships delight-ready so the later Voice & Delight pass is pure fill
 
 ### Enforcement (extends the palette guard)
 
-`pnpm verify` runs, at the same pre-commit/pre-push tier as the color guard, in addition to
-`check-no-raw-palette.mjs`:
+`pnpm verify` tier-1 (pre-commit + pre-push) runs two static guards:
 
-- **Ban arbitrary spacing** (`p-[..]`/`m-[..]`/`gap-[..]`). Dimensional width/height brackets are
-  allowed, but recurring ones are flagged for tokenizing (named column-width tokens).
-- **Ban arbitrary radius** (`rounded-[..]`); flag off-scale `rounded-md`/`rounded-lg` on **cards**
-  (cards must be `xl`).
-- **Primitive-adoption rule** — a hand-rolled card/badge/dropdown where a primitive exists is an
-  error unless it carries a documented reviewed-exception marker.
-- **Interaction-state rule** — ban raw state classes that bypass the state tokens: `bg-accent/40`,
-  `bg-accent/50` and `brightness-95` as hover on fill controls (use `--state-hover`); cream-fill or
-  ink-border **selected** (use `--state-selected`); `ring-2`/`ring-0`/`focus:` for focus (use
-  `focus-visible:ring-1 ring-[--color-ring]`); `opacity-40/60/70` as disabled (use the disabled trio).
-- Keeps the existing raw-palette + bracket-font bans.
+**`check-no-raw-palette.mjs`** (LIVE) — bans raw Tailwind palette classes across the **FULL** palette
+(all 22 hues incl. `violet`/`purple`/`fuchsia`/`pink` — the gap that let `bg-violet-500` slip) + bracket
+micro-fonts (`text-[Npx]`). Use `var(--color-*)` + `text-2xs/3xs/4xs`.
 
-An un-enforced standard drifts back; the push is not done until these guards are live.
+**`check-design-tokens.mjs`** (LIVE) — bans off-scale token bypasses, each proven to fail on a planted
+violation:
+
+- **Arbitrary spacing** (`p-[18px]`/`m-[..]`/`gap-[..]` px/rem literals) — use the 8px scale.
+  Dimensional `w-[..]`/`h-[..]`/`min-w-[..]` brackets ARE allowed (sizing, not rhythm).
+- **Arbitrary radius** (`rounded-[6px]` literal) — use `rounded-sm/md/lg/xl` or a token
+  (`rounded-[var(--radius-pill)]`); a `var()` reference is allowed, a px/rem literal is not.
+- **Non-canonical focus ring** (`focus:ring-2` / `focus-visible:ring-[2-9]`) — the one ring is
+  `focus-visible:ring-1 focus-visible:ring-[var(--color-ring)]` (`ring-0` to suppress a nested ring is OK).
+- **Off-scale disabled opacity** (`disabled:opacity-40/60/70`) — the one treatment is
+  `disabled:opacity-50` + `not-allowed` + `pointer-events-none`.
+
+**Not yet automated (review-checklist rules):** the _hover-fill opacity_ + _selected = sage_ +
+_primitive-adoption_ (hand-rolled card/badge where a primitive exists) rules are enforced in review, not
+by a guard — a reliable regex for "hand-rolled card" has too many false positives. The ~22 remaining
+inline pills adopt `<Badge>` in the ongoing pill-migration.
+
+An un-enforced standard drifts back; the scale + palette + focus + disabled bans are now locked.
 
 ---
 

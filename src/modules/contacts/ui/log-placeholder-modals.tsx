@@ -314,7 +314,7 @@ export function LogEmailModal({
               disabled={busy}
               placeholder="Type the email body"
               data-testid="log-email-body"
-              className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+              className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
             />
           </div>
           <AssociationsSection contactId={contactId} contactLabel={contactLabel} />

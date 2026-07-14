@@ -16,15 +16,15 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { CommitBar } from "@/components/ui/commit-bar"
 
 describe("Badge", () => {
-  it("category variant uses a SOLID jewel fill + white text (strongest scan)", () => {
+  it("category variant uses a MUTED-TINT bg + the full category hue as text", () => {
     render(
       <Badge variant="category" category="lead">
         Lead
       </Badge>,
     )
     const el = screen.getByText("Lead")
-    expect(el.style.backgroundColor).toBe("var(--color-cat-lead)")
-    expect(el.style.color).toBe("var(--color-primary-foreground)")
+    expect(el.style.backgroundColor).toBe("var(--color-cat-lead-tint)")
+    expect(el.style.color).toBe("var(--color-cat-lead)")
   })
 
   it("category variant renders a ~3px soft-rectangle corner (not full-round)", () => {

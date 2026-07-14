@@ -361,7 +361,9 @@ export function NotificationRow({
         // starts at y≈28 — an ~8px cushion below the dot's y=12–20 band, holding
         // even if the link's line-height grows.
         "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--state-hover)]",
-        !isRead && "bg-[var(--color-accent)]/10",
+        // UNREAD sits FORWARD: a faint Pathway-green STATUS wash (distinct role from
+        // the cream mouseover --state-hover). READ recedes on the plain card bg.
+        !isRead && "bg-[var(--color-unread-tint)]",
       )}
       data-testid="notification-row"
       data-unread={!isRead ? "true" : "false"}
@@ -394,15 +396,21 @@ export function NotificationRow({
           reach it. */}
       {!isRead && (
         <div
-          className="absolute top-3 right-3 size-2 rounded-full bg-[var(--color-cat-lead)]"
+          className="absolute top-3 right-3 size-2 rounded-full bg-[var(--color-brand-accent)]"
           data-testid="notification-read-dot"
           aria-label="Unread"
         />
       )}
 
-      {/* LEFT — category icon, top-aligned with the headline. */}
+      {/* LEFT — category icon, top-aligned with the headline. Green when unread
+          (reinforces the forward status), greyed when read (recedes). */}
       <div
-        className="flex size-8 shrink-0 items-center justify-center self-start rounded-full bg-[var(--color-accent)]/40 text-[var(--color-muted-foreground)]"
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center self-start rounded-full",
+          !isRead
+            ? "bg-[var(--color-brand-accent)]/10 text-[var(--color-brand-accent)]"
+            : "bg-[var(--color-accent)]/40 text-[var(--color-muted-foreground)]",
+        )}
         data-testid="notification-category-icon"
         data-category={category}
         aria-hidden="true"
@@ -415,7 +423,13 @@ export function NotificationRow({
       <div className="min-w-0 flex-1 space-y-1 self-start pr-5">
         {/* Headline */}
         <p
-          className={cn("line-clamp-2 text-sm leading-snug", !isRead && "font-medium")}
+          className={cn(
+            "line-clamp-2 text-sm leading-snug",
+            // UNREAD headline = bold ink (forward); READ = dimmed ink (recedes).
+            !isRead
+              ? "font-medium text-[var(--color-foreground)]"
+              : "text-[var(--color-muted-foreground)]",
+          )}
           data-testid="notification-title"
         >
           {n.title}

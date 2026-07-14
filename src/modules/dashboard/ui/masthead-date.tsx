@@ -31,7 +31,10 @@ export function MastheadDate() {
     : ""
 
   return (
-    <div className="text-right" aria-hidden={now ? undefined : true}>
+    <div
+      className="pr-[var(--space-masthead-inset)] text-right"
+      aria-hidden={now ? undefined : true}
+    >
       {/* nbsp placeholders reserve the line height before the client date lands. */}
       <div className="font-serif text-2xl leading-tight font-semibold">{weekday || " "}</div>
       <div className="text-2xs tracking-wide text-[var(--color-brand-accent)] uppercase tabular-nums">

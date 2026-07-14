@@ -3,7 +3,14 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowUpDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Users } from "lucide-react"
+import {
+  ArrowUpDown,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+  SlidersHorizontal,
+  Users,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
@@ -364,23 +371,33 @@ export function ContactsShell({
                 on the right behind a hairline. */}
             <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2">
               <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-                <Button
+                {/* GHOST TRIGGER — the standard for every secondary dropdown/
+                    filter/sort trigger: no resting box/border, transparent; hover =
+                    faint green wash; open OR has-active-filters = green wash + green
+                    label + flipped caret. */}
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
                   aria-expanded={filterOpen}
                   onClick={() => {
                     setFilterOpen((o) => !o)
                   }}
                   className={cn(
-                    "shrink-0",
-                    (filterOpen || filterChipCount > 0) &&
-                      "border-[var(--color-primary)] text-[var(--color-primary)]",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-sm font-medium transition-colors",
+                    "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                    filterOpen || filterChipCount > 0
+                      ? "bg-[var(--state-ghost-hover)] text-[var(--color-brand-accent)]"
+                      : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-ghost-hover)] hover:text-[var(--color-foreground)]",
                   )}
                 >
                   <SlidersHorizontal className="size-4" /> Filter
                   {filterChipCount > 0 ? ` (${String(filterChipCount)})` : ""}
-                </Button>
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform duration-150",
+                      filterOpen && "rotate-180",
+                    )}
+                  />
+                </button>
                 {filterOpen && (
                   <ContactsFilterBar
                     variant="chips"
@@ -403,22 +420,29 @@ export function ContactsShell({
                     }
                   />
                 )}
-                <Button
+                {/* GHOST TRIGGER — same pattern as Filter, above. */}
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
                   aria-expanded={sortOpen}
                   onClick={() => {
                     setSortOpen((o) => !o)
                   }}
                   className={cn(
-                    "shrink-0",
-                    (sortOpen || activeSortBy) &&
-                      "border-[var(--color-primary)] text-[var(--color-primary)]",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-sm font-medium transition-colors",
+                    "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                    sortOpen || activeSortBy
+                      ? "bg-[var(--state-ghost-hover)] text-[var(--color-brand-accent)]"
+                      : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-ghost-hover)] hover:text-[var(--color-foreground)]",
                   )}
                 >
                   <ArrowUpDown className="size-4" /> Sort
-                </Button>
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform duration-150",
+                      sortOpen && "rotate-180",
+                    )}
+                  />
+                </button>
                 {sortOpen && (
                   <div className="flex shrink-0 items-center gap-1.5">
                     {SORT_OPTIONS.map((opt) => {
@@ -426,6 +450,8 @@ export function ContactsShell({
                       // Sort options are toggle chips that match the Filter chips:
                       // a <Badge>-style pill in the shared state language (sage
                       // --state-selected when active, quiet hover otherwise).
+                      // Rounded-RECTANGLE (menu radius), not full-round — one shape
+                      // language across the toolbar's pop-out options.
                       return (
                         <button
                           key={opt.field}
@@ -435,7 +461,7 @@ export function ContactsShell({
                           }}
                           aria-pressed={active}
                           className={cn(
-                            "text-2xs flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors",
+                            "text-2xs flex shrink-0 items-center gap-1 rounded-[var(--radius-lg)] px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors",
                             "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
                             active
                               ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"

@@ -390,9 +390,11 @@ function SidebarParentRow({
           data-testid={`sidebar-parent-${item.label.toLowerCase()}`}
           className={cn(
             "flex size-10 items-center justify-center rounded-md text-sm transition-colors",
+            // Same inverted-pill treatment as every other nav tab (SidebarLeafRow):
+            // active/open = solid near-white fill + ink; rest = dimmed white + white-fill hover.
             hasActiveChild || popoutOpen
-              ? "bg-[var(--color-sidebar-foreground)]/15 font-medium text-[var(--color-sidebar-foreground)]"
-              : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]",
+              ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+              : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
           )}
         >
           <Icon className="size-4 shrink-0" />
@@ -412,9 +414,10 @@ function SidebarParentRow({
         data-testid={`sidebar-parent-${item.label.toLowerCase()}`}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+          // Same inverted-pill treatment as every other nav tab (SidebarLeafRow).
           hasActiveChild
-            ? "bg-[var(--color-sidebar-foreground)]/15 font-medium text-[var(--color-sidebar-foreground)]"
-            : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]",
+            ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+            : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
         )}
       >
         <Icon className="size-4 shrink-0" />
@@ -442,9 +445,11 @@ function SidebarParentRow({
                 aria-current={childActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                  // Sub-items wear the SAME inverted-pill treatment as their parent
+                  // and the top-level tabs — the whole nav is one system.
                   childActive
-                    ? "bg-[var(--color-sidebar-foreground)]/15 font-medium text-[var(--color-sidebar-foreground)]"
-                    : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]",
+                    ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+                    : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
                 )}
               >
                 <ChildIcon className="size-4 shrink-0" />

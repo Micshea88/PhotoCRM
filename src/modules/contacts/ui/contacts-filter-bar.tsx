@@ -533,7 +533,7 @@ function FilterChip({
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className={`flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+          className={`flex cursor-pointer items-center gap-1 rounded-[var(--radius-lg)] border px-3 py-1 text-xs ${
             active
               ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
               : "border-[var(--color-border)]"

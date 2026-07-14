@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils"
  *
  * ONE padding, ONE font (micro / `text-2xs`), ~3px soft-rectangle corner
  * (`--radius-pill`). The single source that retires the pill drift. Variants:
- *   - `category` — SOLID derived-jewel fill + WHITE text (the editorial pill family:
- *     Client=green, Vendor=terracotta, Lead=slate, VIP=wine, Past=graphite).
+ *   - `category` — MUTED-TINT: a pale wash of the category hue as the background +
+ *     the full-strength hue as the TEXT (the editorial pill family: Client=green,
+ *     Vendor=terracotta, Lead=slate, VIP=wine, Past=graphite). Quiet tinted pills —
+ *     the saturated color lives on the name avatar, not the pill.
  *   - `state`    — state token @15% bg + saturated state fg (destructive/warning/
  *     success/info) — delivery/disposition states, not lifecycle taxonomy.
  *   - `neutral`  — muted bg + muted-foreground fg (the default; tags, counts).
@@ -35,10 +37,18 @@ type BadgeProps = {
   | { variant?: "neutral" }
 )
 
-// STATIC literal var() map (NOT `var(--color-cat-${category})`) so Tailwind v4's
+// STATIC literal var() maps (NOT `var(--color-cat-${category})`) so Tailwind v4's
 // source scanner sees every token literally and emits it — a dynamically-built name
-// gets tree-shaken (that's how cat-vip went missing/invisible).
-const CATEGORY_BG: Record<BadgeCategory, string> = {
+// gets tree-shaken (that's how cat-vip went missing/invisible). Two maps: the pale
+// TINT for the pill background, the full hue for the TEXT.
+const CATEGORY_TINT: Record<BadgeCategory, string> = {
+  client: "var(--color-cat-client-tint)",
+  lead: "var(--color-cat-lead-tint)",
+  vendor: "var(--color-cat-vendor-tint)",
+  vip: "var(--color-cat-vip-tint)",
+  past: "var(--color-cat-past-tint)",
+}
+const CATEGORY_FG: Record<BadgeCategory, string> = {
   client: "var(--color-cat-client)",
   lead: "var(--color-cat-lead)",
   vendor: "var(--color-cat-vendor)",
@@ -48,11 +58,10 @@ const CATEGORY_BG: Record<BadgeCategory, string> = {
 
 function badgeStyle(props: BadgeProps): CSSProperties | undefined {
   if (props.variant === "category") {
-    // SOLID fill + white text — strongest scan (the mockup's pale tints were the
-    // light-tint version; the decision is solid).
+    // MUTED-TINT: pale hue wash bg + full hue text (the decided pill treatment).
     return {
-      backgroundColor: CATEGORY_BG[props.category],
-      color: "var(--color-primary-foreground)",
+      backgroundColor: CATEGORY_TINT[props.category],
+      color: CATEGORY_FG[props.category],
     }
   }
   if (props.variant === "state") {

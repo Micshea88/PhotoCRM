@@ -200,7 +200,7 @@ function SidebarLeafRow({
         "flex items-center gap-2 rounded-md text-sm transition-colors",
         collapsed ? "size-10 justify-center" : "px-3 py-2",
         isActive
-          ? "bg-[var(--color-sidebar-foreground)]/15 font-medium text-[var(--color-sidebar-foreground)]"
+          ? "bg-[var(--color-brand-accent)] font-medium text-[var(--color-sidebar-foreground)]"
           : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]",
       )}
     >

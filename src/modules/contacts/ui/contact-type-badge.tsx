@@ -26,9 +26,9 @@ const STATUS_MAP: Record<string, BadgeSpec> = {
   Active: { variant: "category", category: "client" },
   VIP: { variant: "category", category: "vip" },
   Inactive: { variant: "category", category: "past" },
-  // NOTE: Do Not Contact → graphite (retired) per the 5-jewel family. It was
-  // previously the destructive/rust alert; flagged for review.
-  "Do Not Contact": { variant: "category", category: "past" },
+  // Do Not Contact is a WARNING, not a category — a rust ALERT (soft destructive
+  // tint bg + rust text via the state variant), distinct from Past's graphite.
+  "Do Not Contact": { variant: "state", state: "destructive" },
 }
 
 function renderBadge(spec: BadgeSpec, label: string) {

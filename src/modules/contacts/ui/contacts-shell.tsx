@@ -450,7 +450,7 @@ export function ContactsShell({
                   </div>
                 )}
               </div>
-              <div className="text-2xs shrink-0 border-l border-[var(--color-border)] pl-3 tracking-wide text-[var(--color-muted-foreground)] uppercase tabular-nums">
+              <div className="text-2xs shrink-0 border-l border-[var(--color-border)] pl-3 tracking-wide text-[var(--color-brand-accent)] uppercase tabular-nums">
                 {String(totalCount)} {totalCount === 1 ? "contact" : "contacts"}
               </div>
             </div>

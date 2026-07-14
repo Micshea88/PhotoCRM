@@ -339,7 +339,7 @@ function TimeMenu({
                 })
               }}
               className={cn(
-                "flex w-full rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)]",
+                "flex w-full rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-wash-green)]",
                 state.timePreset === o.value && "font-medium text-[var(--color-primary)]",
               )}
             >
@@ -356,7 +356,7 @@ function TimeMenu({
                 onClick={() => {
                   onChange({ ...state, timePreset: null, from: null, to: null })
                 }}
-                className="flex w-full rounded px-2 py-1 text-left text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
+                className="flex w-full rounded px-2 py-1 text-left text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-wash-green)]"
               >
                 Clear
               </button>

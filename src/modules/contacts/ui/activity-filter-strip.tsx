@@ -357,7 +357,7 @@ function DateRangeMenu({
                 selectPreset(o.value)
               }}
               className={cn(
-                "flex w-full items-center rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)]",
+                "flex w-full items-center rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-wash-green)]",
                 state.due === o.value && "font-medium text-[var(--color-primary)]",
               )}
             >

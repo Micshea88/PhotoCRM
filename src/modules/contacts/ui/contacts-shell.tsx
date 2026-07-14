@@ -368,8 +368,11 @@ export function ContactsShell({
           <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
             {/* Toolbar row (card top): Filter + Sort pop-outs on the left (they
                 expand to the right and the row scrolls horizontally), the count
-                on the right behind a hairline. */}
-            <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2">
+                on the right behind a hairline. FIXED height (h-12) so opening
+                either pop-out never resizes/jumps the row — the pop-out options
+                match the trigger height and any overflow scrollbar renders inside
+                the fixed row instead of growing it. */}
+            <div className="flex h-12 items-center gap-2 border-b border-[var(--color-border)] px-3">
               <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
                 {/* GHOST TRIGGER — the standard for every secondary dropdown/
                     filter/sort trigger: no resting box/border, transparent; hover =
@@ -444,14 +447,15 @@ export function ContactsShell({
                   />
                 </button>
                 {sortOpen && (
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  // Thin hairline (--color-border) separates the popped-out sort
+                  // options from the Sort trigger — same divider token as the count.
+                  <div className="flex shrink-0 items-center gap-1.5 border-l border-[var(--color-border)] pl-2">
                     {SORT_OPTIONS.map((opt) => {
                       const active = activeSortBy === opt.field
                       // Sort options are toggle chips that match the Filter chips:
-                      // a <Badge>-style pill in the shared state language (sage
-                      // --state-selected when active, quiet hover otherwise).
-                      // Rounded-RECTANGLE (menu radius), not full-round — one shape
-                      // language across the toolbar's pop-out options.
+                      // borderless soft-rectangle in the two-green menu language —
+                      // dark-green --state-selected when active, green-wash hover
+                      // otherwise. Rounded-RECTANGLE (menu radius), not full-round.
                       return (
                         <button
                           key={opt.field}
@@ -465,7 +469,7 @@ export function ContactsShell({
                             "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
                             active
                               ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
-                              : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]",
+                              : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-wash-green)] hover:text-[var(--color-foreground)] active:bg-[var(--state-active)]",
                           )}
                         >
                           {opt.label}

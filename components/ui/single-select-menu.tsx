@@ -69,9 +69,14 @@ export function SingleSelectMenu({
                       close()
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)] focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
-                      selected &&
-                        "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)]",
+                      "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                      // Two-green menu rule. Unselected: green-wash hover. Selected:
+                      // dark-green fill + light text that STAYS dark-green-dominant on
+                      // hover (brightness-95 cue, never the cream --state-hover that
+                      // used to override the fill and leave light-text-on-grey).
+                      selected
+                        ? "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)] hover:brightness-95"
+                        : "hover:bg-[var(--color-wash-green)] active:bg-[var(--state-active)]",
                     )}
                   >
                     {o.leading}

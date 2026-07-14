@@ -13,8 +13,11 @@ const buttonVariants = cva(
       variant: {
         default:
           "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:brightness-95 active:brightness-95",
+        // Destructive = rust TEXT + rust OUTLINE (not solid fill). Hover/active
+        // stay in the rust family (a light rust wash) — a state-colored control
+        // hovers within its own hue, the one documented exception to the green wash.
         destructive:
-          "bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)] hover:brightness-95 active:brightness-95",
+          "border border-[var(--color-destructive)] bg-[var(--color-background)] text-[var(--color-destructive)] hover:bg-[var(--color-destructive)]/10 active:bg-[var(--color-destructive)]/15",
         outline:
           "border border-[var(--color-border)] bg-[var(--color-background)] hover:bg-[var(--state-hover)] hover:text-[var(--color-accent-foreground)] active:bg-[var(--state-active)]",
         secondary:

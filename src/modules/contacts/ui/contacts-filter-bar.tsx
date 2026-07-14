@@ -163,9 +163,19 @@ export function ContactsFilterBar(props: FilterBarProps) {
             }}
             className="max-w-md flex-1"
           />
-          <Button type="submit" variant="outline" size="sm">
-            Search
-          </Button>
+          {/* GHOST control — same treatment as the Filter/Sort triggers on the
+              list toolbar: transparent, no resting box/border, green-wash hover.
+              (No caret — this is a submit action, not a dropdown trigger.) */}
+          <button
+            type="submit"
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-sm font-medium transition-colors",
+              "text-[var(--color-muted-foreground)] hover:bg-[var(--state-ghost-hover)] hover:text-[var(--color-foreground)]",
+              "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+            )}
+          >
+            <Search className="size-4" /> Search
+          </button>
           {hasAnyFilter && (
             <Button type="button" variant="outline" size="sm" onClick={clearAll}>
               Clear all
@@ -414,8 +424,8 @@ function ChipSearchList({
                   className={cn(
                     "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
                     selected
-                      ? "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)]"
-                      : "hover:bg-[var(--state-hover)]",
+                      ? "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)] hover:brightness-95"
+                      : "hover:bg-[var(--color-wash-green)] hover:text-[var(--color-foreground)]",
                   )}
                 >
                   <span className="flex flex-col truncate">
@@ -494,7 +504,7 @@ function ChipSearchMultiList({
                 <label
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs",
-                    "hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]",
+                    "hover:bg-[var(--color-wash-green)] active:bg-[var(--state-active)]",
                   )}
                 >
                   <input
@@ -529,21 +539,28 @@ function FilterChip({
   return (
     <Popover
       trigger={({ open, toggle }) => (
+        // Identical treatment to the Sort option chips on the list toolbar:
+        // borderless soft-rectangle, two-green menu rule — dark-green when a value
+        // is selected, green-wash on hover/open otherwise.
         <button
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className={`flex cursor-pointer items-center gap-1 rounded-[var(--radius-lg)] border px-3 py-1 text-xs ${
+          className={cn(
+            "text-2xs flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-lg)] px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors",
+            "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
             active
-              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-              : "border-[var(--color-border)]"
-          }`}
+              ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
+              : open
+                ? "bg-[var(--color-wash-green)] text-[var(--color-brand-accent)]"
+                : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-wash-green)] hover:text-[var(--color-foreground)] active:bg-[var(--state-active)]",
+          )}
         >
           <span>{label}</span>
           {active && (
             <>
-              <span className="text-[var(--color-muted-foreground)]">:</span>
-              <span className="font-medium">{value}</span>
+              <span className="opacity-70">:</span>
+              <span>{value}</span>
             </>
           )}
         </button>

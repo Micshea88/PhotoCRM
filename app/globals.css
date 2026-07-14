@@ -127,7 +127,7 @@
   --space-commit-bottom: 1.5rem; /* 24px — button container → page bottom */
 
   /* Dashboard masthead spacing (named steps, not magic px). */
-  --space-masthead-inset: 1.5rem; /* 24px — masthead date sits inset from the right wall */
+  --space-masthead-inset: 2.5rem; /* 40px — masthead date sits inset from the right wall */
   --space-masthead-gap: 4rem; /* 64px — masthead header zone → KPI cards (its own zone) */
 
   /* ========== SHAPE — SQUARED corners (editorial re-tune 1/3) ========== */

@@ -360,9 +360,12 @@ export function NotificationRow({
         // 88px floors the shortest (no-body) row so the ~48px bottom-pinned zone
         // starts at y≈28 — an ~8px cushion below the dot's y=12–20 band, holding
         // even if the link's line-height grows.
-        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--state-hover)]",
-        // UNREAD sits FORWARD: a faint Pathway-green STATUS wash (distinct role from
-        // the cream mouseover --state-hover). READ recedes on the plain card bg.
+        // Hover = the light-green wash (the two-green rule; the SAME value as the
+        // unread tint). So an UNREAD row (already green) stays green through hover —
+        // no grey/cream override — while a READ row (white at rest, receded) picks
+        // up the green-wash hover as interaction feedback. Only READING it (mark
+        // read / click-through) drops the green tint and lets the row recede.
+        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-wash-green)]",
         !isRead && "bg-[var(--color-unread-tint)]",
       )}
       data-testid="notification-row"

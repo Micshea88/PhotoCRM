@@ -342,7 +342,7 @@ export function SearchableSelect({
                         isSelected
                           ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
                           : isActive &&
-                              "bg-[var(--state-hover)] text-[var(--color-accent-foreground)]",
+                              "bg-[var(--color-wash-green)] text-[var(--color-foreground)]",
                       )}
                     >
                       <span className="flex flex-1 flex-col">

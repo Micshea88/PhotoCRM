@@ -20,19 +20,21 @@
   --color-sidebar: oklch(0.1794 0.011 80.5); /* #14110c deepest ink — nav STAYS */
   --color-sidebar-foreground: oklch(0.9848 0.0013 106.4); /* #fafaf9 cool near-white */
 
-  /* ========== BRAND — primary is cooled INK; the green accent is swapped in re-tune 2/3 ========== */
+  /* ========== BRAND — primary is cooled INK; signature Pathway green accent ========== */
   --color-primary: oklch(0.1913 0 89.9); /* #141414 near-black ink buttons (cooled) */
   --color-primary-foreground: oklch(0.9848 0.0013 106.4); /* #fafaf9 cool near-white text */
   /* accent = SUBTLE NEUTRAL SURFACE (hover/selected bg) → cool grey, never the green.
-     The signature-green identity lives in --color-brand-accent (swapped to Pathway green in re-tune 2/3). */
+     The signature-green identity lives in --color-brand-accent (Pathway green #354d3c). */
   --color-accent: oklch(0.9549 0.0013 106.4); /* #f0f0ef cool neutral hover surface */
   --color-accent-foreground: oklch(0.1913 0 89.9);
   --color-brand-accent: oklch(
-    0.3805 0.0291 148.7
-  ); /* #38473a sage — → Pathway green #33493a in re-tune 2/3 */
+    0.395 0.0412 153.4
+  ); /* #354d3c Pathway green (FINAL) — the ONE signature accent */
   --color-secondary: oklch(0.9549 0.0013 106.4); /* #f0f0ef cool neutral */
   --color-secondary-foreground: oklch(0.1913 0 89.9);
-  --color-ring: oklch(0.6151 0.0389 132.3); /* #7c8a72 sage focus — → green family in re-tune 2/3 */
+  --color-ring: oklch(
+    0.6169 0.0559 149
+  ); /* #6e8f73 green focus ring — derived from #354d3c (same lightness as the old sage ring, new green hue) */
 
   /* ========== STATES — dusty (info stays DEFINED) ========== */
   --color-destructive: oklch(0.5432 0.1174 37.9); /* #a8543a rust */

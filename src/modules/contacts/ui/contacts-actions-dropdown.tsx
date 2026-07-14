@@ -6,6 +6,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -18,10 +21,10 @@ import {
  *
  * Items, in order:
  *   1. Edit columns      → opens the host's Edit Columns drawer
- *   2. Import contacts   → /contacts/import (duplicate of the top-bar
- *                          "Import" button, intentional — HubSpot
- *                          pattern for discoverability when the table
- *                          has scrolled the header off-screen)
+ *   2. Export (CSV/XLSX) → downloads the current view (active filters +
+ *                          visible columns) client-side
+ *   3. Import contacts   → /contacts/import (the sole Import entry point;
+ *                          the standalone top-bar Import button was removed)
  *   3. Restore records   → /contacts/deleted (the existing trash view;
  *                          users restore soft-deleted contacts there)
  *   4. View archived     → /contacts/archived (separate from deleted;
@@ -35,7 +38,13 @@ import {
  *                          see the menu item but the route redirects
  *                          to /dashboard.
  */
-export function ContactsActionsDropdown({ onOpenEditColumns }: { onOpenEditColumns: () => void }) {
+export function ContactsActionsDropdown({
+  onOpenEditColumns,
+  onExport,
+}: {
+  onOpenEditColumns: () => void
+  onExport: (format: "csv" | "xlsx") => void
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -48,6 +57,25 @@ export function ContactsActionsDropdown({ onOpenEditColumns }: { onOpenEditColum
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onOpenEditColumns}>Edit columns</DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem
+              onSelect={() => {
+                onExport("csv")
+              }}
+            >
+              CSV (.csv)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                onExport("xlsx")
+              }}
+            >
+              Excel (.xlsx)
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuItem asChild>
           <Link href="/contacts/import">Import contacts</Link>
         </DropdownMenuItem>

@@ -229,7 +229,7 @@ export function SearchableSelect({
           "flex w-full items-center justify-between gap-2 text-left text-sm",
           inlineMode
             ? "h-7 border-0 border-b border-[var(--color-primary)] bg-transparent px-0"
-            : "h-9 rounded-md border border-[var(--color-input)] bg-transparent px-2 shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none",
+            : "h-9 rounded-sm border border-[var(--color-input)] bg-transparent px-2 shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
@@ -252,7 +252,7 @@ export function SearchableSelect({
                 e.stopPropagation()
                 clearChoice()
               }}
-              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]"
+              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-accent-foreground)]"
             >
               <X className="size-3.5" />
             </span>
@@ -267,7 +267,7 @@ export function SearchableSelect({
 
       <PickerPortal triggerRef={triggerRef} open={open} panelRef={panelRef}>
         <div
-          className="max-h-72 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-background)] shadow-md"
+          className="max-h-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-popover)] shadow-md"
           onKeyDown={onPanelKeyDown}
         >
           <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-2 py-1.5">
@@ -319,7 +319,7 @@ export function SearchableSelect({
                     {showHeader && (
                       <li
                         role="presentation"
-                        className="bg-[var(--color-muted)]/40 px-3 py-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase"
+                        className="text-3xs bg-[var(--color-muted)]/40 px-3 py-1 font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase"
                       >
                         {groupLabel}
                       </li>
@@ -339,8 +339,10 @@ export function SearchableSelect({
                       }}
                       className={cn(
                         "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm",
-                        isActive &&
-                          "bg-[var(--color-accent)] text-[var(--color-accent-foreground)]",
+                        isSelected
+                          ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
+                          : isActive &&
+                              "bg-[var(--color-wash-green)] text-[var(--color-foreground)]",
                       )}
                     >
                       <span className="flex flex-1 flex-col">
@@ -352,7 +354,7 @@ export function SearchableSelect({
                         )}
                       </span>
                       {isSelected && (
-                        <Check className="size-4 shrink-0 text-[var(--color-primary)]" />
+                        <Check className="size-4 shrink-0 text-[var(--state-selected-foreground)]" />
                       )}
                     </li>
                   </Fragment>

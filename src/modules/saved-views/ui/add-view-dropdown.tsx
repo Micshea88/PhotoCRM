@@ -29,7 +29,7 @@ export function AddViewDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Add view"
-        className="ml-1 inline-flex h-8 items-center gap-1 rounded-md border border-dashed border-[var(--color-border)] px-2.5 text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]"
+        className="ml-1 inline-flex h-8 items-center gap-1 rounded-md border border-dashed border-[var(--color-border)] px-2.5 text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
       >
         <span aria-hidden="true">+</span>
         <span>Add view</span>

@@ -71,7 +71,9 @@ export function ForgotPasswordForm() {
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input id="email" type="email" autoComplete="email" {...register("email")} />
-        {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+        {errors.email && (
+          <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
+        )}
       </div>
       {error && (
         <Alert variant="destructive">

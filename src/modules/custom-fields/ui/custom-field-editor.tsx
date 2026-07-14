@@ -214,7 +214,7 @@ function CustomFieldEditorForm({
     >
       <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
             {error}
           </div>
         )}
@@ -242,7 +242,7 @@ function CustomFieldEditorForm({
             onChange={(e) => {
               setFieldType(e.target.value as FieldType)
             }}
-            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {TYPE_GROUPS.map((group) => (
               <optgroup key={group.label} label={group.label}>

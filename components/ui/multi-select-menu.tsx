@@ -80,7 +80,7 @@ export function MultiSelectMenu({
       <Fragment key={o.value}>
         {o.dividerBefore && <li className="my-1 border-t border-[var(--color-border)]" />}
         <li>
-          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-[var(--color-accent)]/40">
+          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]">
             <input
               type="checkbox"
               checked={values.includes(o.value)}
@@ -113,12 +113,12 @@ export function MultiSelectMenu({
             "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
             active
               ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
           )}
         >
           <span>{label}</span>
           {active && (
-            <span className="rounded-full bg-[var(--color-primary)]/10 px-1.5 text-[11px] tabular-nums">
+            <span className="text-2xs rounded-full bg-[var(--color-primary)]/10 px-1.5 tabular-nums">
               {values.length}
             </span>
           )}
@@ -168,22 +168,22 @@ export function MultiSelectMenu({
               shown.map((section, si) => {
                 const headerId = `${groupId}-${String(si)}`
                 return (
-                <div
-                  key={section.label || headerId}
-                  role="group"
-                  aria-labelledby={section.label ? headerId : undefined}
-                  aria-label={section.label ? undefined : label}
-                >
-                  {section.label && (
-                    <div
-                      id={headerId}
-                      className="px-2 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase"
-                    >
-                      {section.label}
-                    </div>
-                  )}
-                  <ul className="space-y-0.5">{section.options.map(renderOption)}</ul>
-                </div>
+                  <div
+                    key={section.label || headerId}
+                    role="group"
+                    aria-labelledby={section.label ? headerId : undefined}
+                    aria-label={section.label ? undefined : label}
+                  >
+                    {section.label && (
+                      <div
+                        id={headerId}
+                        className="text-2xs px-2 pt-1.5 pb-0.5 font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase"
+                      >
+                        {section.label}
+                      </div>
+                    )}
+                    <ul className="space-y-0.5">{section.options.map(renderOption)}</ul>
+                  </div>
                 )
               })
             )}

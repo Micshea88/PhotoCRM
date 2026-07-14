@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
+  Activity,
   Calendar,
   ChevronDown,
   ChevronRight,
@@ -22,10 +23,13 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Card } from "@/components/ui/card"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { Input } from "@/components/ui/input"
 import { Popover } from "@/components/ui/popover"
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import { SingleSelectMenu } from "@/components/ui/single-select-menu"
 import { cn } from "@/lib/utils"
 import { detectUrls } from "@/lib/linkify"
 import { useDialer } from "@/modules/telephony/ui/dialer-context"
@@ -168,14 +172,14 @@ export interface ActivityEntry {
  *   - Blue (Transferred / Left Voicemail) — informational
  */
 const DISPOSITION_BADGE_CLASSES: Record<RecordedCallDisposition, string> = {
-  completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  no_answer: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  busy: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  cancelled: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
-  transferred: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  voicemail: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  wrong_number: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  completed: "bg-[var(--color-success)]/10 text-[var(--color-success)]",
+  no_answer: "bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
+  busy: "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]",
+  failed: "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]",
+  cancelled: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
+  transferred: "bg-[var(--color-info)]/10 text-[var(--color-info)]",
+  voicemail: "bg-[var(--color-info)]/10 text-[var(--color-info)]",
+  wrong_number: "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]",
 }
 
 function isKnownDisposition(value: string): value is RecordedCallDisposition {
@@ -188,7 +192,7 @@ export function DispositionBadge({ disposition }: { disposition: string | null |
     <span
       data-testid={`disposition-badge-${disposition}`}
       className={cn(
-        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        "text-3xs shrink-0 rounded-full px-2 py-0.5 font-medium",
         DISPOSITION_BADGE_CLASSES[disposition],
       )}
     >
@@ -205,11 +209,10 @@ type EmailDeliveryStatus = "sent" | "delivered" | "bounced" | "failed" | "compla
 
 const DELIVERY_CHIP_CLASSES: Record<EmailDeliveryStatus, string> = {
   sent: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
-  // FLAG: hardcoded emerald — no --color-success token exists yet; migrate when theme layer lands.
-  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  bounced: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  complained: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  delivered: "bg-[var(--color-success)]/10 text-[var(--color-success)]",
+  bounced: "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]",
+  failed: "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]",
+  complained: "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]",
 }
 
 const DELIVERY_CHIP_LABEL: Record<EmailDeliveryStatus, string> = {
@@ -244,7 +247,7 @@ export function DeliveryStatusChip({
       data-testid={`delivery-status-chip-${status}`}
       title={showReason ? bounceReason : undefined}
       className={cn(
-        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        "text-3xs shrink-0 rounded-full px-2 py-0.5 font-medium",
         DELIVERY_CHIP_CLASSES[status],
       )}
     >
@@ -278,7 +281,7 @@ export function OpensPopout({
           type="button"
           onClick={toggle}
           data-testid="opens-popout-trigger"
-          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="text-3xs shrink-0 rounded px-1.5 py-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           ⓘ Opens: {openCount}
         </button>
@@ -381,6 +384,25 @@ export function entryTitleText(e: ActivityEntry): string {
 }
 
 type DatePreset = "all" | "today" | "week" | "month" | "custom"
+
+// Date-range presets — a headless SingleSelectMenu (not a native <select>) so the
+// open list retints cream-hover / sage-selected like the Assigned-to dropdown,
+// instead of the OS-blue a native select's OS-drawn list shows (accent-color can't
+// reach it). Same value/onChange contract; "custom" still reveals the date inputs.
+const DATE_PRESET_OPTIONS: { value: DatePreset; label: string }[] = [
+  { value: "all", label: "All time" },
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "custom", label: "Custom range" },
+]
+const DATE_PRESET_LABEL: Record<DatePreset, string> = {
+  all: "All time",
+  today: "Today",
+  week: "This week",
+  month: "This month",
+  custom: "Custom range",
+}
 
 interface FeedFilters {
   date: DatePreset
@@ -829,11 +851,19 @@ export function ContactActivityFeed({
 
       {/* Empty state. */}
       {visible.length === 0 ? (
-        <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">
-          {entries.length === 0
-            ? "No activity yet — use the create/log buttons above to start the feed."
-            : `No ${FILTER_LABEL[activeTab].toLowerCase()} entries match the current filters.`}
-        </p>
+        entries.length === 0 ? (
+          <EmptyState
+            icon={<Activity className="size-6" />}
+            title="No activity yet"
+            description="Log a call, note, email, meeting, or SMS with the buttons above to start the feed."
+          />
+        ) : (
+          <EmptyState
+            icon={<Activity className="size-6" />}
+            title="No matching activity"
+            description={`No ${FILTER_LABEL[activeTab].toLowerCase()} entries match the current filters.`}
+          />
+        )
       ) : (
         <ul className="space-y-3">
           {visible.map((e) => (
@@ -918,10 +948,10 @@ function TypeChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full border px-2 py-0.5 text-[11px]",
+        "text-2xs rounded-full border px-2 py-0.5",
         active
           ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
-          : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",
+          : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]",
       )}
     >
       {label}
@@ -942,19 +972,26 @@ function FiltersPanel({
     <div className="space-y-3 text-xs" data-testid="activity-filters-panel">
       <div className="space-y-1">
         <label className="font-medium text-[var(--color-muted-foreground)]">Date range</label>
-        <select
+        <SingleSelectMenu
+          ariaLabel="Date range"
+          options={DATE_PRESET_OPTIONS}
           value={filters.date}
-          onChange={(e) => {
-            onChange({ ...filters, date: e.target.value as DatePreset })
+          onChange={(v) => {
+            onChange({ ...filters, date: v as DatePreset })
           }}
-          className="h-7 w-full rounded-md border border-[var(--color-border)] bg-transparent px-2 text-xs"
-        >
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="month">This month</option>
-          <option value="custom">Custom range</option>
-        </select>
+          wrapperClassName="block w-full"
+          trigger={({ open, toggle }) => (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-expanded={open}
+              className="flex h-7 w-full items-center justify-between gap-2 rounded-sm border border-[var(--color-input)] bg-transparent px-2 text-xs focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
+            >
+              <span>{DATE_PRESET_LABEL[filters.date]}</span>
+              <ChevronDown className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
+            </button>
+          )}
+        />
         {filters.date === "custom" && (
           <div className="mt-1 grid grid-cols-2 gap-1">
             <Input
@@ -1054,7 +1091,7 @@ function EmailAttachments({
             </a>
             {a.deliveryMethod === "link" && (
               <>
-                <span className="text-[10px] text-[var(--color-muted-foreground)]">
+                <span className="text-3xs text-[var(--color-muted-foreground)]">
                   · Sent as link
                 </span>
                 {/* Secondary action: open the exact external URL the recipient
@@ -1064,7 +1101,7 @@ function EmailAttachments({
                     href={shareLinkPath(a.shareLinkToken)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-[var(--color-muted-foreground)] underline hover:text-[var(--color-foreground)]"
+                    className="text-2xs text-[var(--color-muted-foreground)] underline hover:text-[var(--color-foreground)]"
                     data-testid="activity-email-sharelink"
                   >
                     Open share link
@@ -1097,7 +1134,7 @@ function LinkifiedBody({ text }: { text: string }) {
             href={seg.value}
             target="_blank"
             rel="noreferrer noopener"
-            className="text-blue-600 underline dark:text-blue-400"
+            className="text-[var(--color-info)] underline"
             onClick={(e) => {
               e.stopPropagation()
             }}
@@ -1225,10 +1262,7 @@ export function ActivityCard({
   }
 
   return (
-    <article
-      className="group space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3"
-      data-testid={`activity-entry-${entry.kind}`}
-    >
+    <Card className="group space-y-2 px-4 py-3" data-testid={`activity-entry-${entry.kind}`}>
       <header className="flex items-center gap-2">
         <button
           type="button"
@@ -1237,7 +1271,7 @@ export function ActivityCard({
           }}
           aria-expanded={isOpen}
           aria-label={isOpen ? "Collapse entry" : "Expand entry"}
-          className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           {isOpen ? (
             <ChevronDown className="size-3.5" aria-hidden="true" />
@@ -1261,7 +1295,7 @@ export function ActivityCard({
             />
           </>
         )}
-        <time className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
+        <time className="text-2xs shrink-0 text-[var(--color-muted-foreground)]">
           {timeAgo(entry.timestamp)}
         </time>
         {canEdit && !editing && (
@@ -1275,7 +1309,7 @@ export function ActivityCard({
               }}
               aria-label="Edit entry"
               data-testid={`activity-edit-${entry.kind}`}
-              className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
+              className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--state-hover)]"
             >
               <Pencil className="size-3" aria-hidden="true" />
             </button>
@@ -1287,7 +1321,7 @@ export function ActivityCard({
                   onClick={toggle}
                   aria-label="More actions"
                   data-testid={`activity-kebab-${entry.kind}`}
-                  className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--color-accent)]/40"
+                  className="inline-flex size-5 items-center justify-center rounded text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--state-hover)]"
                 >
                   <MoreHorizontal className="size-3" aria-hidden="true" />
                 </button>
@@ -1302,7 +1336,7 @@ export function ActivityCard({
                       setDeleteOpen(true)
                     }}
                     data-testid={`activity-delete-${entry.kind}`}
-                    className="block w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-500/10 dark:text-red-400"
+                    className="block w-full rounded px-2 py-1.5 text-left text-[var(--color-destructive)] hover:bg-[var(--color-destructive)]/10"
                   >
                     Delete
                   </button>
@@ -1368,9 +1402,12 @@ export function ActivityCard({
             data-testid={`activity-edit-body-${entry.kind}`}
             className="w-full resize-y border-0 border-b border-[var(--color-primary)] bg-transparent p-1 text-sm focus:outline-none disabled:opacity-50"
           />
-          {saving && <p className="text-[11px] text-[var(--color-muted-foreground)]">Saving…</p>}
+          {saving && <p className="text-2xs text-[var(--color-muted-foreground)]">Saving…</p>}
           {error && (
-            <p className="text-xs text-red-600 dark:text-red-400" data-testid="activity-edit-error">
+            <p
+              className="text-xs text-[var(--color-destructive)]"
+              data-testid="activity-edit-error"
+            >
               {error}
             </p>
           )}
@@ -1397,7 +1434,7 @@ export function ActivityCard({
         destructive
         submitting={deleting}
       />
-    </article>
+    </Card>
   )
 }
 

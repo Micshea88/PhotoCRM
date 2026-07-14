@@ -57,7 +57,7 @@ export function Drawer({
     >
       <aside
         className={cn(
-          "flex h-full flex-col border-l border-[var(--color-border)] bg-[var(--color-background)] shadow-xl",
+          "flex h-full flex-col border-l border-[var(--color-border)] bg-[var(--color-popover)] shadow-xl",
           widthClass,
         )}
         onClick={(e) => {
@@ -71,7 +71,7 @@ export function Drawer({
               type="button"
               aria-label="Close"
               onClick={onClose}
-              className="rounded-md p-1 text-base hover:bg-[var(--color-accent)]"
+              className="rounded-md p-1 text-base hover:bg-[var(--state-hover)]"
             >
               ✕
             </button>

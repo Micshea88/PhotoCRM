@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
 import { getItemForOrg } from "@/modules/items/queries"
 import { ItemForm } from "@/modules/items/ui/item-form"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function EditItemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,8 +15,8 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
   if (!item) notFound()
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-semibold">Edit item</h1>
+    <PageContainer variant="narrow" className="space-y-6">
+      <h1 className="font-serif text-2xl font-semibold">Edit item</h1>
       <ItemForm
         itemId={item.id}
         initial={{
@@ -24,6 +25,6 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
           status: item.status,
         }}
       />
-    </div>
+    </PageContainer>
   )
 }

@@ -34,6 +34,8 @@ import { AiSummaryLive } from "@/modules/contacts/ui/ai-summary-live"
 import { RegenerateAiButton } from "@/modules/contacts/ui/regenerate-ai-button"
 import { isSummaryStale } from "@/modules/contacts/ai/summary-freshness"
 import type { AiInsight } from "@/modules/contacts/ai/insights-detector"
+import { PageContainer } from "@/modules/shared/ui/page-container"
+import { Card } from "@/components/ui/card"
 
 /**
  * Push 3 (C6c) — contact detail page rebuild.
@@ -249,7 +251,7 @@ export default async function ContactDetailPage({
     // distracting empty margins AND squeezed the action icon row past
     // its 6th slot. Drop the cap; columns flex with soft min/max
     // bounds so the center fills any extra space.
-    <div className="space-y-6 px-6">
+    <PageContainer variant="full" className="space-y-6">
       {/* P3 (C6c polish #3) — Actions dropdown sits adjacent to the
           back breadcrumb on the LEFT (HubSpot pattern). Row 1:
           [← Contacts] [Actions ▼]. Row 2: H1 title + lead status
@@ -273,7 +275,7 @@ export default async function ContactDetailPage({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold">
+          <h1 className="font-serif text-2xl font-semibold">
             {contactLabel(
               {
                 firstName: contact.firstName,
@@ -385,7 +387,7 @@ export default async function ContactDetailPage({
                 ContactDetailLeft panes=["info","about"] so the desktop
                 card styling is preserved without the action row dup. */}
             <div className="space-y-4 lg:hidden" data-testid="contact-detail-mobile-shell">
-              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-2 py-3">
+              <Card className="px-2 py-3">
                 <ActionIconRow
                   contactId={contact.id}
                   contactLabel={`${contact.firstName} ${contact.lastName}`.trim() || "Contact"}
@@ -395,7 +397,7 @@ export default async function ContactDetailPage({
                   contactOptions={associationContactOptions}
                   companyOptions={associationCompanyOptions}
                 />
-              </div>
+              </Card>
               <ContactDetailMobile
                 initialTab={mobileInitialTab}
                 activity={
@@ -410,26 +412,41 @@ export default async function ContactDetailPage({
               />
             </div>
 
-            {/* Desktop 3-column (lg+). P3 polish #5 Fix 2 —
-                lg:min-h-[calc(100vh-14rem)] keeps the columns tall on
-                content-light contacts so dropdowns near the bottom of
-                the left card have room to open. 14rem (~224px) is a
-                conservative offset for global header + page header
-                rows 1+2+3 + page padding. min-h (not h) so heavy
-                activity still grows the row past the viewport. */}
-            <div className="hidden gap-6 lg:grid lg:min-h-[calc(100vh-14rem)] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(280px,360px)]">
-              <ContactDetailLeft {...leftBaseProps} />
-              <ContactDetailCenter
-                initialTab={desktopInitialTab}
-                overview={aiBlock}
-                activity={activityBlock}
-                tasks={tasksBlock}
-              />
-              <ContactDetailRight associations={associationsView} />
+            {/* Desktop grid (lg+). Phase 4b — CONTAINER-QUERY reflow so it
+                responds to the space actually available (nav expanded vs
+                collapsed changes the container width), not the viewport:
+                  • ≥1160px container → 3 columns, MIDDLE floored at 420px (never
+                    the old minmax(0,1fr) that crushed to a ~140px sliver).
+                  • 760–1160px → 2 columns (left + center); the right sidebar is
+                    the 3rd grid child and wraps to a full-width row underneath
+                    (@max col-span-2) — never a 3rd crushed track that overlaps.
+                  • <lg viewport → the mobile tabbed shell above (unchanged).
+                lg:min-h keeps columns tall on content-light contacts (dropdown
+                room). [&>*]:min-w-0 lets long content wrap instead of overflowing. */}
+            <div className="@container/detail hidden lg:block">
+              <div
+                className="grid grid-cols-[minmax(260px,320px)_minmax(420px,1fr)] gap-6 lg:min-h-[calc(100vh-14rem)] @min-[1160px]/detail:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)_minmax(280px,360px)] [&>*]:min-w-0"
+                data-testid="contact-detail-grid"
+              >
+                <div data-testid="detail-col-left">
+                  <ContactDetailLeft {...leftBaseProps} />
+                </div>
+                <div data-testid="detail-col-center">
+                  <ContactDetailCenter
+                    initialTab={desktopInitialTab}
+                    overview={aiBlock}
+                    activity={activityBlock}
+                    tasks={tasksBlock}
+                  />
+                </div>
+                <div className="@max-[1160px]/detail:col-span-2" data-testid="detail-col-right">
+                  <ContactDetailRight associations={associationsView} />
+                </div>
+              </div>
             </div>
           </>
         )
       })()}
-    </div>
+    </PageContainer>
   )
 }

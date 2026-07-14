@@ -11,7 +11,7 @@ export function HighPriorityFlag({ priority }: { priority: string | null }) {
   if (priority !== "high") return null
   return (
     <Flag
-      className="size-3.5 shrink-0 fill-red-600 text-red-600 dark:fill-red-400 dark:text-red-400"
+      className="size-3.5 shrink-0 fill-[var(--color-destructive)] text-[var(--color-destructive)]"
       aria-label="High priority"
     />
   )

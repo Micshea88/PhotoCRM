@@ -124,7 +124,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
     // defaults inside table-fixed get equal shares of remaining table
     // width, which prevented the table from ever overflowing the
     // viewport and made the horizontal scrollbar dormant.
-    defaultWidth: 280,
+    defaultWidth: 220,
     render: displayLabelText,
     measureText: displayLabelText,
     // P3 (C6c followup) — clicking Name sorts on lastName (matches the
@@ -138,7 +138,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   firstName: {
     id: "firstName",
     label: "First name",
-    defaultWidth: 140,
+    defaultWidth: 120,
     render: (row) => row.firstName,
     measureText: (row) => row.firstName,
     sortField: "firstName",
@@ -146,7 +146,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   lastName: {
     id: "lastName",
     label: "Last name",
-    defaultWidth: 140,
+    defaultWidth: 120,
     render: (row) => row.lastName,
     measureText: (row) => row.lastName,
     sortField: "lastName",
@@ -154,7 +154,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   primaryEmail: {
     id: "primaryEmail",
     label: "Email",
-    defaultWidth: 240,
+    defaultWidth: 200,
     render: (row) => row.primaryEmail ?? "",
     measureText: (row) => row.primaryEmail ?? "",
     sortField: "primaryEmail",
@@ -162,7 +162,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   primaryPhone: {
     id: "primaryPhone",
     label: "Phone",
-    defaultWidth: 160,
+    defaultWidth: 150,
     render: (row) => formatPhoneDisplay(row.primaryPhone),
     measureText: (row) => formatPhoneDisplay(row.primaryPhone),
     sortField: "primaryPhone",
@@ -170,7 +170,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   contactType: {
     id: "contactType",
     label: "Type",
-    defaultWidth: 140,
+    defaultWidth: 130,
     render: (row) => row.contactType ?? "",
     measureText: (row) => row.contactType ?? "",
     sortField: "contactType",
@@ -178,7 +178,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   lifecycleStatus: {
     id: "lifecycleStatus",
     label: "Status",
-    defaultWidth: 140,
+    defaultWidth: 130,
     render: (row) => row.lifecycleStatus ?? "",
     measureText: (row) => row.lifecycleStatus ?? "",
     sortField: "lifecycleStatus",
@@ -186,14 +186,14 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   tags: {
     id: "tags",
     label: "Tags",
-    defaultWidth: 200,
+    defaultWidth: 170,
     render: (row) => (row.tags ?? []).join(", "),
     measureText: (row) => (row.tags ?? []).join(", "),
   },
   companyName: {
     id: "companyName",
     label: "Company",
-    defaultWidth: 220,
+    defaultWidth: 180,
     render: (row) => row.companyName ?? "",
     measureText: (row) => row.companyName ?? "",
     sortField: "companyName",
@@ -201,7 +201,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   createdAt: {
     id: "createdAt",
     label: "Created",
-    defaultWidth: 140,
+    defaultWidth: 120,
     render: (row) => row.createdAt.slice(0, 10),
     measureText: (row) => row.createdAt.slice(0, 10),
     sortField: "createdAt",
@@ -214,42 +214,42 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   secondaryEmail: {
     id: "secondaryEmail",
     label: "Secondary email",
-    defaultWidth: 240,
+    defaultWidth: 200,
     render: (row) => row.secondaryEmail ?? "",
     measureText: (row) => row.secondaryEmail ?? "",
   },
   secondaryPhone: {
     id: "secondaryPhone",
     label: "Secondary phone",
-    defaultWidth: 160,
+    defaultWidth: 140,
     render: (row) => formatPhoneDisplay(row.secondaryPhone),
     measureText: (row) => formatPhoneDisplay(row.secondaryPhone),
   },
   mailingCity: {
     id: "mailingCity",
     label: "Mailing city",
-    defaultWidth: 160,
+    defaultWidth: 140,
     render: (row) => row.mailingCity ?? "",
     measureText: (row) => row.mailingCity ?? "",
   },
   mailingState: {
     id: "mailingState",
     label: "Mailing state",
-    defaultWidth: 120,
+    defaultWidth: 100,
     render: (row) => row.mailingState ?? "",
     measureText: (row) => row.mailingState ?? "",
   },
   mailingZip: {
     id: "mailingZip",
     label: "Mailing zip",
-    defaultWidth: 120,
+    defaultWidth: 100,
     render: (row) => row.mailingZip ?? "",
     measureText: (row) => row.mailingZip ?? "",
   },
   dob: {
     id: "dob",
     label: "Birthday",
-    defaultWidth: 140,
+    defaultWidth: 120,
     // dob is a Drizzle `date` column → string in YYYY-MM-DD form
     // (or null). Show as-is for consistency with createdAt's
     // ISO-slice rendering.
@@ -259,35 +259,35 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   anniversaryDate: {
     id: "anniversaryDate",
     label: "Anniversary",
-    defaultWidth: 140,
+    defaultWidth: 120,
     render: (row) => row.anniversaryDate ?? "",
     measureText: (row) => row.anniversaryDate ?? "",
   },
   instagramHandle: {
     id: "instagramHandle",
     label: "Instagram",
-    defaultWidth: 160,
+    defaultWidth: 140,
     render: (row) => row.instagramHandle ?? "",
     measureText: (row) => row.instagramHandle ?? "",
   },
   facebookUrl: {
     id: "facebookUrl",
     label: "Facebook",
-    defaultWidth: 220,
+    defaultWidth: 180,
     render: (row) => row.facebookUrl ?? "",
     measureText: (row) => row.facebookUrl ?? "",
   },
   website: {
     id: "website",
     label: "Website",
-    defaultWidth: 220,
+    defaultWidth: 180,
     render: (row) => row.website ?? "",
     measureText: (row) => row.website ?? "",
   },
   leadSource: {
     id: "leadSource",
     label: "Lead source",
-    defaultWidth: 160,
+    defaultWidth: 140,
     render: (row) => row.leadSource ?? "",
     measureText: (row) => row.leadSource ?? "",
     sortField: "leadSource",
@@ -295,14 +295,14 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   sourceDetail: {
     id: "sourceDetail",
     label: "Source detail",
-    defaultWidth: 180,
+    defaultWidth: 150,
     render: (row) => row.sourceDetail ?? "",
     measureText: (row) => row.sourceDetail ?? "",
   },
   ownerName: {
     id: "ownerName",
     label: "Owner",
-    defaultWidth: 180,
+    defaultWidth: 150,
     // The owner_user_id FK is resolved server-side into a display
     // name (via the orgMembers lookup) — see contacts/page.tsx
     // row mapping. Falls back to "" when the contact has no owner
@@ -313,7 +313,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   updatedAt: {
     id: "updatedAt",
     label: "Date updated",
-    defaultWidth: 140,
+    defaultWidth: 120,
     render: (row) => (row.updatedAt ? row.updatedAt.slice(0, 10) : ""),
     measureText: (row) => (row.updatedAt ? row.updatedAt.slice(0, 10) : ""),
     sortField: "updatedAt",
@@ -321,7 +321,7 @@ export const CONTACT_COLUMN_REGISTRY: Record<string, ContactColumnDef> = {
   notes: {
     id: "notes",
     label: "Notes",
-    defaultWidth: 280,
+    defaultWidth: 220,
     // Notes can be long + multiline; the table cell already clips
     // overflow with CSS truncation. Collapse newlines so the
     // measureText canvas + visible cell agree on what they're
@@ -363,7 +363,7 @@ function buildCustomFieldColumnDef(def: ListCustomFieldDef): ContactColumnDef {
   return {
     id,
     label: customFieldColumnLabel(def),
-    defaultWidth: 180,
+    defaultWidth: 150,
     render,
     measureText: render,
   }

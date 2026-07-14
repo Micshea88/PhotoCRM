@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
 import { getDefaultShareExpiration } from "@/modules/org-preferences/queries"
 import { PreferencesForm } from "@/modules/org-preferences/ui/preferences-form"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function PreferencesSettingsPage() {
   const session = await getSession()
@@ -12,14 +13,14 @@ export default async function PreferencesSettingsPage() {
   const defaultExpiration = await getDefaultShareExpiration(orgId)
 
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <h1 className="text-2xl font-semibold">Preferences</h1>
+    <PageContainer variant="narrow">
+      <h1 className="font-serif text-2xl font-semibold">Preferences</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Org-wide defaults for sharing and delivery.
       </p>
       <div className="mt-6">
         <PreferencesForm defaultExpiration={defaultExpiration} />
       </div>
-    </main>
+    </PageContainer>
   )
 }

@@ -137,7 +137,7 @@ function BulkSnoozeMenu({ open, onOpenChange, onSnooze }: BulkSnoozeMenuProps) {
       <RadixPopover.Trigger asChild>
         <button
           type="button"
-          className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--state-hover)]"
           aria-label="Snooze selected"
           data-testid="bulk-action-snooze"
         >
@@ -167,7 +167,7 @@ function BulkSnoozeMenu({ open, onOpenChange, onSnooze }: BulkSnoozeMenuProps) {
                   onClick={() => {
                     handlePreset(opt)
                   }}
-                  className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                  className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--state-hover)]"
                   data-testid={`bulk-snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
                 >
                   <span className="font-medium">{opt.label}</span>
@@ -184,7 +184,7 @@ function BulkSnoozeMenu({ open, onOpenChange, onSnooze }: BulkSnoozeMenuProps) {
 
           {/* Custom date + time picker */}
           <div
-            className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
+            className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--state-hover)]"
             data-testid="bulk-snooze-custom-row"
           >
             <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
@@ -209,7 +209,7 @@ function BulkSnoozeMenu({ open, onOpenChange, onSnooze }: BulkSnoozeMenuProps) {
               type="button"
               onClick={handleCustom}
               disabled={!customValue}
-              className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+              className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
               data-testid="bulk-snooze-custom-confirm"
             >
               Set
@@ -260,7 +260,7 @@ function BulkActionBar({
         <button
           type="button"
           onClick={onMarkRead}
-          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--state-hover)]"
           data-testid="bulk-action-mark-read"
         >
           Mark read
@@ -269,7 +269,7 @@ function BulkActionBar({
         <button
           type="button"
           onClick={onMarkUnread}
-          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--state-hover)]"
           data-testid="bulk-action-mark-unread"
         >
           Mark unread
@@ -280,7 +280,7 @@ function BulkActionBar({
         <button
           type="button"
           onClick={onArchive}
-          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--state-hover)]"
           data-testid="bulk-action-archive"
         >
           Archive
@@ -289,7 +289,7 @@ function BulkActionBar({
         <button
           type="button"
           onClick={onClear}
-          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+          className="flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
           data-testid="bulk-action-clear"
         >
           Clear selection
@@ -548,7 +548,7 @@ export function NotificationsPageClient() {
           </button>
           <Link
             href="/settings/notifications"
-            className="flex size-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+            className="flex size-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
             aria-label="Notification settings"
           >
             <Settings className="size-4" />
@@ -607,7 +607,7 @@ export function NotificationsPageClient() {
           <div role="list">
             {groups.map((group) => (
               <div key={group.label}>
-                <div className="bg-[var(--color-muted)]/30 px-4 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                <div className="text-3xs bg-[var(--color-muted)]/30 px-4 py-1.5 font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
                   {group.label}
                 </div>
                 {group.items.map((n) => (

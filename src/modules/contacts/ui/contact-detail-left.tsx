@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { User as UserIcon } from "lucide-react"
+import { Card } from "@/components/ui/card"
 import { InlineEditField } from "@/components/ui/inline-edit-field"
 import { InlineEditSelect } from "@/components/ui/inline-edit-select"
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
@@ -245,8 +246,8 @@ export function ContactDetailLeft({
 
   return (
     <aside className="space-y-4 lg:h-full">
-      <section
-        className="flex flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] lg:h-full"
+      <Card
+        className="flex flex-col overflow-hidden lg:h-full"
         data-testid="contact-detail-left-card"
       >
         {/* 1. Identity */}
@@ -488,13 +489,13 @@ export function ContactDetailLeft({
             </AboutRow>
           </div>
         )}
-      </section>
+      </Card>
     </aside>
   )
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-medium text-[var(--color-muted-foreground)]">{children}</p>
+  return <p className="text-2xs font-medium text-[var(--color-muted-foreground)]">{children}</p>
 }
 
 function AboutRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -605,7 +606,7 @@ function InlineEditTags({
         aria-label="Edit tags"
         className={cn(
           "group flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left text-xs",
-          "hover:bg-[var(--color-accent)]/30",
+          "hover:bg-[var(--state-hover)]",
         )}
       >
         <span
@@ -634,8 +635,8 @@ function InlineEditTags({
           void commit(draft)
         }}
       />
-      {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
-      {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+      {saving && <p className="text-3xs text-[var(--color-muted-foreground)]">Saving…</p>}
+      {error && <p className="text-2xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

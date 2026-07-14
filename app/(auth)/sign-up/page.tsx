@@ -17,7 +17,7 @@ export default function SignUpPage() {
       <Suspense
         fallback={
           <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-semibold">Create your studio account</h1>
+            <h1 className="font-serif text-2xl font-semibold">Create your studio account</h1>
             <p className="text-sm text-[var(--color-muted-foreground)]">
               Start running your studio in seconds.
             </p>

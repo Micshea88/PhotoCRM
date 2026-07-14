@@ -590,7 +590,7 @@ export function ContactMergeSideBySide({
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" /> Back
           </a>
-          <h1 className="text-xl font-semibold">Merge contacts</h1>
+          <h1 className="font-serif text-xl font-semibold">Merge contacts</h1>
         </div>
         <div className="flex items-center gap-3">
           <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
@@ -618,7 +618,7 @@ export function ContactMergeSideBySide({
       </header>
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-700/30 dark:bg-red-950/30 dark:text-red-200">
+        <div className="rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
           {error}
         </div>
       )}
@@ -832,14 +832,14 @@ function RecordHeader({
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{recordLabel(record)}</p>
-          <p className="truncate text-[11px] text-[var(--color-muted-foreground)]">
+          <p className="text-2xs truncate text-[var(--color-muted-foreground)]">
             {record.primaryEmail ?? "—"}
           </p>
         </div>
       </div>
       {isPrimary ? (
         <span
-          className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2 py-0.5 text-[11px] font-medium text-[var(--color-primary)]"
+          className="text-2xs inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2 py-0.5 font-medium text-[var(--color-primary)]"
           data-testid={`merge-primary-pill-${record.id}`}
         >
           <Crown className="size-3" aria-hidden="true" /> Primary — kept
@@ -848,7 +848,7 @@ function RecordHeader({
         <button
           type="button"
           onClick={onSetPrimary}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[11px] font-medium hover:bg-[var(--color-accent)]/40"
+          className="text-2xs inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 font-medium hover:bg-[var(--state-hover)]"
           data-testid={`merge-set-primary-${record.id}`}
         >
           Set as primary
@@ -907,7 +907,7 @@ function ValueCell({
         divider && "border-t border-[var(--color-border)]",
         picked
           ? "bg-[var(--color-info)]/10 ring-1 ring-[var(--color-primary)]/30 ring-inset"
-          : "hover:bg-[var(--color-accent)]/30",
+          : "hover:bg-[var(--state-hover)]",
         disabled && !picked && "cursor-default opacity-60",
       )}
     >
@@ -932,7 +932,7 @@ function ValueCell({
         )}
       </span>
       {edited && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-700/20 dark:text-amber-300">
+        <span className="text-3xs inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/10 px-1.5 py-0.5 font-medium text-[var(--color-warning)]">
           <Pencil className="size-2.5" aria-hidden="true" /> edited
         </span>
       )}

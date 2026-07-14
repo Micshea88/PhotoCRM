@@ -345,7 +345,7 @@ function BulkEditDrawerBody({
                 onClick={() => {
                   toggleGroup(group)
                 }}
-                className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium hover:bg-[var(--color-accent)]/30"
+                className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium hover:bg-[var(--state-hover)]"
                 aria-expanded={!collapsed}
               >
                 <span>{group}</span>
@@ -367,7 +367,7 @@ function BulkEditDrawerBody({
                           onClick={() => {
                             setSelectedField(isActive ? null : f)
                           }}
-                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--color-accent)]/30 ${
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--state-hover)] ${
                             isActive ? "bg-[var(--color-primary)]/10" : ""
                           }`}
                           aria-expanded={isActive}
@@ -378,7 +378,7 @@ function BulkEditDrawerBody({
                           />
                           <span>{f.label}</span>
                           {f.destructive && (
-                            <span className="ml-auto text-[10px] text-red-600 dark:text-red-400">
+                            <span className="text-3xs ml-auto text-[var(--color-destructive)]">
                               destructive
                             </span>
                           )}
@@ -398,7 +398,7 @@ function BulkEditDrawerBody({
                               hiddenLeadSources={hiddenLeadSources}
                             />
                             {f.destructive && (
-                              <label className="mt-3 flex items-start gap-2 text-xs text-red-700 dark:text-red-400">
+                              <label className="mt-3 flex items-start gap-2 text-xs text-[var(--color-destructive)]">
                                 <input
                                   type="checkbox"
                                   checked={replaceAcked}

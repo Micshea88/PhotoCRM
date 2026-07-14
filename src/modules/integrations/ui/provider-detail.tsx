@@ -103,7 +103,7 @@ function CapabilityChip({ label }: { label: string }) {
 function ConnectedBadge({ providerId }: { providerId: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+      className="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]"
       data-testid={`integrations-provider-${providerId}-connected-badge`}
     >
       <CheckCircle2 className="size-3.5" aria-hidden="true" />
@@ -149,7 +149,7 @@ export function ProviderDetail({
         <ProviderIcon iconKey={provider.iconKey} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold">{provider.name}</h1>
+            <h1 className="font-serif text-xl font-semibold">{provider.name}</h1>
             {isConnected ? <ConnectedBadge providerId={provider.id} /> : null}
           </div>
           <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">

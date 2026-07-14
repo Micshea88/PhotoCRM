@@ -12,6 +12,7 @@ import {
 import { ConnectedAppsEmpty } from "@/modules/integrations/ui/connected-apps-empty"
 import { ConnectedAppsList } from "@/modules/integrations/ui/connected-apps-list"
 import { listConnectedProvidersForOrg } from "@/modules/telephony/queries"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * /settings/integrations — Browse + Connected Apps tabbed view.
@@ -65,9 +66,9 @@ export default async function IntegrationsSettingsPage({
       : []
 
   return (
-    <div className="space-y-6 p-6">
+    <PageContainer variant="default" className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Integrations</h1>
+        <h1 className="font-serif text-2xl font-semibold">Integrations</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted-foreground)]">
           Connect phone, calendar, email, and payment providers so the CRM can talk to the tools you
           already use.
@@ -81,6 +82,6 @@ export default async function IntegrationsSettingsPage({
       ) : (
         <ConnectedAppsEmpty />
       )}
-    </div>
+    </PageContainer>
   )
 }

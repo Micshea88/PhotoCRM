@@ -413,7 +413,7 @@ export function ContactForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="firstName">
-              First name <span className="text-red-600">*</span>
+              First name <span className="text-[var(--color-destructive)]">*</span>
             </Label>
             <Input
               id="firstName"
@@ -426,7 +426,7 @@ export function ContactForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="lastName">
-              Last name <span className="text-red-600">*</span>
+              Last name <span className="text-[var(--color-destructive)]">*</span>
             </Label>
             <Input
               id="lastName"

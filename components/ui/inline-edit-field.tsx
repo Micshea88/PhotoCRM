@@ -150,7 +150,7 @@ export function InlineEditField({
         aria-label={ariaLabel ?? "Edit field"}
         className={cn(
           "group flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left text-sm",
-          !disabled && "hover:bg-[var(--color-accent)]/30",
+          !disabled && "hover:bg-[var(--state-hover)]",
           disabled && "cursor-default",
           className,
         )}
@@ -205,8 +205,8 @@ export function InlineEditField({
           "border-0 border-b border-[var(--color-primary)] px-0 py-0.5",
         )}
       />
-      {saving && <p className="text-[10px] text-[var(--color-muted-foreground)]">Saving…</p>}
-      {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+      {saving && <p className="text-3xs text-[var(--color-muted-foreground)]">Saving…</p>}
+      {error && <p className="text-2xs text-[var(--color-destructive)]">{error}</p>}
     </div>
   )
 }

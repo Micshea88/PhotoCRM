@@ -14,6 +14,7 @@ import { IncompleteSignups } from "@/modules/org/ui/incomplete-signups"
 import { MembersList } from "@/modules/org/ui/members-list"
 import { PendingInvitations } from "@/modules/org/ui/pending-invitations"
 import { Separator } from "@/components/ui/separator"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function OrgMembersPage() {
   const session = await getSession()
@@ -40,8 +41,8 @@ export default async function OrgMembersPage() {
   ])
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <h1 className="text-2xl font-semibold">Members</h1>
+    <PageContainer variant="default">
+      <h1 className="font-serif text-2xl font-semibold">Members</h1>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
         Invite, manage, and remove members of your organization.
       </p>
@@ -107,6 +108,6 @@ export default async function OrgMembersPage() {
           </section>
         </>
       )}
-    </main>
+    </PageContainer>
   )
 }

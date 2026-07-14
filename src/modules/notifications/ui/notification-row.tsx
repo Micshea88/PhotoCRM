@@ -360,8 +360,13 @@ export function NotificationRow({
         // 88px floors the shortest (no-body) row so the ~48px bottom-pinned zone
         // starts at y≈28 — an ~8px cushion below the dot's y=12–20 band, holding
         // even if the link's line-height grows.
-        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-accent)]/30",
-        !isRead && "bg-[var(--color-accent)]/10",
+        // Hover = the light-green wash (the two-green rule; the SAME value as the
+        // unread tint). So an UNREAD row (already green) stays green through hover —
+        // no grey/cream override — while a READ row (white at rest, receded) picks
+        // up the green-wash hover as interaction feedback. Only READING it (mark
+        // read / click-through) drops the green tint and lets the row recede.
+        "group relative flex min-h-[88px] cursor-pointer items-stretch gap-3 rounded-md px-3 py-3 transition-colors hover:bg-[var(--color-wash-green)]",
+        !isRead && "bg-[var(--color-unread-tint)]",
       )}
       data-testid="notification-row"
       data-unread={!isRead ? "true" : "false"}
@@ -394,15 +399,21 @@ export function NotificationRow({
           reach it. */}
       {!isRead && (
         <div
-          className="absolute top-3 right-3 size-2 rounded-full bg-blue-500"
+          className="absolute top-3 right-3 size-2 rounded-full bg-[var(--color-brand-accent)]"
           data-testid="notification-read-dot"
           aria-label="Unread"
         />
       )}
 
-      {/* LEFT — category icon, top-aligned with the headline. */}
+      {/* LEFT — category icon, top-aligned with the headline. Green when unread
+          (reinforces the forward status), greyed when read (recedes). */}
       <div
-        className="flex size-8 shrink-0 items-center justify-center self-start rounded-full bg-[var(--color-accent)]/40 text-[var(--color-muted-foreground)]"
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center self-start rounded-full",
+          !isRead
+            ? "bg-[var(--color-brand-accent)]/10 text-[var(--color-brand-accent)]"
+            : "bg-[var(--color-accent)]/40 text-[var(--color-muted-foreground)]",
+        )}
         data-testid="notification-category-icon"
         data-category={category}
         aria-hidden="true"
@@ -412,10 +423,16 @@ export function NotificationRow({
 
       {/* CENTER — headline + body preview + context/timestamp line. pr-5 keeps
           the text clear of the top-right dot. */}
-      <div className="min-w-0 flex-1 self-start space-y-1 pr-5">
+      <div className="min-w-0 flex-1 space-y-1 self-start pr-5">
         {/* Headline */}
         <p
-          className={cn("text-sm leading-snug line-clamp-2", !isRead && "font-medium")}
+          className={cn(
+            "line-clamp-2 text-sm leading-snug",
+            // UNREAD headline = bold ink (forward); READ = dimmed ink (recedes).
+            !isRead
+              ? "font-medium text-[var(--color-foreground)]"
+              : "text-[var(--color-muted-foreground)]",
+          )}
           data-testid="notification-title"
         >
           {n.title}
@@ -425,7 +442,7 @@ export function NotificationRow({
             matters without opening it. */}
         {n.body && (
           <p
-            className="text-xs leading-snug text-[var(--color-muted-foreground)] line-clamp-2"
+            className="line-clamp-2 text-xs leading-snug text-[var(--color-muted-foreground)]"
             data-testid="notification-body"
           >
             {n.body}
@@ -433,7 +450,7 @@ export function NotificationRow({
         )}
 
         {/* Context (contact / type) + timestamp — always visible, left-aligned. */}
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]">
+        <div className="text-2xs flex min-w-0 items-center gap-1.5 text-[var(--color-muted-foreground)]">
           <span className="truncate" data-testid="notification-anchor">
             {n.contactName ? (
               <span className="text-[var(--color-foreground)]">{n.contactName}</span>
@@ -450,7 +467,7 @@ export function NotificationRow({
         {/* Snoozed-until indicator — only shown on the Snoozed tab */}
         {onUnsnooze && n.snoozedUntil && (
           <div
-            className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+            className="text-2xs flex items-center gap-1 text-[var(--color-warning)]"
             data-testid="notification-snooze-until"
           >
             <Clock className="size-3 shrink-0" />
@@ -481,7 +498,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={onUnsnooze}
-                  className="flex size-7 items-center justify-center rounded-sm text-amber-600 hover:bg-[var(--color-accent)]/40 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-warning)] hover:bg-[var(--state-hover)] hover:text-[var(--color-warning)]"
                   aria-label="Wake now"
                   data-testid="action-unsnooze"
                 >
@@ -496,7 +513,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={onUnarchive}
-                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                   aria-label="Unarchive"
                   data-testid="action-unarchive"
                 >
@@ -515,7 +532,7 @@ export function NotificationRow({
                   <RadixPopover.Trigger asChild>
                     <button
                       type="button"
-                      className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                      className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                       aria-label="Snooze"
                       data-testid="action-snooze"
                     >
@@ -545,7 +562,7 @@ export function NotificationRow({
                             onClick={() => {
                               handleSnoozePreset(opt)
                             }}
-                            className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                            className="flex w-full items-center justify-between gap-4 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--state-hover)]"
                             data-testid={`snooze-preset-${opt.label.toLowerCase().replace(/\s+/g, "-")}`}
                           >
                             <span className="font-medium">{opt.label}</span>
@@ -562,7 +579,7 @@ export function NotificationRow({
 
                     {/* Custom date + time picker */}
                     <div
-                      className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--color-accent)]/40"
+                      className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[var(--state-hover)]"
                       data-testid="snooze-custom-row"
                     >
                       <CalendarDays className="size-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
@@ -587,7 +604,7 @@ export function NotificationRow({
                         type="button"
                         onClick={handleSnoozeCustom}
                         disabled={!customValue}
-                        className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+                        className="shrink-0 rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
                         data-testid="snooze-custom-confirm"
                       >
                         Set
@@ -605,7 +622,7 @@ export function NotificationRow({
                 onClick={handleCreateTask}
                 disabled={!n.contactId}
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-sm hover:bg-[var(--color-accent)]/40",
+                  "flex size-7 items-center justify-center rounded-sm hover:bg-[var(--state-hover)]",
                   n.contactId
                     ? "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
                     : "cursor-not-allowed text-[var(--color-muted-foreground)]/40",
@@ -626,7 +643,7 @@ export function NotificationRow({
                 <button
                   type="button"
                   onClick={handleArchive}
-                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+                  className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                   aria-label="Archive"
                   data-testid="action-archive"
                 >
@@ -648,14 +665,18 @@ export function NotificationRow({
             }}
             aria-label={isRead ? "Mark as unread" : "Mark as read"}
             data-testid="row-read-toggle"
-            className="text-[11px] font-medium text-[var(--color-primary)] hover:underline"
+            className="text-2xs font-medium text-[var(--color-primary)] hover:underline"
           >
             {isRead ? "Mark as unread" : "Mark as read"}
           </button>
         </div>
       </div>
 
-      {error && <p className="absolute bottom-1 left-12 text-[10px] text-red-500">{error}</p>}
+      {error && (
+        <p className="text-3xs absolute bottom-1 left-12 text-[var(--color-destructive)]">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

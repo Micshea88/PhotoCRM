@@ -265,11 +265,11 @@ export function NotificationFilterStrip({
                   onChange({ ...state, sort: o.value })
                 }}
                 className={cn(
-                  "px-3 py-1 text-sm transition-colors",
+                  "px-3 py-1 text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
                   i > 0 && "border-l border-[var(--color-border)]",
                   state.sort === o.value
-                    ? "bg-[var(--color-primary)] text-white"
-                    : "bg-[var(--color-background)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]",
+                    ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
+                    : "bg-[var(--color-background)] text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]",
                 )}
                 data-testid={`notification-sort-${o.value}`}
               >
@@ -314,10 +314,10 @@ function TimeMenu({
           onClick={toggle}
           data-testid="notification-filter-time"
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
             active
-              ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+              ? "border-[var(--state-selected)] text-[var(--color-primary)]"
+              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
           )}
         >
           <span>{label}</span>
@@ -339,7 +339,7 @@ function TimeMenu({
                 })
               }}
               className={cn(
-                "flex w-full rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40",
+                "flex w-full rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-wash-green)]",
                 state.timePreset === o.value && "font-medium text-[var(--color-primary)]",
               )}
             >
@@ -356,7 +356,7 @@ function TimeMenu({
                 onClick={() => {
                   onChange({ ...state, timePreset: null, from: null, to: null })
                 }}
-                className="flex w-full rounded px-2 py-1 text-left text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+                className="flex w-full rounded px-2 py-1 text-left text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-wash-green)]"
               >
                 Clear
               </button>

@@ -14,6 +14,7 @@ import {
 import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function NewContactPage() {
   const session = await getSession()
@@ -70,10 +71,10 @@ export default async function NewContactPage() {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <PageContainer variant="narrow" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">New contact</h1>
+          <h1 className="font-serif text-2xl font-semibold">New contact</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Person record. Permanent details that don&apos;t change between projects.
           </p>
@@ -95,6 +96,6 @@ export default async function NewContactPage() {
         tagOptions={tagOptions}
         currentUserId={session.user.id}
       />
-    </div>
+    </PageContainer>
   )
 }

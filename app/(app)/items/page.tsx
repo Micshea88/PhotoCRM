@@ -1,8 +1,11 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { Package } from "lucide-react"
 import { getSession } from "@/modules/auth/session"
 import { listItemsForOrg } from "@/modules/items/queries"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function ItemsPage() {
   const session = await getSession()
@@ -13,10 +16,10 @@ export default async function ItemsPage() {
   const items = await listItemsForOrg(orgId)
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Items</h1>
+          <h1 className="font-serif text-2xl font-semibold">Items</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Worked-example feature. Copy this module to add new features.
           </p>
@@ -27,11 +30,16 @@ export default async function ItemsPage() {
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            No items yet. Create your first item.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Package className="size-6" />}
+          title="No items yet"
+          description="Create your first item to get started."
+          action={
+            <Button asChild>
+              <Link href="/items/new">New item</Link>
+            </Button>
+          }
+        />
       ) : (
         <ul className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
           {items.map((item) => (
@@ -52,6 +60,6 @@ export default async function ItemsPage() {
           ))}
         </ul>
       )}
-    </div>
+    </PageContainer>
   )
 }

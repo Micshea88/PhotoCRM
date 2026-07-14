@@ -55,9 +55,9 @@ export function ContactTabs({
             onClick={() => {
               setActive(t.key)
             }}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+            className={`-mb-px border-b-2 px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)] ${
               active === t.key
-                ? "border-[var(--color-primary)] font-medium"
+                ? "border-[var(--state-selected)] font-medium"
                 : "border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
             }`}
           >

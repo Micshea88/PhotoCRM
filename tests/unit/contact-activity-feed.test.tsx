@@ -175,22 +175,22 @@ describe("DeliveryStatusChip", () => {
   describe("color-class mapping", () => {
     it("applies emerald palette for delivered", () => {
       render(<DeliveryStatusChip status="delivered" />)
-      expect(screen.getByTestId("delivery-status-chip-delivered").className).toMatch(/emerald/)
+      expect(screen.getByTestId("delivery-status-chip-delivered").className).toMatch(/success/)
     })
 
     it("applies red palette for bounced", () => {
       render(<DeliveryStatusChip status="bounced" />)
-      expect(screen.getByTestId("delivery-status-chip-bounced").className).toMatch(/red/)
+      expect(screen.getByTestId("delivery-status-chip-bounced").className).toMatch(/destructive/)
     })
 
     it("applies red palette for failed", () => {
       render(<DeliveryStatusChip status="failed" />)
-      expect(screen.getByTestId("delivery-status-chip-failed").className).toMatch(/red/)
+      expect(screen.getByTestId("delivery-status-chip-failed").className).toMatch(/destructive/)
     })
 
     it("applies red palette for complained", () => {
       render(<DeliveryStatusChip status="complained" />)
-      expect(screen.getByTestId("delivery-status-chip-complained").className).toMatch(/red/)
+      expect(screen.getByTestId("delivery-status-chip-complained").className).toMatch(/destructive/)
     })
   })
 })

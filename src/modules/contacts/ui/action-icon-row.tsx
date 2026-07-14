@@ -256,12 +256,12 @@ function IconButton({
     "flex size-9 items-center justify-center rounded-full",
     disabled
       ? "cursor-not-allowed bg-[var(--color-muted)] text-[var(--color-muted-foreground)] opacity-60"
-      : "bg-[var(--color-muted)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]",
+      : "bg-[var(--color-muted)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
   )
   const inner = (
     <>
       <span className={circleClass}>{icon}</span>
-      <span className="text-[11px] text-[var(--color-muted-foreground)]">{label}</span>
+      <span className="text-2xs text-[var(--color-muted-foreground)]">{label}</span>
     </>
   )
   if (href && !disabled) {
@@ -297,7 +297,7 @@ function MoreItem({ label, onClick }: { label: string; onClick: () => void }) {
         type="button"
         role="menuitem"
         onClick={onClick}
-        className="block w-full rounded px-2 py-1.5 text-left hover:bg-[var(--color-accent)]/40"
+        className="block w-full rounded px-2 py-1.5 text-left hover:bg-[var(--state-hover)]"
       >
         {label}
       </button>

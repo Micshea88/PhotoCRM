@@ -289,7 +289,7 @@ function ContactMergeModalBody({
           sure?
         </p>
         {error && (
-          <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-3 rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
             {error}
           </div>
         )}
@@ -333,7 +333,7 @@ function ContactMergeModalBody({
       </p>
 
       {error && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-3 rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
           {error}
         </div>
       )}
@@ -386,7 +386,7 @@ function ContactMergeModalBody({
                   <th key={r.id} className="py-1">
                     {r.firstName} {r.lastName}
                     {r.id === primaryId && (
-                      <span className="ml-1 rounded-full bg-[var(--color-muted)] px-1.5 text-[10px]">
+                      <span className="text-3xs ml-1 rounded-full bg-[var(--color-muted)] px-1.5">
                         primary
                       </span>
                     )}

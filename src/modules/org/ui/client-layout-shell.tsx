@@ -82,7 +82,9 @@ export function ClientLayoutShell({
           initialSettingsExpanded={initialSettingsExpanded}
         />
       </aside>
-      <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">
+      {/* main owns vertical rhythm + bottom-nav clearance only; PageContainer
+          owns the horizontal gutter (LAW 6, one owner per axis). */}
+      <main className="flex-1 overflow-y-auto pt-6 pb-20 lg:pb-6">
         <ReconnectBanner expiredConnections={initialExpiredConnections} />
         {children}
       </main>

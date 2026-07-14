@@ -54,12 +54,12 @@ export function NotificationBell({ initialUnreadCount }: { initialUnreadCount: n
         aria-expanded={open}
         aria-haspopup="dialog"
         data-testid="notification-bell"
-        className="relative flex size-8 items-center justify-center rounded-md text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-accent)]/40"
+        className="relative flex size-8 items-center justify-center rounded-md text-[var(--color-foreground)] transition-colors hover:bg-[var(--state-hover)]"
       >
         <Bell className="size-4" />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 flex min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] leading-4 font-bold text-white"
+            className="text-4xs absolute -top-0.5 -right-0.5 flex min-w-[16px] items-center justify-center rounded-full bg-[var(--color-destructive)] px-1 leading-4 font-bold text-white"
             data-testid="notification-badge"
             aria-hidden
           >

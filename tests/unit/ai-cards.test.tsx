@@ -85,7 +85,11 @@ describe("AiStatusBadge", () => {
   it("renders the status text", () => {
     render(<AiStatusBadge status="Hot Lead" reasoning="Recent inbound." />)
     expect(screen.getByText("Hot Lead")).toBeInTheDocument()
-    expect(screen.getByTestId("ai-status-badge")).toHaveAttribute("title", "Recent inbound.")
+    // The reasoning surfaces via the badge's native title tooltip.
+    expect(screen.getByText("Hot Lead").closest("[title]")).toHaveAttribute(
+      "title",
+      "Recent inbound.",
+    )
   })
 
   it('renders "No classification yet" when status is null', () => {

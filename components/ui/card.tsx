@@ -6,7 +6,10 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-card-foreground)] shadow-sm",
+        // Reskin (4e owns card treatment): rounded-xl + hairline border /60, NO
+        // shadow — restraint. Elevation comes from the border + whitespace, not
+        // a drop shadow.
+        "rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-card)] text-[var(--color-card-foreground)]",
         className,
       )}
       {...props}

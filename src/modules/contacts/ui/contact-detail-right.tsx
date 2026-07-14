@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Settings } from "lucide-react"
+import { Card } from "@/components/ui/card"
 import { Modal } from "@/components/ui/modal"
 import { Popover } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -29,8 +30,8 @@ export function ContactDetailRight({
   hasEventsModule?: boolean
 }) {
   return (
-    <aside
-      className="divide-y divide-[var(--color-border)] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] lg:h-full"
+    <Card
+      className="divide-y divide-[var(--color-border)] overflow-hidden lg:h-full"
       data-testid="contact-detail-right"
     >
       <CollapsibleSection
@@ -102,7 +103,7 @@ export function ContactDetailRight({
           body="Contracts, mood boards, and asset deliveries attach here once the Files module ships."
         />
       </CollapsibleSection>
-    </aside>
+    </Card>
   )
 }
 
@@ -138,7 +139,7 @@ function CollapsibleSection({
             setOpen((o) => !o)
           }}
           aria-expanded={open}
-          className="flex flex-1 items-center gap-1 rounded-sm py-0.5 text-left text-sm font-medium hover:bg-[var(--color-accent)]/20"
+          className="flex flex-1 items-center gap-1 rounded-sm py-0.5 text-left text-sm font-medium hover:bg-[var(--state-hover)]"
         >
           {open ? (
             <ChevronDown
@@ -171,7 +172,7 @@ function CollapsibleSection({
               type="button"
               onClick={toggle}
               aria-label={`${title} actions`}
-              className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/30"
+              className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
             >
               <MoreHorizontal className="size-3.5" aria-hidden="true" />
             </button>
@@ -186,7 +187,7 @@ function CollapsibleSection({
         <button
           type="button"
           aria-label={`${title} settings`}
-          className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/30"
+          className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
           title={`${title} settings — ships with the linked module.`}
         >
           <Settings className="size-3.5" aria-hidden="true" />

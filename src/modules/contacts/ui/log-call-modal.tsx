@@ -139,9 +139,9 @@ export function LogCallModal({
         return window.confirm("Discard this call log?")
       }}
       footer={
-        <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="text-2xs flex items-center justify-between gap-2">
           {error ? (
-            <span className="text-red-600 dark:text-red-400">{error}</span>
+            <span className="text-[var(--color-destructive)]">{error}</span>
           ) : (
             <span className="text-[var(--color-muted-foreground)]">
               Saved to this contact&apos;s activity feed.
@@ -236,7 +236,7 @@ export function LogCallModal({
             disabled={busy}
             placeholder="Notes about the call"
             data-testid="log-call-notes"
-            className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+            className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
           />
         </div>
 

@@ -2,8 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, ListTodo } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { cn } from "@/lib/utils"
@@ -240,9 +241,11 @@ export function ContactTasksPane({
       {anyActive ? (
         <section className="space-y-2" data-testid="contact-tasks-flat">
           {flatList.length === 0 ? (
-            <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
-              No tasks match these filters.
-            </p>
+            <EmptyState
+              icon={<ListTodo className="size-6" />}
+              title="No matching tasks"
+              description="No tasks match these filters. Try clearing or adjusting them."
+            />
           ) : (
             <TaskList
               tasks={flatList}
@@ -264,9 +267,11 @@ export function ContactTasksPane({
             testId="contact-tasks-open"
           >
             {openTasks.length === 0 ? (
-              <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-muted-foreground)]">
-                No open tasks. Use “Create a task” to add one.
-              </p>
+              <EmptyState
+                icon={<ListTodo className="size-6" />}
+                title="No open tasks"
+                description="Use “Create a task” above to add one."
+              />
             ) : (
               <TaskList
                 tasks={openTasks}
@@ -536,7 +541,7 @@ function TaskRow({
   return (
     <li
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-[var(--color-accent)]/30",
+        "group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-[var(--state-hover)]",
         done && "opacity-50",
       )}
       data-testid="contact-task-row"
@@ -555,7 +560,7 @@ function TaskRow({
         <span className={cn(dueStateTextClass(dueState))}>{task.title}</span>
       </span>
       {task.eventName && (
-        <span className="shrink-0 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[10px] text-[var(--color-muted-foreground)]">
+        <span className="text-3xs shrink-0 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[var(--color-muted-foreground)]">
           {task.eventName}
         </span>
       )}
@@ -566,13 +571,13 @@ function TaskRow({
         variant="avatar"
       />
       {done && task.completedAt ? (
-        <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
+        <span className="text-2xs shrink-0 text-[var(--color-muted-foreground)] tabular-nums">
           Completed {formatDate(task.completedAt)}
         </span>
       ) : task.dueDate ? (
         <span
           className={cn(
-            "shrink-0 text-[11px] tabular-nums",
+            "text-2xs shrink-0 tabular-nums",
             dueStateTextClass(dueState) || "text-[var(--color-muted-foreground)]",
           )}
         >
@@ -584,7 +589,7 @@ function TaskRow({
         onClick={() => {
           setEditing(true)
         }}
-        className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--color-foreground)]"
+        className="text-2xs shrink-0 text-[var(--color-muted-foreground)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--color-foreground)]"
         data-testid="contact-task-edit"
       >
         Edit
@@ -594,7 +599,7 @@ function TaskRow({
         onClick={() => {
           setDeleteOpen(true)
         }}
-        className="shrink-0 text-[11px] text-[var(--color-destructive)] opacity-0 transition group-hover:opacity-100"
+        className="text-2xs shrink-0 text-[var(--color-destructive)] opacity-0 transition group-hover:opacity-100"
         data-testid="contact-task-delete"
       >
         Delete

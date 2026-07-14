@@ -46,16 +46,16 @@ export function DedupBlockModal({
   return (
     <Modal open={open} onClose={onClose} title="Duplicate contact detected">
       <div className="space-y-4">
-        <div className="flex gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
+        <div className="flex gap-3 rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3 text-sm">
           <AlertCircle
-            className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400"
+            className="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]"
             aria-hidden="true"
           />
           <div className="space-y-1">
-            <p className="font-medium text-amber-900 dark:text-amber-200">
+            <p className="font-medium text-[var(--color-warning)]">
               An existing contact already has this {dedupFieldLabel(matchedField)}.
             </p>
-            <p className="text-xs text-amber-800 dark:text-amber-300">
+            <p className="text-xs text-[var(--color-warning)]">
               To avoid creating duplicate records, edit the existing contact instead of creating a
               new one. If this is genuinely a different person, change the duplicate field and try
               again.

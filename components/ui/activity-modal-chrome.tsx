@@ -97,7 +97,7 @@ export function ActivityModalChrome({
             setState((s) => ({ ...s, collapsed: false }))
           }}
           aria-label="Restore modal"
-          className="inline-flex size-6 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="inline-flex size-6 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           <ChevronUp className="size-4" aria-hidden="true" />
         </button>
@@ -106,7 +106,7 @@ export function ActivityModalChrome({
           type="button"
           onClick={handleClose}
           aria-label="Close modal"
-          className="inline-flex size-6 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="inline-flex size-6 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           <X className="size-4" aria-hidden="true" />
         </button>
@@ -139,7 +139,7 @@ export function ActivityModalChrome({
               setState((s) => ({ ...s, collapsed: true }))
             }}
             aria-label="Collapse modal"
-            className="inline-flex size-7 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+            className="inline-flex size-7 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
             data-testid="activity-modal-collapse"
           >
             <ChevronDown className="size-4" aria-hidden="true" />
@@ -154,7 +154,7 @@ export function ActivityModalChrome({
               setState((s) => ({ ...s, expanded: !s.expanded }))
             }}
             aria-label={state.expanded ? "Restore size" : "Expand modal"}
-            className="inline-flex size-7 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+            className="inline-flex size-7 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
           >
             {state.expanded ? (
               <Minimize2 className="size-4" aria-hidden="true" />
@@ -166,7 +166,7 @@ export function ActivityModalChrome({
             type="button"
             onClick={handleClose}
             aria-label="Close modal"
-            className="inline-flex size-7 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+            className="inline-flex size-7 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
             data-testid="activity-modal-close"
           >
             <X className="size-4" aria-hidden="true" />
@@ -283,7 +283,7 @@ export function AssociationsSection({
                   setPickerOpen(true)
                 }}
                 data-testid="add-association"
-                className="ml-1 rounded border border-dashed border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-primary)] hover:bg-[var(--color-accent)]/30"
+                className="text-2xs ml-1 rounded border border-dashed border-[var(--color-border)] px-2 py-0.5 text-[var(--color-primary)] hover:bg-[var(--state-hover)]"
               >
                 + Add association
               </button>
@@ -340,7 +340,7 @@ export function FollowUpTaskAffordance() {
           <option>In 3 months</option>
         </select>
       </label>
-      <p className="text-[10px] text-[var(--color-muted-foreground)]">
+      <p className="text-3xs text-[var(--color-muted-foreground)]">
         Contact-scoped follow-up tasks ship in Push 7.
       </p>
     </div>

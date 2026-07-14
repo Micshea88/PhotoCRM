@@ -193,4 +193,55 @@ Locked decision `docs/decisions-since-may-docs.md` §18 (reverses the earlier "n
 
 ---
 
+## Competitive inputs — Maroo + Bloom.io research (July 2026)
+
+Tagged to the phase each belongs to.
+
+### P11 Finance — Contractor / team payout loop (build; real ownable gap)
+
+Pay second shooters, editors, and VAs from inside Pathway. No photography CRM closes this loop; Maroo is the only competitor doing it. Mike's own studio is the ideal first user.
+
+- **ARCHITECTURE (locked):** Stripe Connect **Express** — the studio's connected account sends the payout; Pathway orchestrates and NEVER sits in the money path. This is NOT merchant-of-record (MoR was correctly scoped out earlier; Express is different and safe — Stripe is the licensed money transmitter, keeping Pathway an orchestration layer, consistent with "your money, your processor"). Do NOT use Connect Custom — that pulls PII custody + compliance liability back onto Pathway.
+- **PII / KYC:** Stripe Connect Express runs KYC and CUSTODIES the SSN/EIN via Stripe-hosted onboarding. Pathway stores ONLY the connected-account id/token — never the raw tax ID. This is the whole breach-liability answer: don't hold the PII. (Same principle as never touching card numbers.)
+- **1099-NEC:** use Stripe's own 1099 tooling for v1 (Stripe generates + files, contractors access forms via Stripe Express). Third-party filers (Track1099 / Tax1099) only if Stripe's tooling is outgrown — do NOT build filing in-house.
+- **NATIVE-FEEL LINE:** Pathway owns the surrounding UI (payee list, W-9 status, "pay contractor" button, payout + filing status) in editorial-ink. The identity-collection moment itself is Stripe-hosted (redirect/embedded component) — not pixel-native, and that's the correct trade vs. going Custom and inheriting liability.
+- **GATING RULE (adopt verbatim):** "no valid tax form, no pay" — hard-block the payout button until Stripe onboarding + W-9 are complete. Same hard-block pattern as duplicate-contact prevention.
+- **RISK PREP (first-class, not afterthought):** payee KYC UX gentleness, tax-doc accuracy liability (mitigated by Stripe/third-party filer), W-9/TIN handled as high-sensitivity PII (mitigated by not custodying it).
+
+### Roadmap — Client messenger (Bloom's standout; fits CRM core)
+
+One thread per client, reply-as-text UX, send as email OR chat from the same thread. Real gap in the current plan. Scope against the notification-center / email infra already in place.
+
+### Roadmap — Time-to-first-value (TTFV) onboarding audit
+
+Maroo + Bloom both reach a first useful action in ~2 min with a genuine free tier and no card. The AI migration is the durable floor but is heavier than "sign up and go." Audit signup → first-useful-action and identify the fastest first win that does NOT depend on a full migration completing.
+
+### P5 / P6 consideration — Per-event workflow / next-step tracker (Bloom)
+
+Bloom's most-praised feature is a high-altitude view showing the NEXT task per project with drag-reorder + inline invoice status. Consider a per-event workflow/next-step tracker (not just a status field) when building Events/Pipeline. Consideration, not committed.
+
+### Explicitly NOT building (traps — recorded so they aren't re-proposed)
+
+- Merchant-of-record payments (compliance/liability; contradicts locked Stripe-Connect model).
+- Book-Now-Pay-Later + cancellation insurance (Maroo) — lending/underwriting/insurance is its own company; off-mission.
+- Gallery / image delivery — Pathway is not a Lightroom/ShootProof/Pic-Time replacement.
+
+### Positioning (not a build) — rebuttal to Maroo's "free because payments"
+
+Maroo makes CRM free and monetizes the money flow (MoR). Pathway's counter: "your money, your processor, no platform lock-in, no MoR risk" — control, not fee-savings. Have this crisp for sales.
+
+### Contacts list: Lifetime value + Last contacted columns (post-reskin)
+
+Two new contact-list columns, ON by default, added to the existing per-saved-view Edit-columns system (`columnConfig` jsonb).
+
+- **Lifetime value** = revenue rollup per contact (aggregation across projects/invoices).
+- **Last contacted** = max(activity date) per contact (from the activity log).
+- **PERFORMANCE REQUIREMENT:** both must be cheap to fetch for the whole visible page — pre-aggregate or fast-join; do not compute per-row lazily, or the list slows at scale.
+- **Empty states:** no revenue → "$0" or "—"; never contacted → "—". Must look intentional.
+- **Default-on scope:** backfill into the DEFAULT view's `columnConfig` only; leave user-customized saved views untouched.
+- **NOT part of the reskin** — feature build (backend + column defs) after the reskin lands.
+- **"Next event" column was explicitly REJECTED** (a contact can have many events → ambiguous).
+
+---
+
 _Roadmap only — not scheduled. When one is picked up, run it through the standing research → synthesize → complaint-scope → options → approval path before building._

@@ -93,7 +93,7 @@ function ExpandedPanel() {
           onClick={dialer.collapseWidget}
           aria-label="Collapse dialer"
           title="Collapse"
-          className="flex size-6 items-center justify-center rounded hover:bg-[var(--color-accent)]/40"
+          className="flex size-6 items-center justify-center rounded hover:bg-[var(--state-hover)]"
         >
           <ChevronDown className="size-4" aria-hidden="true" />
         </button>
@@ -127,7 +127,7 @@ function CollapsedPill() {
       onClick={dialer.expandWidget}
       aria-label="Expand dialer"
       title="Expand dialer"
-      className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-2 text-sm font-medium shadow-lg hover:bg-[var(--color-accent)]/20"
+      className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-2 text-sm font-medium shadow-lg hover:bg-[var(--state-hover)]"
       style={{ minWidth: "220px", height: "40px" }}
     >
       <Phone className="size-4" aria-hidden="true" />

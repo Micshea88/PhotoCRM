@@ -34,14 +34,14 @@ export function FilterPills({
       {pills.map((p) => (
         <span
           key={p.key}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-foreground)]"
+          className="text-2xs inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-[var(--color-foreground)]"
         >
           {p.label}
           <button
             type="button"
             onClick={p.onRemove}
             aria-label={`Remove filter ${p.label}`}
-            className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+            className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
           >
             <X className="size-3" />
           </button>
@@ -51,7 +51,7 @@ export function FilterPills({
         <button
           type="button"
           onClick={onClearAll}
-          className="text-[11px] text-[var(--color-primary)] hover:underline"
+          className="text-2xs text-[var(--color-primary)] hover:underline focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
           data-testid="filter-clear-all"
         >
           Clear all filters

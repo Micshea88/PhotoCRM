@@ -100,7 +100,7 @@ export function CalendarRange({
             shiftMonth(-1)
           }}
           aria-label="Previous month"
-          className="rounded p-1 hover:bg-[var(--color-accent)]/40"
+          className="rounded p-1 hover:bg-[var(--state-hover)]"
         >
           <ChevronLeft className="size-4" />
         </button>
@@ -113,12 +113,12 @@ export function CalendarRange({
             shiftMonth(1)
           }}
           aria-label="Next month"
-          className="rounded p-1 hover:bg-[var(--color-accent)]/40"
+          className="rounded p-1 hover:bg-[var(--state-hover)]"
         >
           <ChevronRight className="size-4" />
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-[var(--color-muted-foreground)]">
+      <div className="text-3xs grid grid-cols-7 gap-0.5 text-center text-[var(--color-muted-foreground)]">
         {WEEKDAY_LABELS.map((w) => (
           <span key={w}>{w}</span>
         ))}
@@ -138,7 +138,7 @@ export function CalendarRange({
                 onDayClick(day)
               }}
               className={cn(
-                "flex h-7 items-center justify-center rounded text-xs tabular-nums hover:bg-[var(--color-accent)]/60",
+                "flex h-7 items-center justify-center rounded text-xs tabular-nums hover:bg-[var(--state-hover)]",
                 inRange && "bg-[var(--color-primary)]/10",
                 (isStart || isEnd) &&
                   "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]",

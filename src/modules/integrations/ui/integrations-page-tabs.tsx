@@ -35,9 +35,9 @@ export function IntegrationsPageTabs({ active }: { active: IntegrationsTabId }) 
             aria-selected={isActive}
             data-testid={`integrations-tab-${tab.id}`}
             className={cn(
-              "border-b-2 px-4 py-2 text-sm transition-colors",
+              "border-b-2 px-4 py-2 text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
               isActive
-                ? "border-[var(--color-primary)] font-medium text-[var(--color-foreground)]"
+                ? "border-[var(--state-selected)] font-medium text-[var(--color-foreground)]"
                 : "border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]",
             )}
           >

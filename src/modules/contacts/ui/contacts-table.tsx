@@ -29,7 +29,9 @@ import type { ListCustomFieldDef } from "@/modules/custom-fields/ui/column-helpe
 import { archiveContact, deleteContact } from "../actions"
 import { fontFromElement, getMeasurementContext, measureColumnAutoFit } from "./column-auto-fit"
 import { resolveContactColumns, type ColumnConfigItem, type ContactRow } from "./columns"
+import { ContactTypeAvatar } from "./contact-type-avatar"
 import { HorizontalScrollIndicator } from "./horizontal-scroll-indicator"
+import { ContactTypeBadge, StatusBadge } from "./contact-type-badge"
 
 const DELETE_BODY =
   "This contact will be moved to Deleted and automatically purged after 90 days. You can restore it before then on the Deleted page."
@@ -274,9 +276,9 @@ export function ContactsTable({
           className="min-w-full table-fixed border-separate border-spacing-0 text-sm"
           style={{ width: "max-content" }}
         >
-          <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
+          <thead className="text-2xs text-left text-[var(--color-muted-foreground)]">
             <tr>
-              <th className="w-10 border-r border-b border-[var(--color-border)] px-2 py-2">
+              <th className="w-10 border-b border-[var(--color-border)] px-2 py-2">
                 <input
                   type="checkbox"
                   aria-label="Select all on this page"
@@ -328,7 +330,7 @@ export function ContactsTable({
             {rows.map((row) => (
               <tr
                 key={row.id}
-                className={`cursor-pointer hover:bg-[var(--color-accent)]/30 ${
+                className={`cursor-pointer hover:bg-[var(--state-hover)] active:bg-[var(--state-active)] ${
                   selectedIds.has(row.id) ? "bg-[var(--color-primary)]/5" : ""
                 }`}
                 onClick={() => {
@@ -336,7 +338,7 @@ export function ContactsTable({
                 }}
               >
                 <td
-                  className="w-10 border-t border-r border-[var(--color-border)] px-2 py-2"
+                  className="w-10 border-t border-[var(--color-border)] px-2 py-2"
                   onClick={(e) => {
                     e.stopPropagation()
                   }}
@@ -365,14 +367,29 @@ export function ContactsTable({
                       // whitespace-nowrap + text-ellipsis lifts that
                       // constraint. `title` on the cell reveals the
                       // untruncated text on hover.
-                      className="overflow-hidden border-t border-r border-[var(--color-border)] px-4 py-2 text-ellipsis whitespace-nowrap"
+                      className="overflow-hidden border-t border-[var(--color-border)] px-4 py-2 text-ellipsis whitespace-nowrap"
                       style={{
                         width: width ? `${String(width)}px` : undefined,
                         maxWidth: width ? `${String(width)}px` : undefined,
                       }}
                       title={measured}
                     >
-                      {col.render(row)}
+                      {col.id === "displayLabel" ? (
+                        <span className="flex items-center gap-2">
+                          <ContactTypeAvatar
+                            type={row.contactType}
+                            firstName={row.firstName}
+                            lastName={row.lastName}
+                          />
+                          <span className="truncate">{col.render(row)}</span>
+                        </span>
+                      ) : col.id === "contactType" ? (
+                        <ContactTypeBadge type={row.contactType} />
+                      ) : col.id === "lifecycleStatus" ? (
+                        <StatusBadge status={row.lifecycleStatus} />
+                      ) : (
+                        col.render(row)
+                      )}
                     </td>
                   )
                 })}
@@ -400,7 +417,7 @@ export function ContactsTable({
                         onClick={(e) => {
                           e.stopPropagation()
                         }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
                       >
                         <MoreVertical className="h-4 w-4" aria-hidden="true" />
                       </DropdownMenuTrigger>
@@ -506,7 +523,7 @@ function SortableHeaderCell({
     <th
       ref={setNodeRef}
       style={style}
-      className="relative border-r border-b border-[var(--color-border)] px-4 py-2"
+      className="relative border-b border-[var(--color-border)] px-4 py-2"
       aria-sort={sortActive ? (sortDir === "desc" ? "descending" : "ascending") : undefined}
     >
       <span
@@ -515,14 +532,14 @@ function SortableHeaderCell({
         onClick={handleSortClick}
         className={
           sortableField
-            ? "cursor-pointer select-none hover:text-[var(--color-foreground)]"
-            : "cursor-grab select-none"
+            ? "cursor-pointer tracking-wide uppercase select-none hover:text-[var(--color-foreground)]"
+            : "cursor-grab tracking-wide uppercase select-none"
         }
         data-testid={sortableField ? `contacts-th-sortable-${sortableField}` : undefined}
       >
         {label}
         {sortArrow && (
-          <span className="ml-1 text-[10px] text-[var(--color-primary)]">{sortArrow}</span>
+          <span className="text-3xs ml-1 text-[var(--color-primary)]">{sortArrow}</span>
         )}
       </span>
       <span
@@ -544,8 +561,10 @@ function SortableHeaderCell({
           const th = e.currentTarget.parentElement
           if (th) onAutoFit(th)
         }}
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-primary)]/40"
-      />
+        className="group absolute top-0 right-0 flex h-full w-3 cursor-col-resize items-center justify-end pr-0.5"
+      >
+        <span className="h-3.5 w-px bg-[var(--color-border)] transition-colors duration-150 group-hover:h-full group-hover:bg-[var(--color-muted-foreground)]" />
+      </span>
     </th>
   )
 }

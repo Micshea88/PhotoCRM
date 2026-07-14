@@ -56,7 +56,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   if (!invitation) {
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">Invitation not found</h1>
+        <h1 className="font-serif text-2xl font-semibold">Invitation not found</h1>
         <Alert variant="destructive">
           <AlertDescription>
             This invitation link is invalid. Check that you opened the most recent invitation email,
@@ -74,7 +74,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   if (invitation.status === "canceled") {
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">Invitation canceled</h1>
+        <h1 className="font-serif text-2xl font-semibold">Invitation canceled</h1>
         <Alert variant="destructive">
           <AlertDescription>
             This invitation has been canceled. Ask {invitation.organizationName} to send a fresh
@@ -87,7 +87,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   if (invitation.status === "accepted") {
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">Invitation already used</h1>
+        <h1 className="font-serif text-2xl font-semibold">Invitation already used</h1>
         <Alert variant="destructive">
           <AlertDescription>
             This invitation has already been accepted. Sign in to access{" "}
@@ -103,7 +103,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   if (invitation.expiresAt < new Date()) {
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">Invitation expired</h1>
+        <h1 className="font-serif text-2xl font-semibold">Invitation expired</h1>
         <Alert variant="destructive">
           <AlertDescription>
             This invitation expired on {invitation.expiresAt.toLocaleDateString()}. Ask{" "}
@@ -119,7 +119,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
     // UI rather than silently proceeding.
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">Invitation unavailable</h1>
+        <h1 className="font-serif text-2xl font-semibold">Invitation unavailable</h1>
         <Alert variant="destructive">
           <AlertDescription>
             This invitation is no longer pending. Ask the inviter for a fresh one.
@@ -134,7 +134,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   if (blocker) {
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">Incomplete signup blocks this email</h1>
+        <h1 className="font-serif text-2xl font-semibold">Incomplete signup blocks this email</h1>
         <Alert variant="destructive">
           <AlertDescription>
             <p className="font-medium">
@@ -187,7 +187,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
       )}`
       return (
         <div className="space-y-6 text-center">
-          <h1 className="text-2xl font-semibold">Sign in to accept</h1>
+          <h1 className="font-serif text-2xl font-semibold">Sign in to accept</h1>
           <Alert>
             <AlertDescription>
               <p className="font-medium">Your previous session expired.</p>
@@ -222,7 +222,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-semibold">Join {invitation.organizationName}</h1>
+        <h1 className="font-serif text-2xl font-semibold">Join {invitation.organizationName}</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           You&apos;ve been invited to join <strong>{invitation.organizationName}</strong> on
           Pathway. This invitation was sent to <strong>{invitation.email}</strong>.

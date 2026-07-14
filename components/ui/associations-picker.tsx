@@ -117,7 +117,7 @@ export function AssociationsPicker({
             onClick={() => {
               onOpenChange(false)
             }}
-            className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+            className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -230,7 +230,7 @@ export function AssociationsPicker({
 
         <footer className="space-y-2 border-t border-[var(--color-border)] px-3 py-2">
           {(showMultiContactWarn || showCompanyWarn) && (
-            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+            <p className="text-2xs text-[var(--color-warning)]">
               Multi-record associations ship in Push 3.5+. Selections beyond the primary contact
               will not save in this version.
             </p>
@@ -278,11 +278,11 @@ function CategoryTab({
           "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs",
           active
             ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
-            : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40",
+            : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]",
         )}
       >
         <span>{label}</span>
-        <span className="text-[10px] opacity-70">{String(count)}</span>
+        <span className="text-3xs opacity-70">{String(count)}</span>
       </button>
     </li>
   )
@@ -320,7 +320,7 @@ function CheckboxList({
             <label
               className={cn(
                 "flex cursor-pointer items-start gap-2 rounded px-2 py-1 text-sm",
-                "hover:bg-[var(--color-accent)]/30",
+                "hover:bg-[var(--state-hover)] active:bg-[var(--state-active)]",
                 isPrimary && "cursor-not-allowed opacity-80",
               )}
             >
@@ -338,12 +338,12 @@ function CheckboxList({
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{o.label}</span>
                 {o.sub && (
-                  <span className="block truncate text-[11px] text-[var(--color-muted-foreground)]">
+                  <span className="text-2xs block truncate text-[var(--color-muted-foreground)]">
                     {o.sub}
                   </span>
                 )}
                 {isPrimary && (
-                  <span className="block text-[10px] text-[var(--color-muted-foreground)]/80">
+                  <span className="text-3xs block text-[var(--color-muted-foreground)]/80">
                     Primary — locked
                   </span>
                 )}
@@ -387,7 +387,7 @@ function SelectedList({
     <div className="space-y-2 px-1 py-1">
       {selectedContacts.length > 0 && (
         <div>
-          <p className="px-2 py-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+          <p className="text-3xs px-2 py-1 font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
             Contacts
           </p>
           <CheckboxList
@@ -402,7 +402,7 @@ function SelectedList({
       )}
       {selectedCompanies.length > 0 && (
         <div>
-          <p className="px-2 py-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+          <p className="text-3xs px-2 py-1 font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
             Companies
           </p>
           <CheckboxList

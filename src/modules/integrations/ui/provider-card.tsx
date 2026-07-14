@@ -70,8 +70,8 @@ function ConnectStateBadge({ state }: { state: IntegrationProvider["connectState
   const label = CONNECT_STATE_LABELS[state]
   const classes = cn(
     "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
-    state === "connected" && "bg-emerald-100 text-emerald-800",
-    state === "always_available" && "bg-sky-100 text-sky-800",
+    state === "connected" && "bg-[var(--color-success)]/10 text-[var(--color-success)]",
+    state === "always_available" && "bg-[var(--color-info)]/10 text-[var(--color-info)]",
     state === "not_connected" && "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]",
   )
   return <span className={classes}>{label}</span>
@@ -89,9 +89,9 @@ export function ProviderCard({ provider }: { provider: IntegrationProvider }) {
     <Link
       href={`/settings/integrations/${provider.categoryId}/${provider.id}`}
       data-testid={`integration-provider-card-${provider.id}`}
-      className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+      className="block focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ring)]"
     >
-      <Card className="h-full p-4 transition-colors hover:bg-[var(--color-accent)]/30">
+      <Card className="h-full p-4 transition-colors hover:bg-[var(--state-hover)]">
         <div className="flex items-start gap-3">
           <ProviderIcon iconKey={provider.iconKey} />
           <div className="min-w-0 flex-1">

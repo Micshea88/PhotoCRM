@@ -251,13 +251,13 @@ export function ManageViewsDrawer({
                 return (
                   <tr
                     key={v.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-accent)]/20"
+                    className="border-t border-[var(--color-border)] hover:bg-[var(--state-hover)]"
                   >
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{v.name}</span>
                         {isSystemDefault && (
-                          <span className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)]">
+                          <span className="text-3xs rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[var(--color-muted-foreground)]">
                             System
                           </span>
                         )}
@@ -274,7 +274,7 @@ export function ManageViewsDrawer({
                           </span>
                         )}
                         {isDefault && (
-                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
+                          <span className="rounded bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[var(--color-warning)]">
                             Default
                           </span>
                         )}
@@ -284,7 +284,7 @@ export function ManageViewsDrawer({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           aria-label={`Actions for ${v.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-[var(--color-accent)]"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-[var(--state-hover)]"
                           disabled={busy}
                         >
                           ⋮

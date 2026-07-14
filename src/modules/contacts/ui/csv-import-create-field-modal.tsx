@@ -223,7 +223,7 @@ export function CsvImportCreateFieldModal({
             }}
             disabled={submitting}
             data-testid="csv-v2-create-field-type"
-            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none"
+            className="h-9 w-full rounded-md border border-[var(--color-input)] bg-transparent px-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
           >
             {FIELD_TYPES.map((t) => {
               const isDisabled = DISABLED_TYPES.has(t)
@@ -244,7 +244,7 @@ export function CsvImportCreateFieldModal({
 
         {error && (
           <p
-            className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200"
+            className="rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 px-3 py-2 text-xs text-[var(--color-destructive)]"
             data-testid="csv-v2-create-field-error"
           >
             {error}

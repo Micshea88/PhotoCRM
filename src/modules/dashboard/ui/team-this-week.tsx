@@ -1,8 +1,10 @@
 "use client"
 
+import { Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/format"
 import { Avatar } from "@/components/ui/avatar"
+import { EmptyState } from "@/components/ui/empty-state"
 import { taskDueState } from "@/modules/tasks/task-due-state"
 import { dueStateTextClass } from "@/modules/tasks/ui/due-state-class"
 import { HighPriorityFlag } from "@/modules/tasks/ui/high-priority-flag"
@@ -61,10 +63,12 @@ export function TeamThisWeek({ tasks, hasSeedView, members }: TeamThisWeekProps)
     return (
       <section className="space-y-2 rounded-lg border border-[var(--color-border)] p-4">
         <h2 className="text-sm font-medium text-[var(--color-muted-foreground)]">Team This Week</h2>
-        <p className="text-sm">
-          The Team This Week view isn&rsquo;t set up for this studio yet. Once you create some tasks
-          with due dates, the team breakdown will show up here.
-        </p>
+        <EmptyState
+          className="px-4 py-8"
+          icon={<Users className="size-6" />}
+          title="Team This Week not set up yet"
+          description="The Team This Week view isn't set up for this studio yet. Once you create some tasks with due dates, the team breakdown will show up here."
+        />
       </section>
     )
   }
@@ -73,7 +77,12 @@ export function TeamThisWeek({ tasks, hasSeedView, members }: TeamThisWeekProps)
     return (
       <section className="space-y-2 rounded-lg border border-[var(--color-border)] p-4">
         <h2 className="text-sm font-medium text-[var(--color-muted-foreground)]">Team This Week</h2>
-        <p className="text-sm">No tasks scheduled this week.</p>
+        <EmptyState
+          className="px-4 py-8"
+          icon={<Users className="size-6" />}
+          title="No tasks scheduled this week"
+          description="Once tasks are scheduled for this week, the team breakdown shows up here."
+        />
       </section>
     )
   }

@@ -135,7 +135,7 @@ export function AppSidebarNav({
     <nav
       aria-label="Primary"
       className={cn(
-        "flex h-full flex-col border-r border-[var(--color-border)] bg-[var(--color-background)]",
+        "flex h-full flex-col border-r border-[var(--color-sidebar-foreground)]/10 bg-[var(--color-sidebar)]",
       )}
     >
       <div className="flex items-center justify-end p-2">
@@ -144,7 +144,7 @@ export function AppSidebarNav({
           onClick={onToggle}
           aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
           title={collapsed ? "Expand ([)" : "Collapse ([)"}
-          className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]"
+          className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]"
         >
           {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
         </button>
@@ -200,8 +200,11 @@ function SidebarLeafRow({
         "flex items-center gap-2 rounded-md text-sm transition-colors",
         collapsed ? "size-10 justify-center" : "px-3 py-2",
         isActive
-          ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-          : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+          ? // ACTIVE = persistent inverted pill (solid near-white fill + ink text) — the
+            // boldest "you are here"; the active tab wears the hover state permanently.
+            "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+          : // Inactive = dimmed white label; hover inverts to near-white fill + ink text.
+            "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
       )}
     >
       <Icon className="size-4 shrink-0" />
@@ -335,7 +338,7 @@ function SidebarParentRow({
               aria-label={item.label}
               data-testid={`sidebar-popout-${item.label.toLowerCase()}`}
               style={{ position: "fixed", top: popoutPos.top, left: popoutPos.left }}
-              className="z-50 min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-background)] py-1 shadow-md"
+              className="z-50 min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-popover)] py-1 shadow-md"
             >
               <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                 {item.label}
@@ -355,7 +358,7 @@ function SidebarParentRow({
                       "flex items-center gap-2 px-3 py-2 text-sm",
                       childActive
                         ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-                        : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+                        : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-accent-foreground)]",
                     )}
                   >
                     <ChildIcon className="size-4 shrink-0" />
@@ -387,9 +390,11 @@ function SidebarParentRow({
           data-testid={`sidebar-parent-${item.label.toLowerCase()}`}
           className={cn(
             "flex size-10 items-center justify-center rounded-md text-sm transition-colors",
+            // Same inverted-pill treatment as every other nav tab (SidebarLeafRow):
+            // active/open = solid near-white fill + ink; rest = dimmed white + white-fill hover.
             hasActiveChild || popoutOpen
-              ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-              : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+              ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+              : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
           )}
         >
           <Icon className="size-4 shrink-0" />
@@ -409,9 +414,10 @@ function SidebarParentRow({
         data-testid={`sidebar-parent-${item.label.toLowerCase()}`}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+          // Same inverted-pill treatment as every other nav tab (SidebarLeafRow).
           hasActiveChild
-            ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-            : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+            ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+            : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
         )}
       >
         <Icon className="size-4 shrink-0" />
@@ -425,7 +431,7 @@ function SidebarParentRow({
       </button>
       {expanded && (
         <div
-          className="mt-1 ml-4 flex flex-col gap-1 border-l border-[var(--color-border)] pl-2"
+          className="mt-1 ml-4 flex flex-col gap-1 border-l border-[var(--color-sidebar-foreground)]/10 pl-2"
           data-testid={`sidebar-children-${item.label.toLowerCase()}`}
         >
           {children.map((child) => {
@@ -439,9 +445,11 @@ function SidebarParentRow({
                 aria-current={childActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                  // Sub-items wear the SAME inverted-pill treatment as their parent
+                  // and the top-level tabs — the whole nav is one system.
                   childActive
-                    ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-                    : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]",
+                    ? "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+                    : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
                 )}
               >
                 <ChildIcon className="size-4 shrink-0" />

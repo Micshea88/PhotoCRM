@@ -31,6 +31,7 @@ export function SingleSelectMenu({
   trigger,
   align = "start",
   className,
+  wrapperClassName,
   ariaLabel,
 }: {
   options: SingleSelectOption[]
@@ -40,10 +41,17 @@ export function SingleSelectMenu({
   trigger: (state: { open: boolean; toggle: () => void }) => ReactNode
   align?: "start" | "end"
   className?: string
+  /** Outer wrapper classes — pass `block w-full` for a full-width select trigger. */
+  wrapperClassName?: string
   ariaLabel?: string
 }) {
   return (
-    <Popover align={align} className={cn("min-w-[200px] p-1", className)} trigger={trigger}>
+    <Popover
+      align={align}
+      className={cn("min-w-[200px] p-1", className)}
+      wrapperClassName={wrapperClassName}
+      trigger={trigger}
+    >
       {({ close }) => (
         <ul role="listbox" aria-label={ariaLabel} className="space-y-0.5">
           {options.map((o) => {
@@ -61,14 +69,20 @@ export function SingleSelectMenu({
                       close()
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40",
-                      selected && "font-medium",
+                      "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                      // Two-green menu rule. Unselected: green-wash hover. Selected:
+                      // dark-green fill + light text that STAYS dark-green-dominant on
+                      // hover (brightness-95 cue, never the cream --state-hover that
+                      // used to override the fill and leave light-text-on-grey).
+                      selected
+                        ? "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)] hover:brightness-95"
+                        : "hover:bg-[var(--color-wash-green)] active:bg-[var(--state-active)]",
                     )}
                   >
                     {o.leading}
                     <span className="flex-1 truncate">{o.label}</span>
                     {selected && (
-                      <Check className="size-3.5 shrink-0 text-[var(--color-primary)]" />
+                      <Check className="size-3.5 shrink-0 text-[var(--state-selected-foreground)]" />
                     )}
                   </button>
                 </li>

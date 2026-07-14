@@ -153,7 +153,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
           <Link
             href="/settings/notifications"
             onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40 hover:text-[var(--color-foreground)]"
+            className="flex size-7 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]"
             aria-label="Notification settings"
             data-testid="notification-settings-link"
           >
@@ -213,7 +213,7 @@ export function NotificationDropdown({ onUnreadCountChange, onClose }: Notificat
           <div className="py-1">
             {groups.map((group) => (
               <div key={group.label}>
-                <div className="px-4 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                <div className="text-3xs px-4 py-1.5 font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
                   {group.label}
                 </div>
                 {group.items.map((n) => (

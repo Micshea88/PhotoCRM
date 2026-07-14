@@ -1,3 +1,4 @@
+import { PageContainer } from "@/modules/shared/ui/page-container"
 import { countOpenOpportunities } from "@/modules/opportunities/queries"
 import { countProjectsInDateRange } from "@/modules/projects/queries"
 import { listTasksByDueDateRange } from "@/modules/tasks/queries"
@@ -52,7 +53,7 @@ export default async function DashboardPage() {
     const userFirstName = session.user.name.split(" ")[0] ?? session.user.name
 
     return (
-      <div className="space-y-6">
+      <PageContainer variant="full" className="space-y-6">
         <WelcomeHeader userFirstName={userFirstName} studioName={studioName} />
 
         <div className="grid gap-4 sm:grid-cols-3">
@@ -100,7 +101,7 @@ export default async function DashboardPage() {
           }))}
           members={members}
         />
-      </div>
+      </PageContainer>
     )
   })
 }

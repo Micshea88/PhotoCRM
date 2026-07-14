@@ -209,10 +209,10 @@ export function ActivityFilterStrip({
               }}
               aria-pressed={state.thread}
               className={cn(
-                "shrink-0 rounded-md border px-2.5 py-1 text-sm transition-colors",
+                "shrink-0 rounded-md border px-2.5 py-1 text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
                 state.thread
-                  ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-                  : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+                  ? "border-[var(--state-selected)] text-[var(--color-primary)]"
+                  : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
               )}
               data-testid="activity-thread-toggle"
             >
@@ -294,7 +294,7 @@ export function ActivityFilterStrip({
             }}
           />
           <span
-            className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums"
+            className="text-2xs shrink-0 text-[var(--color-muted-foreground)] tabular-nums"
             data-testid="activity-filter-count"
           >
             {shownCount}/{totalCount}
@@ -336,10 +336,10 @@ function DateRangeMenu({
           onClick={toggle}
           data-testid="activity-filter-due"
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
             active
-              ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/40",
+              ? "border-[var(--state-selected)] text-[var(--color-primary)]"
+              : "border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--state-hover)]",
           )}
         >
           <span>{activeLabel}</span>
@@ -357,7 +357,7 @@ function DateRangeMenu({
                 selectPreset(o.value)
               }}
               className={cn(
-                "flex w-full items-center rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40",
+                "flex w-full items-center rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-wash-green)]",
                 state.due === o.value && "font-medium text-[var(--color-primary)]",
               )}
             >

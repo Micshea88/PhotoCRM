@@ -8,6 +8,7 @@ import { extendedFromBetterAuth, type BetterAuthRole } from "@/modules/rbac/type
 import { getLabel } from "@/modules/terminology/queries"
 import { DuplicatesTabs } from "@/modules/duplicates/ui/duplicates-tabs"
 import { CompanyDuplicatesShell } from "@/modules/duplicates/ui/company-duplicates-shell"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 /**
  * Push 4 (B1) — /companies/duplicates. Owner+Admin only. The
@@ -50,7 +51,7 @@ export default async function CompanyDuplicatesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <PageContainer variant="full" className="space-y-6">
       <div>
         <Link
           href="/contacts"
@@ -58,13 +59,13 @@ export default async function CompanyDuplicatesPage() {
         >
           ← {contactPlural}
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Manage duplicates</h1>
+        <h1 className="mt-1 font-serif text-2xl font-semibold">Manage duplicates</h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Records that may be the same. Review and merge.
         </p>
       </div>
       <DuplicatesTabs contactLabel={contactPlural} companyLabel={companyPlural} active="company" />
       <CompanyDuplicatesShell />
-    </div>
+    </PageContainer>
   )
 }

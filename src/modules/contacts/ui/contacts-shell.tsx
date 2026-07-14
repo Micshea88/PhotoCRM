@@ -1,9 +1,20 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import {
+  ArrowUpDown,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+  SlidersHorizontal,
+  Users,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { cn } from "@/lib/utils"
+import { exportContactsCsv, exportContactsXlsx, type ExportColumn } from "./export-contacts"
 import {
   SavedViewsTabStrip,
   type SavedViewTab,
@@ -17,7 +28,7 @@ import { ContactsTable, type ContactRow } from "./contacts-table"
 import { EditColumnsDrawer } from "./edit-columns-drawer"
 import { MoreFiltersDrawer, type CustomFieldDef } from "./more-filters-drawer"
 import { SelectionBanner } from "./selection-banner"
-import { CONTACT_COLUMN_REGISTRY, type ColumnConfigItem } from "./columns"
+import { CONTACT_COLUMN_REGISTRY, resolveContactColumns, type ColumnConfigItem } from "./columns"
 import type { ContactsPageSize } from "../pagination"
 
 /**
@@ -84,6 +95,19 @@ interface ContactsShellProps {
   customFieldDefs: CustomFieldDef[]
 }
 
+// Sort pop-out options — a sensible subset of the sortable columns. Each wraps
+// the SAME URL sortBy/sortDir logic the header-click sort uses.
+const SORT_OPTIONS: { label: string; field: string }[] = [
+  { label: "Name", field: "lastName" },
+  { label: "Email", field: "primaryEmail" },
+  { label: "Phone", field: "primaryPhone" },
+  { label: "Type", field: "contactType" },
+  { label: "Status", field: "lifecycleStatus" },
+  { label: "Company", field: "companyName" },
+  { label: "Created", field: "createdAt" },
+  { label: "Updated", field: "updatedAt" },
+]
+
 export function ContactsShell({
   contacts,
   totalCount,
@@ -148,6 +172,27 @@ export function ContactsShell({
   // ── Selection state for bulk actions (Push 2c Part 2) ───────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+  // ── Saved-views left panel: collapsible + persisted, independent of the
+  //    nav collapse. Deferred localStorage read avoids SSR/hydration mismatch
+  //    (and the set-state-in-effect lint — same microtask pattern used elsewhere).
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  useEffect(() => {
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active) setPanelCollapsed(readStoredPanelCollapsed())
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+  function togglePanel() {
+    setPanelCollapsed((prev) => {
+      const next = !prev
+      writeStoredPanelCollapsed(next)
+      return next
+    })
+  }
+
   // ── Snapshot the "current state" passed to Save/Save-as. ──────────────
   const currentState = useMemo(
     () => ({
@@ -173,8 +218,59 @@ export function ContactsShell({
     return n
   }, [params])
 
+  // ── Toolbar: Filter + Sort pop-outs (reshape only — wrap existing logic) ──
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [sortOpen, setSortOpen] = useState(false)
+
+  const activeSortBy = params.get("sortBy")
+  const activeSortDir = params.get("sortDir") === "desc" ? "desc" : "asc"
+
+  const filterChipCount = useMemo(() => {
+    let n = 0
+    for (const key of [
+      "contactType",
+      "lifecycleStatus",
+      "tags",
+      "ownerUserId",
+      "companyId",
+      "leadSource",
+    ]) {
+      if (params.get(key)) n++
+    }
+    if (params.get("createdFrom") || params.get("createdTo")) n++
+    return n + morePanelCount
+  }, [params, morePanelCount])
+
+  function applySort(field: string) {
+    const url = new URLSearchParams(params)
+    // Same field → toggle direction; new field → ascending. Page resets.
+    const nextDir = activeSortBy === field && activeSortDir === "asc" ? "desc" : "asc"
+    url.set("sortBy", field)
+    url.set("sortDir", nextDir)
+    url.delete("page")
+    router.push(`${pathname}?${url.toString()}`)
+  }
+
+  // Export the CURRENT view — the loaded (filtered) rows + the visible columns —
+  // client-side as CSV or XLSX. Function-declaration so the header's onExport can
+  // reference it (hoisted).
+  function handleExport(format: "csv" | "xlsx") {
+    const resolved = resolveContactColumns(columnConfig, customFieldDefs)
+    const cols: ExportColumn[] = resolved.visible.map((col) => ({
+      label: col.label,
+      value: (row) => col.render(row),
+    }))
+    if (format === "csv") {
+      exportContactsCsv(contacts, cols)
+    } else {
+      void exportContactsXlsx(contacts, cols)
+    }
+  }
+
   return (
-    <div className="space-y-4">
+    // When the dirty save bar is showing, reserve bottom clearance so the fixed
+    // bar never covers the last row / pagination.
+    <div className={cn("space-y-4", isDirty && "pb-20 lg:pb-16")}>
       {/*
        * Push 2c.2 — page header lifted into the shell so the top-right
        * toolbar (Actions / Import / New contact) can share state with
@@ -183,134 +279,288 @@ export function ContactsShell({
        */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Contacts</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            People — the permanent record. Switch views to slice the list, customize columns, or
-            save a new view.
-          </p>
+          <h1 className="font-serif text-2xl font-semibold">Contacts</h1>
         </div>
         <div className="flex items-center gap-2">
           <ContactsActionsDropdown
             onOpenEditColumns={() => {
               setEditColumnsOpen(true)
             }}
+            onExport={handleExport}
           />
-          <Link href="/contacts/import">
-            <Button variant="outline">Import</Button>
-          </Link>
           <Link href="/contacts/new">
             <Button>New contact</Button>
           </Link>
         </div>
       </div>
 
-      <SavedViewsTabStrip
-        views={views}
-        activeViewId={activeViewId}
-        pinnedViewIds={pinnedViewIds}
-        defaultViewId={defaultViewId}
-        hasPrefsRow={hasPrefsRow}
-        createdAtById={createdAtById}
-        currentUserId={currentUserId}
-        objectType="contact"
-        members={members}
-        isDirty={isDirty}
-        currentState={currentState}
-        onDiscard={() => {
-          // Discard = revert to the view's saved state: clear all URL
-          // filter overrides (everything except ?view=) AND reset client
-          // column state to the active view's columnConfig.
-          setColumnConfig(activeView?.columnConfig ?? [])
-          startTransition(() => {
-            router.push(activeViewId ? `${pathname}?view=${activeViewId}` : pathname)
-          })
-        }}
-      />
-
+      {/* Search stays under the title (not in the list frame). */}
       <ContactsFilterBar
+        variant="search"
         tagOptions={tagOptions}
         ownerOptions={ownerOptions}
         companyOptions={companyOptions}
         leadSourceOptions={leadSourceOptions}
         hiddenLeadSources={hiddenLeadSources}
-        trailingChips={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setMoreFiltersOpen(true)
-            }}
-          >
-            + More filters{morePanelCount > 0 ? ` (${String(morePanelCount)})` : ""}
-          </Button>
-        }
       />
 
-      {/*
-       * Push 2c.2 — selection banner replaces the "Actions" dropdown's
-       * 1+-selected face. The 0-selected face's org-level items moved
-       * to the top-header ContactsActionsDropdown above.
-       */}
-      <SelectionBanner
-        selectedIds={[...selectedIds]}
-        ownerOptions={ownerOptions}
-        tagOptions={tagOptions}
-        companyOptions={companyOptions}
-        leadSourceOptions={leadSourceOptions}
-        hiddenLeadSources={hiddenLeadSources}
-        onClear={() => {
-          setSelectedIds(new Set())
-        }}
-      />
-      {selectedIds.size === 0 && (
-        <p className="text-xs text-[var(--color-muted-foreground)]">
-          {String(totalCount)} contact{totalCount === 1 ? "" : "s"}
-        </p>
-      )}
+      {/* Two-column: collapsible Saved Views panel (left) + the table (right).
+          Stacks to one column on narrow widths (LAW 6) — never a crushed
+          two-column at small sizes. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        {/* Saved Views panel — its own LIGHT card (distinct from the dark nav).
+            Collapsible + persisted, independent of the main nav collapse. */}
+        <div
+          className={cn(
+            "w-full shrink-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]",
+            panelCollapsed ? "lg:w-auto" : "lg:w-60",
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <span className="text-2xs font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+              Saved views
+            </span>
+            <button
+              type="button"
+              onClick={togglePanel}
+              aria-label={panelCollapsed ? "Expand saved views" : "Collapse saved views"}
+              aria-expanded={!panelCollapsed}
+              className="flex size-6 items-center justify-center rounded-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            >
+              {panelCollapsed ? (
+                <PanelLeftOpen className="size-4" />
+              ) : (
+                <PanelLeftClose className="size-4" />
+              )}
+            </button>
+          </div>
+          {!panelCollapsed && (
+            <div className="px-2 pb-2">
+              <SavedViewsTabStrip
+                orientation="vertical"
+                views={views}
+                activeViewId={activeViewId}
+                pinnedViewIds={pinnedViewIds}
+                defaultViewId={defaultViewId}
+                hasPrefsRow={hasPrefsRow}
+                createdAtById={createdAtById}
+                currentUserId={currentUserId}
+                objectType="contact"
+                members={members}
+                isDirty={isDirty}
+                currentState={currentState}
+                onDiscard={() => {
+                  // Discard = revert to the view's saved state: clear all URL
+                  // filter overrides (everything except ?view=) AND reset client
+                  // column state to the active view's columnConfig.
+                  setColumnConfig(activeView?.columnConfig ?? [])
+                  startTransition(() => {
+                    router.push(activeViewId ? `${pathname}?view=${activeViewId}` : pathname)
+                  })
+                }}
+              />
+            </div>
+          )}
+        </div>
 
-      {cappedOut ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-6 text-sm">
-          <p className="font-medium text-amber-800 dark:text-amber-200">
-            Too many matches to display
-          </p>
-          <p className="mt-1 text-amber-700 dark:text-amber-300">
-            More than 10,000 contacts match the current filters. Refine your filters (or pick a
-            narrower saved view) to bring the list under the cap, or export your full dataset from
-            Settings.
-          </p>
+        {/* Table area (right column) — ONE contained list card. */}
+        <div className="min-w-0 flex-1">
+          <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            {/* Toolbar row (card top): Filter + Sort pop-outs on the left (they
+                expand to the right and the row scrolls horizontally), the count
+                on the right behind a hairline. FIXED height (h-12) so opening
+                either pop-out never resizes/jumps the row — the pop-out options
+                match the trigger height and any overflow scrollbar renders inside
+                the fixed row instead of growing it. */}
+            <div className="flex h-12 items-center gap-2 border-b border-[var(--color-border)] px-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+                {/* GHOST TRIGGER — the standard for every secondary dropdown/
+                    filter/sort trigger: no resting box/border, transparent; hover =
+                    faint green wash; open OR has-active-filters = green wash + green
+                    label + flipped caret. */}
+                <button
+                  type="button"
+                  aria-expanded={filterOpen}
+                  onClick={() => {
+                    setFilterOpen((o) => !o)
+                  }}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-sm font-medium transition-colors",
+                    "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                    filterOpen || filterChipCount > 0
+                      ? "bg-[var(--state-ghost-hover)] text-[var(--color-brand-accent)]"
+                      : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-ghost-hover)] hover:text-[var(--color-foreground)]",
+                  )}
+                >
+                  <SlidersHorizontal className="size-4" /> Filter
+                  {filterChipCount > 0 ? ` (${String(filterChipCount)})` : ""}
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform duration-150",
+                      filterOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {filterOpen && (
+                  <ContactsFilterBar
+                    variant="chips"
+                    tagOptions={tagOptions}
+                    ownerOptions={ownerOptions}
+                    companyOptions={companyOptions}
+                    leadSourceOptions={leadSourceOptions}
+                    hiddenLeadSources={hiddenLeadSources}
+                    trailingChips={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setMoreFiltersOpen(true)
+                        }}
+                      >
+                        + More filters{morePanelCount > 0 ? ` (${String(morePanelCount)})` : ""}
+                      </Button>
+                    }
+                  />
+                )}
+                {/* GHOST TRIGGER — same pattern as Filter, above. */}
+                <button
+                  type="button"
+                  aria-expanded={sortOpen}
+                  onClick={() => {
+                    setSortOpen((o) => !o)
+                  }}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-sm font-medium transition-colors",
+                    "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                    sortOpen || activeSortBy
+                      ? "bg-[var(--state-ghost-hover)] text-[var(--color-brand-accent)]"
+                      : "text-[var(--color-muted-foreground)] hover:bg-[var(--state-ghost-hover)] hover:text-[var(--color-foreground)]",
+                  )}
+                >
+                  <ArrowUpDown className="size-4" /> Sort
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform duration-150",
+                      sortOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {sortOpen && (
+                  // Thin hairline (--color-border) separates the popped-out sort
+                  // options from the Sort trigger — same divider token as the count.
+                  <div className="flex shrink-0 items-center gap-1.5 border-l border-[var(--color-border)] pl-2">
+                    {SORT_OPTIONS.map((opt) => {
+                      const active = activeSortBy === opt.field
+                      // Sort options are toggle chips that match the Filter chips:
+                      // borderless soft-rectangle in the two-green menu language —
+                      // dark-green --state-selected when active, green-wash hover
+                      // otherwise. Rounded-RECTANGLE (menu radius), not full-round.
+                      return (
+                        <button
+                          key={opt.field}
+                          type="button"
+                          onClick={() => {
+                            applySort(opt.field)
+                          }}
+                          aria-pressed={active}
+                          className={cn(
+                            "text-2xs flex shrink-0 items-center gap-1 rounded-[var(--radius-lg)] px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors",
+                            "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+                            active
+                              ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
+                              : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-wash-green)] hover:text-[var(--color-foreground)] active:bg-[var(--state-active)]",
+                          )}
+                        >
+                          {opt.label}
+                          {active ? (activeSortDir === "asc" ? " ↑" : " ↓") : ""}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="text-2xs shrink-0 border-l border-[var(--color-border)] pl-3 tracking-wide text-[var(--color-brand-accent)] uppercase tabular-nums">
+                {String(totalCount)} {totalCount === 1 ? "contact" : "contacts"}
+              </div>
+            </div>
+
+            {/* Bulk-action banner — only when rows are selected. */}
+            {selectedIds.size > 0 && (
+              <div className="border-b border-[var(--color-border)] px-3 py-2">
+                <SelectionBanner
+                  selectedIds={[...selectedIds]}
+                  ownerOptions={ownerOptions}
+                  tagOptions={tagOptions}
+                  companyOptions={companyOptions}
+                  leadSourceOptions={leadSourceOptions}
+                  hiddenLeadSources={hiddenLeadSources}
+                  onClear={() => {
+                    setSelectedIds(new Set())
+                  }}
+                />
+              </div>
+            )}
+
+            {cappedOut ? (
+              <div className="m-3 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/5 p-6 text-sm">
+                <p className="font-medium text-[var(--color-warning)]">
+                  Too many matches to display
+                </p>
+                <p className="mt-1 text-[var(--color-warning)]">
+                  More than 10,000 contacts match the current filters. Refine your filters (or pick
+                  a narrower saved view) to bring the list under the cap, or export your full
+                  dataset from Settings.
+                </p>
+              </div>
+            ) : contacts.length === 0 ? (
+              filterChipCount > 0 || params.get("q") ? (
+                <EmptyState
+                  icon={<Users className="size-6" />}
+                  title="No contacts found"
+                  description="No contacts match the current filters. Try clearing or adjusting them."
+                />
+              ) : (
+                <EmptyState
+                  icon={<Users className="size-6" />}
+                  title="No contacts yet"
+                  description="Add your first contact to start building your list."
+                  action={
+                    <Button asChild>
+                      <Link href="/contacts/new">New contact</Link>
+                    </Button>
+                  }
+                />
+              )
+            ) : (
+              <>
+                <ContactsTable
+                  rows={contacts}
+                  columnConfig={columnConfig}
+                  onColumnConfigChange={setColumnConfig}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  customFieldDefs={customFieldDefs}
+                  sortField={params.get("sortBy")}
+                  sortDir={params.get("sortDir") === "desc" ? "desc" : "asc"}
+                  onSortChange={(next) => {
+                    // Header-click sort still works (kept as an entry point
+                    // alongside the Sort pop-out). Page resets on sort change.
+                    const url = new URLSearchParams(params)
+                    url.set("sortBy", next.field)
+                    url.set("sortDir", next.direction)
+                    url.delete("page")
+                    router.push(`${pathname}?${url.toString()}`)
+                  }}
+                />
+                <div className="border-t border-[var(--color-border)] px-3 py-2">
+                  <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      ) : contacts.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            No contacts match the current filters.
-          </p>
-        </div>
-      ) : (
-        <>
-          <ContactsTable
-            rows={contacts}
-            columnConfig={columnConfig}
-            onColumnConfigChange={setColumnConfig}
-            selectedIds={selectedIds}
-            onSelectedIdsChange={setSelectedIds}
-            customFieldDefs={customFieldDefs}
-            sortField={params.get("sortBy")}
-            sortDir={params.get("sortDir") === "desc" ? "desc" : "asc"}
-            onSortChange={(next) => {
-              // P3 (C6c followup) — push sort into the URL so the server
-              // re-renders with the new sort applied. Page resets to 1
-              // since sort changes the row order.
-              const url = new URLSearchParams(params)
-              url.set("sortBy", next.field)
-              url.set("sortDir", next.direction)
-              url.delete("page")
-              router.push(`${pathname}?${url.toString()}`)
-            }}
-          />
-          <ContactsPagination totalCount={totalCount} page={page} pageSize={pageSize} />
-        </>
-      )}
+      </div>
 
       <MoreFiltersDrawer
         open={moreFiltersOpen}
@@ -333,6 +583,18 @@ export function ContactsShell({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+const PANEL_COLLAPSED_KEY = "pathway.contacts.savedViewsCollapsed"
+
+function readStoredPanelCollapsed(): boolean {
+  if (typeof window === "undefined") return false
+  return window.localStorage.getItem(PANEL_COLLAPSED_KEY) === "1"
+}
+
+function writeStoredPanelCollapsed(value: boolean): void {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(PANEL_COLLAPSED_KEY, value ? "1" : "0")
+}
 
 function columnConfigsEqual(a: ColumnConfigItem[], b: ColumnConfigItem[]): boolean {
   if (a.length !== b.length) return false

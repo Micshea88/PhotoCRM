@@ -228,7 +228,7 @@ export function SelectionBanner({
             size="sm"
             // Destructive style — red bg via inline class since the
             // current Button variant set doesn't ship a "destructive".
-            className="bg-red-600 text-white hover:bg-red-700"
+            className="bg-[var(--color-destructive)] text-white hover:bg-[var(--color-destructive)]"
             disabled={busy}
             onClick={() => {
               setDeleteOpen(true)

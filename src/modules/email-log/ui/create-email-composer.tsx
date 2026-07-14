@@ -297,7 +297,7 @@ export function CreateEmailComposer({
           placeholder="Write your message…"
           spellCheck
           data-testid="email-composer-body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none"
         />
 
         {/* Attachments */}
@@ -398,7 +398,7 @@ export function CreateEmailComposer({
           )}
         </div>
 
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
 
         <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] pt-3">
           <Button
@@ -452,7 +452,7 @@ function EmailChips({
         {emails.map((e) => (
           <span
             key={e}
-            className="inline-flex items-center gap-1 rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px]"
+            className="text-2xs inline-flex items-center gap-1 rounded-full bg-[var(--color-muted)] px-2 py-0.5"
           >
             {e}
             <button
@@ -537,10 +537,10 @@ function ChooseExistingButton({
                   onPick(f)
                   setOpenList(false)
                 }}
-                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--color-accent)]/40"
+                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--state-hover)]"
               >
                 <span className="truncate">{f.pathname}</span>
-                <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
+                <span className="text-2xs shrink-0 text-[var(--color-muted-foreground)]">
                   {prettySize(f.sizeBytes)}
                 </span>
               </button>
@@ -583,7 +583,7 @@ function AttachmentRow({
     >
       <div className="flex items-center gap-2">
         <span className="flex-1 truncate text-sm">{a.name}</span>
-        <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)]">
+        <span className="text-2xs shrink-0 text-[var(--color-muted-foreground)]">
           {prettySize(a.sizeBytes)}
         </span>
         <button
@@ -612,21 +612,21 @@ function AttachmentRow({
       </div>
       <p
         className={cn(
-          "text-[11px]",
+          "text-2xs",
           a.scanStatus === "infected" || a.scanStatus === "error"
-            ? "text-red-600 dark:text-red-400"
+            ? "text-[var(--color-destructive)]"
             : "text-[var(--color-muted-foreground)]",
         )}
       >
         {statusLabel}
       </p>
       {a.heicNotice && (
-        <p className="text-[11px] text-[var(--color-muted-foreground)]">
+        <p className="text-2xs text-[var(--color-muted-foreground)]">
           HEIC files may not display in all email clients.
         </p>
       )}
       {a.protect && (
-        <label className="flex items-center gap-2 text-[11px] text-[var(--color-muted-foreground)]">
+        <label className="text-2xs flex items-center gap-2 text-[var(--color-muted-foreground)]">
           Passcode
           <input
             value={a.passcode}
@@ -640,7 +640,7 @@ function AttachmentRow({
         </label>
       )}
       {showExpiration && (
-        <label className="flex items-center gap-2 text-[11px] text-[var(--color-muted-foreground)]">
+        <label className="text-2xs flex items-center gap-2 text-[var(--color-muted-foreground)]">
           Link expires
           <select
             value={a.expiration}

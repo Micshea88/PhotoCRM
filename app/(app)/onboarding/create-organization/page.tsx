@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/modules/auth/session"
 import { getPendingInvitationsForEmail } from "@/modules/org/queries"
 import { CreateOrganizationForm } from "@/modules/org/ui/create-organization-form"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -22,21 +23,23 @@ export default async function CreateOrganizationPage() {
   const pendingInvitations = await getPendingInvitationsForEmail(session.user.email)
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
-      <div className="space-y-6">
-        {pendingInvitations.length > 0 && (
-          <PendingInvitationsBanner invitations={pendingInvitations} />
-        )}
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-semibold">Create your studio</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            {pendingInvitations.length > 0
-              ? "Or set up your own studio below."
-              : "One last step before you start running your studio."}
-          </p>
+    <main className="flex min-h-screen flex-col justify-center">
+      <PageContainer variant="narrow">
+        <div className="space-y-6">
+          {pendingInvitations.length > 0 && (
+            <PendingInvitationsBanner invitations={pendingInvitations} />
+          )}
+          <div className="space-y-2 text-center">
+            <h1 className="font-serif text-2xl font-semibold">Create your studio</h1>
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              {pendingInvitations.length > 0
+                ? "Or set up your own studio below."
+                : "One last step before you start running your studio."}
+            </p>
+          </div>
+          <CreateOrganizationForm />
         </div>
-        <CreateOrganizationForm />
-      </div>
+      </PageContainer>
     </main>
   )
 }

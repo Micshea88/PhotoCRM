@@ -13,7 +13,7 @@ export default function SignInPage() {
       <Suspense
         fallback={
           <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-semibold">Welcome back</h1>
+            <h1 className="font-serif text-2xl font-semibold">Welcome back</h1>
             <p className="text-sm text-[var(--color-muted-foreground)]">
               Sign in to your Pathway account
             </p>

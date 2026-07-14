@@ -18,6 +18,7 @@ import {
 import { listActiveFieldDefinitionsForRecordType } from "@/modules/custom-fields/queries"
 import { listHiddenLeadSources } from "@/modules/lead-sources/queries"
 import { ContactForm } from "@/modules/contacts/ui/contact-form"
+import { PageContainer } from "@/modules/shared/ui/page-container"
 
 export default async function EditContactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -76,10 +77,10 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <PageContainer variant="narrow" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Edit contact</h1>
+          <h1 className="font-serif text-2xl font-semibold">Edit contact</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Update any field. The full HubSpot-style inline-editing detail page ships later; this
             form is the V1 way to change contact data.
@@ -115,6 +116,6 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
           role: association.role,
         }))}
       />
-    </div>
+    </PageContainer>
   )
 }

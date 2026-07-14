@@ -208,12 +208,12 @@ describe("NotificationRow", () => {
     expect(timeEl.textContent).not.toBe("")
   })
 
-  it("shows a blue dot when readAt is null (unread)", () => {
+  it("shows a green dot when readAt is null (unread)", () => {
     const n = makeNotification({ readAt: null })
     render(<NotificationRow notification={n} onRefresh={vi.fn()} />)
     const dot = screen.getByTestId("notification-read-dot")
     expect(dot).toBeInTheDocument()
-    expect(dot.classList.contains("bg-blue-500")).toBe(true)
+    expect(dot.classList.contains("bg-[var(--color-brand-accent)]")).toBe(true)
   })
 
   it("renders NO dot element when readAt is set (read)", () => {
@@ -503,7 +503,9 @@ describe("NotificationRow — row click navigation (D2)", () => {
   // HONEYBOOK LAYOUT — read/unread TEXT link in the bottom-right action zone,
   // below the icon row.
   it("read control is a hover-revealed text link in the action zone, below the icons, with a state-dependent label", () => {
-    render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
+    render(
+      <NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />,
+    )
     const toggle = screen.getByTestId("row-read-toggle")
     const zone = screen.getByTestId("notification-action-zone")
     const icons = screen.getByTestId("notification-actions")
@@ -522,14 +524,19 @@ describe("NotificationRow — row click navigation (D2)", () => {
 
     // A read row → 'Mark as unread'.
     render(
-      <NotificationRow notification={makeNotification({ readAt: new Date() })} onRefresh={vi.fn()} />,
+      <NotificationRow
+        notification={makeNotification({ readAt: new Date() })}
+        onRefresh={vi.fn()}
+      />,
     )
     expect(screen.getAllByTestId("row-read-toggle")[1]).toHaveTextContent("Mark as unread")
   })
 
   it("HoneyBook layout: the unread dot is PERSISTENT — present when unread and NOT hover-gated (stays visible on hover)", async () => {
     const user = userEvent.setup()
-    render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
+    render(
+      <NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />,
+    )
     const dot = screen.getByTestId("notification-read-dot")
     expect(dot).toBeInTheDocument()
     // NOT hidden on hover: unlike the abandoned collision-fix, the dot carries no
@@ -542,7 +549,9 @@ describe("NotificationRow — row click navigation (D2)", () => {
   })
 
   it("HoneyBook layout: the top-right dot and the bottom-right action zone are SEPARATE containers (cannot occupy the same corner)", () => {
-    render(<NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />)
+    render(
+      <NotificationRow notification={makeNotification({ readAt: null })} onRefresh={vi.fn()} />,
+    )
     const row = screen.getByTestId("notification-row")
     const dot = screen.getByTestId("notification-read-dot")
     const zone = screen.getByTestId("notification-action-zone")
@@ -564,7 +573,10 @@ describe("NotificationRow — row click navigation (D2)", () => {
   it("HoneyBook layout: renders the category icon glyph per registry category (payments → DollarSign, messages → Mail)", () => {
     // payment.received → category "payments" → DollarSign
     const { unmount } = render(
-      <NotificationRow notification={makeNotification({ type: "payment.received" })} onRefresh={vi.fn()} />,
+      <NotificationRow
+        notification={makeNotification({ type: "payment.received" })}
+        onRefresh={vi.fn()}
+      />,
     )
     const payIcon = screen.getByTestId("notification-category-icon")
     expect(payIcon).toHaveAttribute("data-category", "payments")
@@ -616,7 +628,7 @@ describe("NotificationRow — row click navigation (D2)", () => {
     await user.click(screen.getByTestId("row-read-toggle"))
     expect(markNotificationUnread).toHaveBeenCalledWith({ id: "n1" })
     const dot = screen.getByTestId("notification-read-dot")
-    expect(dot.classList.contains("bg-blue-500")).toBe(true)
+    expect(dot.classList.contains("bg-[var(--color-brand-accent)]")).toBe(true)
     expect(screen.getByTestId("row-read-toggle")).toHaveTextContent("Mark as read")
   })
 })

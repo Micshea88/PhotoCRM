@@ -419,7 +419,7 @@ describe("PreviewStep — CSV V2 matched-field highlight (red on the colliding v
   // The danger red used by the header duplicate count is
   // text-red-600 dark:text-red-400 — same token used by the
   // V2 matched-field highlight so the visual ties together.
-  const DANGER_RED = "text-red-600"
+  const DANGER_RED = "text-[var(--color-destructive)]"
 
   it("matchedField='email' colors the email red and leaves the phone normal", () => {
     renderPreview({

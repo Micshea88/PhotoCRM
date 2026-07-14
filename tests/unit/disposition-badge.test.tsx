@@ -113,31 +113,31 @@ describe("DispositionBadge", () => {
     it("applies the emerald palette for completed (Connected)", () => {
       render(<DispositionBadge disposition="completed" />)
       const badge = screen.getByTestId("disposition-badge-completed")
-      expect(badge.className).toMatch(/emerald/)
+      expect(badge.className).toMatch(/success/)
     })
 
     it("applies the red palette for busy", () => {
       render(<DispositionBadge disposition="busy" />)
       const badge = screen.getByTestId("disposition-badge-busy")
-      expect(badge.className).toMatch(/red/)
+      expect(badge.className).toMatch(/destructive/)
     })
 
     it("applies the amber palette for no_answer", () => {
       render(<DispositionBadge disposition="no_answer" />)
       const badge = screen.getByTestId("disposition-badge-no_answer")
-      expect(badge.className).toMatch(/amber/)
+      expect(badge.className).toMatch(/warning/)
     })
 
     it("applies the blue palette for transferred", () => {
       render(<DispositionBadge disposition="transferred" />)
       const badge = screen.getByTestId("disposition-badge-transferred")
-      expect(badge.className).toMatch(/blue/)
+      expect(badge.className).toMatch(/info/)
     })
 
     it("applies the gray palette for cancelled", () => {
       render(<DispositionBadge disposition="cancelled" />)
       const badge = screen.getByTestId("disposition-badge-cancelled")
-      expect(badge.className).toMatch(/gray/)
+      expect(badge.className).toMatch(/muted/)
     })
   })
 })

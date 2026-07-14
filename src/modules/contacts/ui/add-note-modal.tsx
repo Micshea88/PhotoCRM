@@ -107,9 +107,9 @@ export function AddNoteModal({
         return window.confirm("Discard this note?")
       }}
       footer={
-        <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="text-2xs flex items-center justify-between gap-2">
           {error ? (
-            <span className="text-red-600 dark:text-red-400">{error}</span>
+            <span className="text-[var(--color-destructive)]">{error}</span>
           ) : (
             <span className="text-[var(--color-muted-foreground)]">
               {String(MAX_BODY - body.length)} characters left
@@ -145,7 +145,7 @@ export function AddNoteModal({
           disabled={busy}
           aria-label="Note body"
           data-testid="add-note-body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
 
         {/* Formatting toolbar — display-only V1 (rich-text pipeline

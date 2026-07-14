@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Calendar, Mail, Paperclip, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
 import { SearchableSelect } from "@/components/ui/searchable-select"
@@ -78,24 +79,21 @@ function ComposerShell({
   onCancel: () => void
 }) {
   return (
-    <div
-      className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-      data-testid="activity-composer"
-    >
+    <Card className="space-y-3 p-4" data-testid="activity-composer">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
         <button
           type="button"
           aria-label="Cancel"
           onClick={onCancel}
-          className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]/40"
+          className="rounded p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--state-hover)]"
         >
           <X className="size-3.5" aria-hidden="true" />
         </button>
       </div>
       {children}
       {error && (
-        <p className="text-xs text-red-600 dark:text-red-400" data-testid="composer-error">
+        <p className="text-xs text-[var(--color-destructive)]" data-testid="composer-error">
           {error}
         </p>
       )}
@@ -113,7 +111,7 @@ function ComposerShell({
           {saving ? "Saving…" : saveLabel}
         </Button>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -199,7 +197,7 @@ export function NoteComposer({ contactId, onSaved, onCancel, eventOptions }: Com
         disabled={saving}
         aria-label="Note body"
         data-testid="note-composer-body"
-        className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+        className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
       />
       <EventSelect
         value={projectId}
@@ -379,7 +377,7 @@ export function CallLogComposer({ contactId, onSaved, onCancel, eventOptions }: 
           disabled={saving}
           placeholder="Notes about the call"
           data-testid="call-composer-notes"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
       <EventSelect
@@ -498,7 +496,7 @@ export function EmailLogComposer({
           maxLength={10_000}
           disabled={saving}
           placeholder="What did the email say?"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
       <EventSelect
@@ -597,7 +595,7 @@ export function MeetingLogComposer({
           maxLength={10_000}
           disabled={saving}
           placeholder="What did you discuss?"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
       <Field label="Outcome">
@@ -675,7 +673,7 @@ export function SmsLogComposer({ contactId, onSaved, onCancel }: ComposerBasePro
           maxLength={10_000}
           disabled={saving}
           placeholder="Type the SMS body"
-          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-[var(--color-ring)] focus:outline-none disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-[var(--color-input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none disabled:opacity-50"
         />
       </Field>
     </ComposerShell>
@@ -744,7 +742,7 @@ function ConnectGate({
       >
         Connect
       </Button>
-      <p className="text-[11px] text-[var(--color-muted-foreground)]">{shipTarget}</p>
+      <p className="text-2xs text-[var(--color-muted-foreground)]">{shipTarget}</p>
     </div>
   )
 }

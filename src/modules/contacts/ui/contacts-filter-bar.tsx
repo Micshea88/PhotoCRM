@@ -24,6 +24,13 @@ export interface FilterBarProps {
    * own row).
    */
   trailingChips?: React.ReactNode
+  /**
+   * Which half to render. "full" = search + chips (legacy). The contacts
+   * toolbar renders "search" under the title and "chips" inside the Filter
+   * pop-out — both instances share the same URL-param logic, so nothing is
+   * reimplemented; only the rendered half differs.
+   */
+  variant?: "full" | "search" | "chips"
 }
 
 /**
@@ -128,202 +135,228 @@ export function ContactsFilterBar(props: FilterBarProps) {
     })
   }
 
+  const variant = props.variant ?? "full"
+  const showSearch = variant !== "chips"
+  const showChips = variant !== "search"
+
   return (
-    <div className="space-y-3">
-      {/* Search */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          // No-op equivalent: typing already pushes the URL via the
-          // debounce effect. The button exists as a visual + a11y
-          // affordance; pressing it re-asserts the current value
-          // (and clears any pending debounce timer by calling
-          // updateParam immediately).
-          updateParam("q", searchInput.trim() || null)
-        }}
-        className="flex items-center gap-2"
-      >
-        <Input
-          type="search"
-          placeholder="Search name, email, phone, or company…"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value)
+    <div className={cn(showSearch && showChips && "space-y-3")}>
+      {showSearch && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            // No-op equivalent: typing already pushes the URL via the
+            // debounce effect. The button exists as a visual + a11y
+            // affordance; pressing it re-asserts the current value
+            // (and clears any pending debounce timer by calling
+            // updateParam immediately).
+            updateParam("q", searchInput.trim() || null)
           }}
-          className="flex-1"
-        />
-        <Button type="submit" variant="outline" size="sm">
-          Search
-        </Button>
-        {hasAnyFilter && (
-          <Button type="button" variant="outline" size="sm" onClick={clearAll}>
-            Clear all
-          </Button>
-        )}
-      </form>
-
-      {/* Filter chips */}
-      <div className="flex flex-wrap items-start gap-2">
-        <FilterChip label="Contact type" value={activeContactType}>
-          <ChipSearchList
-            items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
-            value={activeContactType || null}
-            onChange={(v) => {
-              updateParam("contactType", v)
-            }}
-          />
-        </FilterChip>
-
-        <FilterChip label="Lifecycle status" value={activeLifecycle}>
-          <ChipSearchList
-            items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
-            value={activeLifecycle || null}
-            onChange={(v) => {
-              updateParam("lifecycleStatus", v)
-            }}
-          />
-        </FilterChip>
-
-        <FilterChip
-          label="Tags"
-          value={activeTags.length > 0 ? `${String(activeTags.length)} selected` : ""}
+          className="flex items-center gap-2"
         >
-          {props.tagOptions.length === 0 ? (
-            <p className="text-xs text-[var(--color-muted-foreground)]">
-              No tags yet. Add tags on a contact to filter by them.
-            </p>
-          ) : (
-            <ChipSearchMultiList
-              items={props.tagOptions.map((t) => ({ value: t, label: t }))}
-              values={activeTags}
-              onChange={(next) => {
-                updateParam("tags", next)
+          <Input
+            type="search"
+            placeholder="Search name, email, phone, or company…"
+            value={searchInput}
+            onChange={(e) => {
+              setSearchInput(e.target.value)
+            }}
+            className="max-w-md flex-1"
+          />
+          {/* GHOST control — same treatment as the Filter/Sort triggers on the
+              list toolbar: transparent, no resting box/border, green-wash hover.
+              (No caret — this is a submit action, not a dropdown trigger.) */}
+          <button
+            type="submit"
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-sm font-medium transition-colors",
+              "text-[var(--color-muted-foreground)] hover:bg-[var(--state-ghost-hover)] hover:text-[var(--color-foreground)]",
+              "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
+            )}
+          >
+            <Search className="size-4" /> Search
+          </button>
+          {hasAnyFilter && (
+            <Button type="button" variant="outline" size="sm" onClick={clearAll}>
+              Clear all
+            </Button>
+          )}
+        </form>
+      )}
+
+      {showChips && (
+        <div
+          className={cn(
+            "flex gap-2",
+            // In the list toolbar (single row) center the chips so they share the
+            // row's centerline with the Filter + Sort triggers — the taller trailing
+            // "+ More filters" button sets the row height, and items-start used to
+            // pin the shorter chips to its top (sitting higher than Sort). The
+            // wrapping "full" variant keeps items-start for multi-row top-alignment.
+            variant === "chips" ? "flex-nowrap items-center" : "flex-wrap items-start",
+          )}
+        >
+          <FilterChip label="Contact type" value={activeContactType}>
+            <ChipSearchList
+              items={CONTACT_TYPES.map((t) => ({ value: t, label: t }))}
+              value={activeContactType || null}
+              onChange={(v) => {
+                updateParam("contactType", v)
               }}
             />
-          )}
-        </FilterChip>
+          </FilterChip>
 
-        <FilterChip
-          label="Owner"
-          value={(() => {
-            if (!activeOwner) return ""
-            const m = props.ownerOptions.find((o) => o.id === activeOwner)
-            return m?.name ?? m?.email ?? activeOwner
-          })()}
-        >
-          <ChipSearchList
-            items={props.ownerOptions.map((o) => ({
-              value: o.id,
-              label: o.name ?? o.email,
-              description: o.name ? o.email : undefined,
-            }))}
-            value={activeOwner || null}
-            onChange={(v) => {
-              updateParam("ownerUserId", v)
-            }}
-            emptyMessage="No team members"
-          />
-        </FilterChip>
+          <FilterChip label="Lifecycle status" value={activeLifecycle}>
+            <ChipSearchList
+              items={LIFECYCLE_STATUSES.map((s) => ({ value: s, label: s }))}
+              value={activeLifecycle || null}
+              onChange={(v) => {
+                updateParam("lifecycleStatus", v)
+              }}
+            />
+          </FilterChip>
 
-        <FilterChip
-          label="Company"
-          value={
-            activeCompany
-              ? (props.companyOptions.find((c) => c.id === activeCompany)?.name ?? activeCompany)
-              : ""
-          }
-        >
-          <ChipSearchList
-            items={props.companyOptions.map((c) => ({ value: c.id, label: c.name }))}
-            value={activeCompany || null}
-            onChange={(v) => {
-              updateParam("companyId", v)
-            }}
-            emptyMessage="No companies yet"
-          />
-        </FilterChip>
-
-        <FilterChip label="Lead source" value={activeLeadSource}>
-          <LeadSourceCombobox
-            value={activeLeadSource}
-            onChange={(v) => {
-              updateParam("leadSource", v || null)
-            }}
-            existingValues={props.leadSourceOptions}
-            hiddenSources={props.hiddenLeadSources}
-            allowAnyOption
-            anyLabel="— Any —"
-          />
-        </FilterChip>
-
-        <FilterChip
-          label="Date created"
-          value={createdFrom || createdTo ? `${createdFrom || "…"} → ${createdTo || "…"}` : ""}
-        >
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  selectPreset(7)
+          <FilterChip
+            label="Tags"
+            value={activeTags.length > 0 ? `${String(activeTags.length)} selected` : ""}
+          >
+            {props.tagOptions.length === 0 ? (
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                No tags yet. Add tags on a contact to filter by them.
+              </p>
+            ) : (
+              <ChipSearchMultiList
+                items={props.tagOptions.map((t) => ({ value: t, label: t }))}
+                values={activeTags}
+                onChange={(next) => {
+                  updateParam("tags", next)
                 }}
-              >
-                Last 7 days
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  selectPreset(30)
-                }}
-              >
-                Last 30 days
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  selectPreset(90)
-                }}
-              >
-                Last 90 days
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs">From</label>
-                <Input
-                  type="date"
-                  value={createdFrom}
-                  onChange={(e) => {
-                    updateParam("createdFrom", e.target.value || null)
-                  }}
-                />
-              </div>
-              <div>
-                <label className="text-xs">To</label>
-                <Input
-                  type="date"
-                  value={createdTo}
-                  onChange={(e) => {
-                    updateParam("createdTo", e.target.value || null)
-                  }}
-                />
-              </div>
-            </div>
-            {(createdFrom || createdTo) && (
-              <Button type="button" variant="outline" size="sm" onClick={clearDateRange}>
-                Clear date range
-              </Button>
+              />
             )}
-          </div>
-        </FilterChip>
-        {props.trailingChips}
-      </div>
+          </FilterChip>
+
+          <FilterChip
+            label="Owner"
+            value={(() => {
+              if (!activeOwner) return ""
+              const m = props.ownerOptions.find((o) => o.id === activeOwner)
+              return m?.name ?? m?.email ?? activeOwner
+            })()}
+          >
+            <ChipSearchList
+              items={props.ownerOptions.map((o) => ({
+                value: o.id,
+                label: o.name ?? o.email,
+                description: o.name ? o.email : undefined,
+              }))}
+              value={activeOwner || null}
+              onChange={(v) => {
+                updateParam("ownerUserId", v)
+              }}
+              emptyMessage="No team members"
+            />
+          </FilterChip>
+
+          <FilterChip
+            label="Company"
+            value={
+              activeCompany
+                ? (props.companyOptions.find((c) => c.id === activeCompany)?.name ?? activeCompany)
+                : ""
+            }
+          >
+            <ChipSearchList
+              items={props.companyOptions.map((c) => ({ value: c.id, label: c.name }))}
+              value={activeCompany || null}
+              onChange={(v) => {
+                updateParam("companyId", v)
+              }}
+              emptyMessage="No companies yet"
+            />
+          </FilterChip>
+
+          <FilterChip label="Lead source" value={activeLeadSource}>
+            <LeadSourceCombobox
+              value={activeLeadSource}
+              onChange={(v) => {
+                updateParam("leadSource", v || null)
+              }}
+              existingValues={props.leadSourceOptions}
+              hiddenSources={props.hiddenLeadSources}
+              allowAnyOption
+              anyLabel="— Any —"
+            />
+          </FilterChip>
+
+          <FilterChip
+            label="Date created"
+            value={createdFrom || createdTo ? `${createdFrom || "…"} → ${createdTo || "…"}` : ""}
+          >
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectPreset(7)
+                  }}
+                >
+                  Last 7 days
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectPreset(30)
+                  }}
+                >
+                  Last 30 days
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectPreset(90)
+                  }}
+                >
+                  Last 90 days
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs">From</label>
+                  <Input
+                    type="date"
+                    value={createdFrom}
+                    onChange={(e) => {
+                      updateParam("createdFrom", e.target.value || null)
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs">To</label>
+                  <Input
+                    type="date"
+                    value={createdTo}
+                    onChange={(e) => {
+                      updateParam("createdTo", e.target.value || null)
+                    }}
+                  />
+                </div>
+              </div>
+              {(createdFrom || createdTo) && (
+                <Button type="button" variant="outline" size="sm" onClick={clearDateRange}>
+                  Clear date range
+                </Button>
+              )}
+            </div>
+          </FilterChip>
+          {props.trailingChips}
+        </div>
+      )}
     </div>
   )
 }
@@ -394,21 +427,23 @@ function ChipSearchList({
                     onChange(selected ? null : item.value)
                   }}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs",
+                    "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none active:bg-[var(--state-active)]",
                     selected
-                      ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-foreground)]"
-                      : "hover:bg-[var(--color-accent)]/50",
+                      ? "bg-[var(--state-selected)] font-medium text-[var(--state-selected-foreground)] hover:brightness-95"
+                      : "hover:bg-[var(--color-wash-green)] hover:text-[var(--color-foreground)]",
                   )}
                 >
                   <span className="flex flex-col truncate">
                     <span className="truncate">{item.label}</span>
                     {item.description && (
-                      <span className="truncate text-[10px] text-[var(--color-muted-foreground)]">
+                      <span className="text-3xs truncate text-[var(--color-muted-foreground)]">
                         {item.description}
                       </span>
                     )}
                   </span>
-                  {selected && <Check className="size-3.5 shrink-0 text-[var(--color-primary)]" />}
+                  {selected && (
+                    <Check className="size-3.5 shrink-0 text-[var(--state-selected-foreground)]" />
+                  )}
                 </button>
               </li>
             )
@@ -474,7 +509,7 @@ function ChipSearchMultiList({
                 <label
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs",
-                    "hover:bg-[var(--color-accent)]/50",
+                    "hover:bg-[var(--color-wash-green)] active:bg-[var(--state-active)]",
                   )}
                 >
                   <input
@@ -509,21 +544,28 @@ function FilterChip({
   return (
     <Popover
       trigger={({ open, toggle }) => (
+        // Identical treatment to the Sort option chips on the list toolbar:
+        // borderless soft-rectangle, two-green menu rule — dark-green when a value
+        // is selected, green-wash on hover/open otherwise.
         <button
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className={`flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+          className={cn(
+            "text-2xs flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-lg)] px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors",
+            "focus-visible:ring-1 focus-visible:ring-[var(--color-ring)] focus-visible:outline-none",
             active
-              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-              : "border-[var(--color-border)]"
-          }`}
+              ? "bg-[var(--state-selected)] text-[var(--state-selected-foreground)]"
+              : open
+                ? "bg-[var(--color-wash-green)] text-[var(--color-brand-accent)]"
+                : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-wash-green)] hover:text-[var(--color-foreground)] active:bg-[var(--state-active)]",
+          )}
         >
           <span>{label}</span>
           {active && (
             <>
-              <span className="text-[var(--color-muted-foreground)]">:</span>
-              <span className="font-medium">{value}</span>
+              <span className="opacity-70">:</span>
+              <span>{value}</span>
             </>
           )}
         </button>

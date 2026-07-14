@@ -200,8 +200,11 @@ function SidebarLeafRow({
         "flex items-center gap-2 rounded-md text-sm transition-colors",
         collapsed ? "size-10 justify-center" : "px-3 py-2",
         isActive
-          ? "bg-[var(--color-brand-accent)] font-medium text-[var(--color-sidebar-foreground)]"
-          : "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-sidebar-foreground)]/10 hover:text-[var(--color-sidebar-foreground)]",
+          ? // ACTIVE = persistent inverted pill (solid near-white fill + ink text) — the
+            // boldest "you are here"; the active tab wears the hover state permanently.
+            "bg-[var(--color-background)] font-medium text-[var(--color-foreground)]"
+          : // Inactive = dimmed white label; hover inverts to near-white fill + ink text.
+            "text-[var(--color-sidebar-foreground)]/70 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]",
       )}
     >
       <Icon className="size-4 shrink-0" />

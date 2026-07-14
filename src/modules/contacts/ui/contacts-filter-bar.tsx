@@ -187,8 +187,13 @@ export function ContactsFilterBar(props: FilterBarProps) {
       {showChips && (
         <div
           className={cn(
-            "flex items-start gap-2",
-            variant === "chips" ? "flex-nowrap" : "flex-wrap",
+            "flex gap-2",
+            // In the list toolbar (single row) center the chips so they share the
+            // row's centerline with the Filter + Sort triggers — the taller trailing
+            // "+ More filters" button sets the row height, and items-start used to
+            // pin the shorter chips to its top (sitting higher than Sort). The
+            // wrapping "full" variant keeps items-start for multi-row top-alignment.
+            variant === "chips" ? "flex-nowrap items-center" : "flex-wrap items-start",
           )}
         >
           <FilterChip label="Contact type" value={activeContactType}>

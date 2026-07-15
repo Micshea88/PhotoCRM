@@ -53,6 +53,21 @@ end-to-end from the correct URL; (b) get a real custom domain (no custom domain 
 multi-alias + single-trusted-origin setup is the root of this 403 class, required before customer
 signup).
 
+### C3 — every "CI-enforced" claim in this repo is really a LOCAL pre-push hook (2026-07-15)
+
+GitHub Actions has never run on this repo (see C1). So every doc that says a guard is
+"CI-enforced" is, today, only enforced by the **local `lefthook` pre-push hook on the pusher's
+machine** — not by any remote required check. A future reader must not believe the repo is gated
+when only the pusher's laptop is. Known affected claims:
+
+- **Policy item 9** ("`audit()` … CI-enforced via `check-actions.mjs`") — local hook only.
+- The **multi-tenant isolation guard** / RLS suite — local hook only (this whole investigation).
+- `docs/multi-tenant-remediation-plan.md` and any other doc using "CI"/"CI-enforced" language for
+  a check that lives in `pnpm verify` — same caveat.
+
+This is **fixed by A1b** (enable Actions + require the check on `main`). Until A1b lands, treat
+every "CI-enforced" phrase as "pre-push-hook-enforced, pusher-local, not remotely gated."
+
 ---
 
 ## The 3 🔴 red bugs
@@ -125,27 +140,59 @@ new pattern. Add a test simulating two concurrent ticks asserting exactly one se
 
 ## The 12-item policy list (destined for `AGENTS.md`)
 
-> **SOURCE NEEDED — not fabricated.** This conversation was compacted; the enumerated 12-item
-> policy list is not in my current working context and is not recorded in-repo. I will not invent
-> it (that would defeat the point of this doc). **Action:** Mike to paste the 12 items (or point to
-> the transcript/doc); I'll enumerate them here verbatim, then port to `AGENTS.md`.
->
-> Fragments captured this session (NOT the authoritative 12 — do not treat as complete):
->
-> - Prefer **policy-based admin access over privilege-based bypass** (auditable, revocable).
-> - **BYPASSRLS reserved strictly for the migration role**; no admin/app/test role gets it.
-> - Tenant context uses **`SET LOCAL`**, never bare `SET` (bare `SET` leaks across pooled
->   connections on Vercel+Neon).
-> - Policies read **`current_setting('app.current_org', TRUE)`** so a missing context **fails
->   closed** (0 rows), never raises.
-> - Branch 2 governing laws: **(i) no single vendor is ever the only road in (two doors min);
->   (ii) never let a security gate fail closed with no exemption** (the `requireEmailVerification`
->   class).
+Authoritative, transcribed verbatim from Mike (2026-07-15). Ported to `AGENTS.md` →
+"Standing backend policies (LOCKED)".
+
+1. RLS tests run under a NOBYPASSRLS role via helper-level `SET LOCAL ROLE app_authenticated`.
+2. Every webhook: verify-sig → enqueue → ACK → async → idempotent-on-event-id → DLQ + reconcile.
+   Never inline. rc-sync is the template.
+3. Every job: idempotent + atomic claim (`UPDATE…WHERE…RETURNING` / `FOR UPDATE SKIP LOCKED`) +
+   lease + reaper; `retry_after` > max runtime.
+4. Every merge re-parents ALL child relations, enumerated from the FKs, test-enforced. New child
+   table ⇒ merge engine + re-parent test updated in the same PR.
+5. Every outbound provider call goes through a rate-limited, 429-aware, retrying client.
+6. No `OFFSET` on tenant-scoped lists — keyset on `(sort_col, id)`; everything paginated/capped
+   including tasks and the activity feed.
+7. "Queryable ⇒ not free text" — enum/lookup + normalize-on-write for lead source, company
+   category, lost reason.
+8. Permission checks centralized (`orgAction.withPermission(key)`); financial/sensitive actions
+   carry an action-layer check AND RLS.
+9. `audit()` on every state-changing action, CI-enforced via `check-actions.mjs`, not convention.
+   **⚠️ See C3 below: "CI-enforced" here currently means the LOCAL pre-push hook only — GitHub
+   Actions has never run. This item's guarantee is not actually gated until A1b lands.**
+10. Externally-consumed endpoints versioned `/api/v1` + shared rate-limit (Upstash) before
+    multi-region.
+11. PII + payments baseline: MFA, session expiry reconciled, password-min = 12, HIBP wired.
+12. PM frontend when it ships: virtualization + optimistic UI + production scale-seed in v1
+    (LAW 2). Don't retrofit.
 
 ## ❌ Standard gaps — sorted by WHEN THEY BITE
 
-> **SOURCE NEEDED — not fabricated.** Same as above: the enumerated ❌ standard-gap list (and its
-> before-beta / at-scale / when-the-feature-ships sequencing) is not in my current context or
-> in-repo. Mike to paste it; I'll record each with when-it-bites + honest status. Related existing
-> gap-tracking to reconcile against: `docs/multi-tenant-remediation-plan.md` (e.g. Tier-1: 7
-> org-scoped tables with no RLS) and `TODO.md` (H10 auth events → audit log, etc.).
+Authoritative, transcribed verbatim from Mike (2026-07-15).
+
+**Before beta:**
+
+- Resend + Nylas webhooks process inline, no reconciliation (rc-sync is the correct template:
+  enqueue→ACK→DLQ→backoff→sweep).
+- rc-sync running jobs have no lease/reaper — a crash post-claim strands the job forever.
+- No outbound rate-limit/retry on Resend sends (the RC client does it right).
+- No API versioning (flat `app/api/**`).
+- No MFA + 7-day sessions + password-min 8, which contradicts the documented 12 (`auth.ts:41`).
+- In-memory rate-limit won't hold multi-region.
+- Forward-only migrations, no down-scripts.
+
+**At scale:**
+
+- Tasks + activity feed unpaginated; contacts list is `OFFSET` (capped 10k).
+- CSV import row-by-row.
+- Dedup loads the whole org table then filters in JS — ids never reach SQL.
+- Global search `custom_fields::text ILIKE` bypasses GIN (pg_trgm fix deferred).
+- Free-text governance gaps beyond `companies.category` — `lead_source`, `source_detail`,
+  `lost_reason` (lost_reason backs a report).
+
+**When the feature ships:**
+
+- contact↔opportunity is single-FK not M2M (needs `opportunity_contacts` join + merge re-parent).
+- PM system is backend scaffolding only — no `/events`, `/tasks`, `/board` routes, FS-only deps,
+  no critical-path/capacity/real-time. Genuinely deferred, not missing. Indexes are in place.
+  LAW 2 remediation applies when the PM UI ships.

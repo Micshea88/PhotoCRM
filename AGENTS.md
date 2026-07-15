@@ -95,10 +95,30 @@ To satisfy LAW 1 (persona separation) for live-consultation / client-facing disp
 - Assert the **row is denser** (e.g. the preview clamped to one line) — not that a density attribute is present.
 - Assert the **quote was removed** from the cleaned string — not that a trim function was called.
 
-**COROLLARY — real payloads for external input:** any code that parses **EXTERNAL input** (email bodies, webhook payloads, imported files) MUST be tested against **REAL CAPTURED PAYLOADS**, not hand-written fixtures. Hand-written fixtures encode the shape the author *imagined*, and pass on code that fails on the shape that actually arrives. **A test that passes on a fixture that does not resemble production input proves nothing.**
+**COROLLARY — real payloads for external input:** any code that parses **EXTERNAL input** (email bodies, webhook payloads, imported files) MUST be tested against **REAL CAPTURED PAYLOADS**, not hand-written fixtures. Hand-written fixtures encode the shape the author _imagined_, and pass on code that fails on the shape that actually arrives. **A test that passes on a fixture that does not resemble production input proves nothing.**
 
-- **Why this law exists (worked examples, all shipped through clean reviews):** three notification features shipped broken because their tests verified *state* not *behavior* — sort didn't sort (test asserted the mapped param, not the rendered order), compact wasn't compact (test asserted a `data-density` attribute, not the row density), and the email cleaner didn't clean real Gmail HTML (fixtures were newline-separated + entity-free; the real payload is single-line + entity-encoded). See `docs/cleanup-and-tech-debt.md` for the full post-mortem.
+- **Why this law exists (worked examples, all shipped through clean reviews):** three notification features shipped broken because their tests verified _state_ not _behavior_ — sort didn't sort (test asserted the mapped param, not the rendered order), compact wasn't compact (test asserted a `data-density` attribute, not the row density), and the email cleaner didn't clean real Gmail HTML (fixtures were newline-separated + entity-free; the real payload is single-line + entity-encoded). See `docs/cleanup-and-tech-debt.md` for the full post-mortem.
 - **Trigger:** the D1/D2/D3 production defects (2026-07-10).
+
+## Standing backend policies (LOCKED — apply to EVERY backend change)
+
+Twelve backend policies, checked like the design laws. Full context + status in
+`docs/backend-audit-backlog.md`.
+
+1. **RLS tests run under a NOBYPASSRLS role** via helper-level `SET LOCAL ROLE app_authenticated`.
+2. **Every webhook:** verify-sig → enqueue → ACK → async → idempotent-on-event-id → DLQ + reconcile. Never inline. `rc-sync` is the template.
+3. **Every job:** idempotent + atomic claim (`UPDATE…WHERE…RETURNING` / `FOR UPDATE SKIP LOCKED`) + lease + reaper; `retry_after` > max runtime.
+4. **Every merge re-parents ALL child relations, enumerated from the FKs, test-enforced.** New child table ⇒ merge engine + re-parent test updated in the same PR.
+5. **Every outbound provider call** goes through a rate-limited, 429-aware, retrying client.
+6. **No `OFFSET` on tenant-scoped lists** — keyset on `(sort_col, id)`; everything paginated/capped including tasks and the activity feed.
+7. **"Queryable ⇒ not free text"** — enum/lookup + normalize-on-write for lead source, company category, lost reason.
+8. **Permission checks centralized** (`orgAction.withPermission(key)`); financial/sensitive actions carry an action-layer check AND RLS.
+9. **`audit()` on every state-changing action**, enforced via `check-actions.mjs`, not convention.
+10. **Externally-consumed endpoints versioned `/api/v1`** + shared rate-limit (Upstash) before multi-region.
+11. **PII + payments baseline:** MFA, session expiry reconciled, password-min = 12, HIBP wired.
+12. **PM frontend when it ships:** virtualization + optimistic UI + production scale-seed in v1 (LAW 2). Don't retrofit.
+
+> **Enforcement caveat (2026-07-15):** "enforced" / "CI-enforced" for items above (esp. #1, #9) currently means the **local `lefthook` pre-push hook only** — GitHub Actions has never run on this repo. Making these remote-gated is tracked as A1b in `docs/backend-audit-backlog.md`.
 
 ## Build-planning audits — STANDING PROCESS (every audit)
 

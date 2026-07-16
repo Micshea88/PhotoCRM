@@ -4,7 +4,9 @@ Tracked home for the backend audit's red bugs, the policy items destined for `AG
 the standard gaps — so this security work survives session/transcript loss.
 
 **Companions:** `docs/multi-tenant-remediation-plan.md` (RLS enforcement model + table coverage),
-`docs/decisions-since-may-docs.md` (decision ledger), `TODO.md` (foundation punch list).
+`docs/decisions-since-may-docs.md` (decision ledger), `docs/decisions-2026-07-16.md` (planning
+session — elaborates the 12 policies + the A2 merge + auth-resilience decisions), `TODO.md`
+(foundation punch list).
 
 **Status legend:** 🔴 not started · 🟡 in progress · ✅ done · ⊘ superseded.
 

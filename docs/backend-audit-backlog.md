@@ -124,7 +124,37 @@ opportunities, meetings, sms-messages, projects. **No test covers it.**
 constraints** so the merge re-parents ALL of them and a newly-added child table can't be silently
 forgotten. Add a test that **derives the expected child-table list from the FKs** and fails if the
 engine doesn't handle one (new child table ⇒ engine + test both fail in the same PR). Explicit
-regression tests for `email_log` + tasks. Survivorship must be auditable.
+regression tests for `email_log` + tasks + notifications. Survivorship must be auditable.
+
+**STEP 1 audit result (2026-07-16, accepted).** `executeContactMerge` re-parents **10** of the 13
+FK children via hand-written UPDATEs; **3 missed** — `email_log.contactId` (`email-log/schema.ts:51`),
+`tasks.contactId` (`tasks/schema.ts:101`), `notifications.contactId` (`notifications/schema.ts:76`),
+all `ON DELETE SET NULL`. Every `cascade`/`restrict` FK IS re-parented. **Q3 transactional: HANDLED**
+(orgAction wraps in `ctx.db.transaction`, `safe-action.ts:201`/`:251`). **Q4 audited: HANDLED**
+(audit-first, `merge-engine.ts:387`). **Decision (Mike): all 3 RE-HOME to winner — zero intentional
+exclusions.** If the FK sweep finds a 14th table, STOP and ask before excluding.
+
+**Why policy 4 is enumerate-from-FKs, not "remember to update the list" — the list demonstrably rots
+(2026-07-16 git evidence):** the merge re-parent block was written with the C7 rebuild (~2026-05-31,
+`9cf6f04`). `tasks.contactId` was added **2026-06-18** (`d27fd05`) and `notifications.contactId`
+**2026-07-05** (`081a15b`) — both AFTER the list, and both missed. (`email_log.contactId` is
+contemporaneous, 2026-05-31 `c2e6a2f` — a same-window oversight.) A hand-written list has now rotted
+twice as new child tables landed; a test carrying its own hardcoded list would be the same bug one
+layer up.
+
+**Q1 — how a merged-away notification renders today (`notifications/queries.ts`):** the list query
+`leftJoin`s contacts on `notifications.contactId = contacts.id` with **no `deletedAt` filter**
+(`:177`, `:253`). So a notification pointing at a soft-deleted loser renders **fine but stale** — it
+shows the _loser's_ name — in the global notification center; it **vanishes from the winner's
+contact-scoped view** (filtered by `contactId = winner`); and after purge (loser hard-deleted) the
+join finds nothing → `contactName = null` (`:46`). Re-homing fixes all three.
+
+**Q3 — other hand-written contact-child enumerations (report-only):** the purge-deleted cron
+(`app/api/jobs/cron/purge-deleted/route.ts`) hard-deletes and imports `contacts, contactNotes`, but
+relies on DB-level FK `ON DELETE` (cascade/set-null) for most children rather than a literal
+re-parent list — so it is **not** the same rot class as the merge engine. No GDPR/anonymize/export
+feature walks contact children by a literal list today (the `export`/`anonymize` grep hits were
+`export function` false positives). The merge engine is the one literal-list rot site.
 
 ### A3 — workflow double-send (non-atomic claim) — 🔴 not started
 

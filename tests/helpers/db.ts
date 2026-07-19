@@ -13,6 +13,13 @@ export async function withTestDb<T>(fn: (db: TestDb) => Promise<T>): Promise<T> 
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    // Mirror production (safe-action.ts:210 / org-context.ts:122): drop into the
+    // NOBYPASSRLS role as the FIRST statement so RLS genuinely applies regardless of
+    // what DATABASE_URL connects as — locally pathway_app (already non-bypass), in CI
+    // postgres (superuser+BYPASSRLS, where without this every RLS check is a no-op).
+    // The connecting role must be app_authenticated or a member of it (0041 grants it
+    // to pathway_app; a superuser can SET ROLE unconditionally).
+    await client.query("SET LOCAL ROLE app_authenticated")
     const txDb = drizzle(client, { schema })
     try {
       return await fn(txDb)

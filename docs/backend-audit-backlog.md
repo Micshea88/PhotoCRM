@@ -194,6 +194,17 @@ all `ON DELETE SET NULL`. Every `cascade`/`restrict` FK IS re-parented. **Q3 tra
 (audit-first, `merge-engine.ts:387`). **Decision (Mike): all 3 RE-HOME to winner — zero intentional
 exclusions.** If the FK sweep finds a 14th table, STOP and ask before excluding.
 
+**STEP 2 build — the sweep DID find a 14th (2026-07-19).** The live FK catalog (`pg_constraint`) shows
+**14** relations referencing `contacts`, not 13: the 10 handled + the 3 planned (`email_log`, `tasks`,
+`notifications`) + **`ai_usage_log.contactId`** (`contacts/ai/ai-usage-schema.ts:31`, `ON DELETE SET
+NULL`) — the audit's "13" missed it. Stopped and asked per the rule. **Decision (Mike, 2026-07-19):
+re-home `ai_usage_log` too (4th).** Rationale: it carries a dedicated `(org, contact_id)` index for
+"tokens per contact" cost queries, so leaving it would under-count the winner post-merge and dangle rows
+on the soft-deleted loser — the same failure mode as the other 3; `call_log` (the closest SET NULL
+telemetry analog) is already re-homed, so this keeps the invariant uniform. All four are plain SET NULL
+FKs (not M2M joins) → straight repoint, no junction dedup. Test derives the child list from live FKs and
+asserts **zero child rows reference any loser after a merge** (universal invariant, not a hardcoded list).
+
 **Why policy 4 is enumerate-from-FKs, not "remember to update the list" — the list demonstrably rots
 (2026-07-16 git evidence):** the merge re-parent block was written with the C7 rebuild (~2026-05-31,
 `9cf6f04`). `tasks.contactId` was added **2026-06-18** (`d27fd05`) and `notifications.contactId`

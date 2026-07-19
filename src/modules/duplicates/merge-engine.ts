@@ -8,11 +8,15 @@ import { callLog } from "@/modules/calls/schema"
 import { companies } from "@/modules/companies/schema"
 import { contactCompanyAssociations, contactNotes, contacts } from "@/modules/contacts/schema"
 import { bustContactAiCache } from "@/modules/contacts/ai/cache-invalidation"
+import { aiUsageLog } from "@/modules/contacts/ai/ai-usage-schema"
+import { emailLog } from "@/modules/email-log/schema"
 import { meetings } from "@/modules/meetings/schema"
+import { notifications } from "@/modules/notifications/schema"
 import { opportunities } from "@/modules/opportunities/schema"
 import { paymentInstallments } from "@/modules/invoices/schema"
 import { projectContacts, projects } from "@/modules/projects/schema"
 import { smsMessages } from "@/modules/sms-messages/schema"
+import { tasks } from "@/modules/tasks/schema"
 import type * as schema from "@/db/schema"
 
 /**
@@ -555,6 +559,44 @@ export async function executeContactMerge(
       and(
         eq(paymentInstallments.organizationId, ctx.organizationId),
         inArray(paymentInstallments.billingContactId, loserIds),
+      ),
+    )
+
+  // A2 fix (2026-07-19) — re-home the remaining SET NULL per-contact records
+  // the original merge missed. Without these, after the loser is soft-deleted
+  // the rows keep pointing at it, so the winner's email history, task list,
+  // notifications, and per-contact AI-usage totals silently drop the loser's
+  // records. All four are plain SET NULL FKs (not M2M joins), so a straight
+  // repoint suffices — no junction dedup. `ai_usage_log` is the 14th child the
+  // audit's list missed; re-homed here by decision (2026-07-19) to keep the
+  // winner's "tokens per contact" accurate. The FK-derived coverage test
+  // asserts zero child rows reference any loser after a merge.
+  await db
+    .update(emailLog)
+    .set({ contactId: winnerId })
+    .where(
+      and(eq(emailLog.organizationId, ctx.organizationId), inArray(emailLog.contactId, loserIds)),
+    )
+  await db
+    .update(tasks)
+    .set({ contactId: winnerId })
+    .where(and(eq(tasks.organizationId, ctx.organizationId), inArray(tasks.contactId, loserIds)))
+  await db
+    .update(notifications)
+    .set({ contactId: winnerId })
+    .where(
+      and(
+        eq(notifications.organizationId, ctx.organizationId),
+        inArray(notifications.contactId, loserIds),
+      ),
+    )
+  await db
+    .update(aiUsageLog)
+    .set({ contactId: winnerId })
+    .where(
+      and(
+        eq(aiUsageLog.organizationId, ctx.organizationId),
+        inArray(aiUsageLog.contactId, loserIds),
       ),
     )
 

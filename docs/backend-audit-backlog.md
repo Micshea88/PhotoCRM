@@ -74,7 +74,17 @@ every "CI-enforced" phrase as "pre-push-hook-enforced, pusher-local, not remotel
 
 ## The 3 🔴 red bugs
 
-### A1 — CI RLS tests: role + the CI-doesn't-run divergence — 🟡 in progress (investigation done, fix agreed, not yet built)
+### A1 — CI RLS tests: role + the CI-doesn't-run divergence — ✅ A1a BUILT (commit 41756e8); A1b remaining = user's GitHub clicks
+
+**A1a shipped 2026-07-19 (commit `41756e8`, branch `fix/backend-red-bugs`).** All items 1–4, 6, 7 below
+done: both shared helper families (`tests/helpers/rls.ts` `withRawOrgContext`/`withRawClient` AND
+`tests/helpers/db.ts` `withTestDb`) now `SET LOCAL ROLE app_authenticated` as the first statement;
+read + write paths covered; `rls-cross-org.test.ts` rewritten to assert the connection-independent
+invariant (`current_user=app_authenticated`, `rolbypassrls=false`, `is_superuser=off`) that goes red if
+the switch is removed, and to guard the escalation assertion on session privilege. **Before/after: under
+a `postgres` bypass connection the suite went 109 fail → 0; 165/165 under both `pathway_app` and
+`postgres`.** Item 5 (make CI actually run) is A1b — see below; needs no `ci.yml` change, only the
+GitHub enable/require clicks (the fork-default-disabled fix).
 
 **Evidence.** Runtime is correct: `src/lib/safe-action.ts:210` (write) and
 `src/lib/org-context.ts:122` (read) both `SET LOCAL ROLE app_authenticated` then

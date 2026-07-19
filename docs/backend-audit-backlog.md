@@ -227,7 +227,10 @@ Authoritative, transcribed verbatim from Mike (2026-07-15). Ported to `AGENTS.md
    Actions has never run. This item's guarantee is not actually gated until A1b lands.**
 10. Externally-consumed endpoints versioned `/api/v1` + shared rate-limit (Upstash) before
     multi-region.
-11. PII + payments baseline: MFA, session expiry reconciled, password-min = 12, HIBP wired.
+11. PII + payments baseline: MFA, session expiry reconciled, password **min 8 + composition (≥1
+    uppercase / ≥1 number / ≥1 special)** with requirements shown in the UI, HIBP wired (HIBP is the
+    load-bearing control; composition is competitor-parity — see decisions-2026-07-16 → Passwords, revised
+    2026-07-19, supersedes the earlier "min 12").
 12. PM frontend when it ships: virtualization + optimistic UI + production scale-seed in v1
     (LAW 2). Don't retrofit.
 
@@ -242,7 +245,9 @@ Authoritative, transcribed verbatim from Mike (2026-07-15).
 - rc-sync running jobs have no lease/reaper — a crash post-claim strands the job forever.
 - No outbound rate-limit/retry on Resend sends (the RC client does it right).
 - No API versioning (flat `app/api/**`).
-- No MFA + 7-day sessions + password-min 8, which contradicts the documented 12 (`auth.ts:41`).
+- No MFA + 7-day sessions + no password composition rules yet (`auth.ts:41` is min 8 with no
+  complexity). Decision (2026-07-19): keep min 8, add composition (≥1 upper/number/special) + UI
+  messaging + HIBP — build in B2.
 - In-memory rate-limit won't hold multi-region.
 - Forward-only migrations, no down-scripts.
 

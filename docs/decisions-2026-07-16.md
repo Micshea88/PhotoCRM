@@ -116,15 +116,26 @@ like form submissions, so it goes blind exactly where the product is automated).
 ≥64, no mandatory complexity, no periodic rotation unless evidence of compromise, no hints/security
 questions, breached-credential screening required.
 
-**Our decisions:**
+**Our decisions (REVISED 2026-07-19 — supersedes the earlier "min 12"):**
 
-- **Minimum 12 characters — DELIBERATE DEVIATION** from the 15-char single-factor recommendation.
-  Reason: 15 is a usability burden and we pair it with conditional MFA.
+- **Minimum 8 characters + composition rules:** require **≥1 uppercase, ≥1 number, ≥1 special
+  character.** Matches HoneyBook and most consumer CRMs; matches user expectation and cyber-insurance /
+  due-diligence checklists that still ask for complexity.
+- **DELIBERATE DEVIATION from the NIST standard above — in the OPPOSITE direction from the earlier
+  "min 12" decision.** NIST Rev 4 recommends **against** mandatory composition rules (they push users to
+  predictable patterns like `Password1!`, get reused/written down, add little entropy, hurt usability) and
+  favors length + breach screening instead. We are choosing 8 + complexity **knowingly** for
+  familiarity / competitor-parity / insurance-checklist reasons. **The real security in this policy is the
+  HIBP breach screening (below), not the composition rules** — keep HIBP regardless.
+- **UI messaging (required):** the password requirements (min 8, 1 uppercase, 1 number, 1 special) must be
+  **shown to the user at every password-creation point** — sign-up, reset-password, and account settings —
+  with live/inline validation, not a post-submit error.
 - Allow **≥64** characters.
 - **No periodic rotation** unless evidence of compromise (matches standard).
-- **Screen against breached-credential lists (HIBP)** (matches standard).
-- **Current state:** password-min **8** in code (`auth.ts:41`) while docs say 12 — neither matches.
-  **Fix to 12.**
+- **Screen against breached-credential lists (HIBP)** (matches standard — the load-bearing control here).
+- **Current state / build:** `auth.ts:41` is already min **8** — so **length needs no change** (the earlier
+  "fix to 12" is reverted). What's NEW to build: the **composition validation** (Better Auth /
+  a Zod refinement on the password schema) and the **UI requirements messaging**. Part of B2.
 - **CONDITIONAL MFA** — a code via text or to the email on file is **REQUIRED** when EITHER: the user
   hasn't logged in for **>14 days**, OR is logging in from a **new device**. **Explicitly NOT per-login
   2FA** — same device every day must not be prompted.

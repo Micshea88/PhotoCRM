@@ -115,7 +115,7 @@ Twelve backend policies, checked like the design laws. Full context + status in
 8. **Permission checks centralized** (`orgAction.withPermission(key)`); financial/sensitive actions carry an action-layer check AND RLS.
 9. **`audit()` on every state-changing action**, enforced via `check-actions.mjs`, not convention.
 10. **Externally-consumed endpoints versioned `/api/v1`** + shared rate-limit (Upstash) before multi-region.
-11. **PII + payments baseline:** MFA, session expiry reconciled, password-min = 12, HIBP wired.
+11. **PII + payments baseline:** MFA, session expiry reconciled, password **min 8 + composition (≥1 uppercase / ≥1 number / ≥1 special), requirements shown in the UI**, HIBP wired (HIBP is the load-bearing control; composition is competitor-parity, a deliberate deviation from NIST — see `docs/decisions-2026-07-16.md` → Passwords, revised 2026-07-19).
 12. **PM frontend when it ships:** virtualization + optimistic UI + production scale-seed in v1 (LAW 2). Don't retrofit.
 
 > **Enforcement caveat (2026-07-15):** "enforced" / "CI-enforced" for items above (esp. #1, #9) currently means the **local `lefthook` pre-push hook only** — GitHub Actions has never run on this repo. Making these remote-gated is tracked as A1b in `docs/backend-audit-backlog.md`.

@@ -111,6 +111,39 @@ role with per-insert GUC, then `SET LOCAL ROLE app_authenticated`, then probes).
    invisible).
 7. Run the full RLS suite before/after; STOP + report if any test flips RED under the real role.
 
+### A1b prerequisite — migration portability (why CI can't just be "enabled") — ✅ DONE 2026-07-18
+
+**The break was SELF-INFLICTED, not inherited (proven).** This repo is a fork of
+`Shancorps/pathway-foundation`. The foundation's chain has **4 migrations, none referencing
+`pathway_app`**, builds from zero, and its **Actions ran green** (`total_count=3`, last two
+`success`) — same inherited `ci.yml`, which is **byte-identical to ours**. Our fork's Actions show
+`total_count=0` **because GitHub disables workflows on forks by default** (the enable is the
+**Actions-tab banner**, not Settings → Actions). We added 61 migrations; `0015` (authored 2026-05-19
+by Mike, _after_ the fork) embedded a `SET LOCAL ROLE pathway_app` RLS self-test — a role only
+`scripts/postgres-init.sh` (dev docker-init) creates — so `pnpm db:migrate` **failed build-from-zero**
+(`ERROR: role "pathway_app" does not exist`), which is why enabling CI today would go red at the
+_migrate_ step, before any test.
+
+**Fix (Option A, authorized Rule-#9 exception — see AGENTS.md §9a):** removed the DO-block probe from
+`0015` (schema-only now); its assertion already lived in `assignment-scoped-rls.test.ts` ("cross-org
+attack"), which A1a makes genuine under the non-bypass role. **Proven on a fresh `postgres:16-alpine`:
+before = fail at 0015; after = 65/65 applied, `app_authenticated` created (0041 runs), `SET LOCAL ROLE
+app_authenticated` → `bypassrls=f, is_super=off`, `db:check` clean, suspenders test 23/23.** `pathway_app`
+is correctly absent on a fresh cluster; local dev unchanged (`postgres-init.sh` still creates it).
+
+**Migration sweep (all 65) — role refs / DO-block self-tests:** only **`0015`** broke build-from-zero.
+**`0047`** has a DO-block probe using `SET LOCAL ROLE app_authenticated` but is portable (0041 creates
+that role first); **`0021`** has a DO-block probe with no role switch (runs as migrator) — portable.
+Both flagged, **not touched** (only `0015` was authorized). `0041/0061/0062` role references are
+comments. Only `0041` creates a role.
+
+**Why A1b (remote required check) matters — record, not a separate item:** the local pre-push hook
+(`lefthook`, installed + firing; pre-push runs the full RLS suite as `pathway_app`) is **skippable via
+`git push --no-verify` with no trace**, and it only protects a machine where `lefthook install` ran.
+A remote required check doesn't care whose laptop it is or whether they were in a hurry. A1b remaining:
+enable Actions (Actions-tab banner), **require** the check on `main` (Settings → Branches / Rulesets),
+then prove-it-fails.
+
 ### A2 — contact merge silently loses child relations — 🔴 not started
 
 **Evidence.** `src/modules/duplicates/merge-engine.ts:178` `executeContactMerge` re-parents an

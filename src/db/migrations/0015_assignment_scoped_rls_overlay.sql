@@ -156,74 +156,24 @@ CREATE POLICY "tasks_delete" ON "tasks"
     AND COALESCE(current_setting('app.current_role', true), '') NOT IN ('photographer','contractor','editor')
   );--> statement-breakpoint
 
--- ─── MIGRATION PROBE ───────────────────────────────────────────────────
--- Belt-and-suspenders defense for the security boundary change. The
--- integration test suite (tests/integration/assignment-scoped-rls.test.ts)
--- is the SUSPENDERS — it runs immediately after this migration in CI. This
--- DO block is the BELT: it fails the migration AT THE MIGRATION STEP if
--- the new overlay accidentally loosens org isolation, giving faster
--- feedback than the test run.
+-- MIGRATION PROBE — REMOVED 2026-07-17 (authorized exception to Hard Rule #9).
+-- The original DO-block here asserted the assignment-scoped overlay did not loosen
+-- org isolation (a team member in org B with a FORGED project_photographers row
+-- pointing at an org A project must see 0 rows of that project). It ran
+-- `SET LOCAL ROLE pathway_app` — a role NO migration creates (only
+-- scripts/postgres-init.sh, dev-only) — so the whole chain FAILED build-from-zero
+-- on any cluster lacking that role (CI, a fresh prod rebuild).
 --
--- The probe runs as the `pathway_app` role (NOSUPERUSER, NOBYPASSRLS).
--- Without that, migrations run as the postgres superuser which bypasses
--- RLS and the probe would falsely succeed at seeing the row.
-DO $$
-DECLARE
-  v_org_a TEXT := 'rlsprobe_org_a';
-  v_org_b TEXT := 'rlsprobe_org_b';
-  v_user_b TEXT := 'rlsprobe_user_b';
-  v_project_a TEXT := 'rlsprobe_project_a';
-  v_pp_id TEXT := 'rlsprobe_pp';
-  v_visible_count INT;
-BEGIN
-  -- Set up org A + org B + a probe user in org B.
-  INSERT INTO organization (id, name, slug, created_at)
-    VALUES (v_org_a, 'Probe Org A', 'rlsprobe-org-a', NOW()),
-           (v_org_b, 'Probe Org B', 'rlsprobe-org-b', NOW());
-  INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
-    VALUES (v_user_b, 'Probe User B', 'rlsprobe-user-b@example.com', true, NOW(), NOW());
-
-  -- Switch to non-superuser role so RLS actually applies.
-  SET LOCAL ROLE pathway_app;
-
-  -- Insert a project in org A as owner.
-  PERFORM set_config('app.current_org', v_org_a, true);
-  PERFORM set_config('app.current_role', 'owner', true);
-  PERFORM set_config('app.current_user_id', '', true);
-  INSERT INTO projects (id, organization_id, name) VALUES (v_project_a, v_org_a, 'Probe A');
-
-  -- Forge a project_photographers row in org B claiming an assignment to
-  -- org A's project. The forge inserts under app.current_org = orgB so it
-  -- passes project_photographers' org-isolation WITH CHECK.
-  PERFORM set_config('app.current_org', v_org_b, true);
-  INSERT INTO project_photographers (id, organization_id, project_id, user_id, role)
-    VALUES (v_pp_id, v_org_b, v_project_a, v_user_b, 'lead');
-
-  -- Probe as photographer in org B. The new policy's OUTER AND clamp is
-  -- organization_id = current_setting('app.current_org', true). Even though
-  -- the forged assignment row exists, the outer clamp on the project
-  -- itself returns 0 rows (project_a.organization_id = orgA ≠ orgB).
-  PERFORM set_config('app.current_role', 'photographer', true);
-  PERFORM set_config('app.current_user_id', v_user_b, true);
-  SELECT count(*) INTO v_visible_count FROM projects WHERE id = v_project_a;
-
-  IF v_visible_count <> 0 THEN
-    RAISE EXCEPTION
-      'RLS MIGRATION PROBE FAILED: assignment-scoped overlay LOOSENED org isolation. Photographer in org B saw % row(s) of org A project. The new policies have a parenthesization or boolean-logic bug.',
-      v_visible_count;
-  END IF;
-
-  -- Reset role + cleanup as superuser.
-  RESET ROLE;
-  PERFORM set_config('app.current_org', v_org_a, true);
-  PERFORM set_config('app.current_role', 'owner', true);
-  DELETE FROM project_photographers WHERE id = v_pp_id;
-  DELETE FROM projects WHERE id = v_project_a;
-  DELETE FROM "user" WHERE id = v_user_b;
-  DELETE FROM organization WHERE id IN (v_org_a, v_org_b);
-  PERFORM set_config('app.current_org', '', true);
-  PERFORM set_config('app.current_role', '', true);
-  PERFORM set_config('app.current_user_id', '', true);
-
-  RAISE NOTICE 'RLS migration probe OK: org isolation preserved under the assignment-scoped overlay.';
-END $$;
+-- Why removing it is safe (not an override of Rule #9, a case it never aimed at):
+-- a DO-block ASSERTS but creates/alters/drops NO schema, so a fresh cluster applying
+-- this file now produces schema byte-identical to a DB that applied the old version.
+-- Schema divergence — the disaster Rule #9 guards — is structurally zero. Drizzle
+-- also keys applied migrations on the journal timestamp, never a content hash
+-- (drizzle-orm pg-core/dialect.js migrate()), so editing an already-applied file is
+-- inert on prod.
+--
+-- The assertion was NOT deleted — it is the SUSPENDERS it always referenced, and it
+-- runs on every machine under the correct non-bypass role:
+--   tests/integration/assignment-scoped-rls.test.ts — "cross-org attack" (it: "team
+--   member in org B with a forged project_photographers assignment ... STILL cannot
+--   see org A's data"). See docs/backend-audit-backlog.md → A2/migration portability.

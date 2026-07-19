@@ -144,6 +144,23 @@ A remote required check doesn't care whose laptop it is or whether they were in 
 enable Actions (Actions-tab banner), **require** the check on `main` (Settings → Branches / Rulesets),
 then prove-it-fails.
 
+**CI needs NO role-provisioning step — the original A1b plan is revised (proven 2026-07-19).** The plan
+had assumed CI would need a `postgres-init.sh`-equivalent step (create `pathway_app` + default privileges)
+before `db:migrate`. It does not. Migration **`0041` self-provisions** `app_authenticated`:
+`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES` (existing tables at 0041) **plus**
+`ALTER DEFAULT PRIVILEGES … GRANT … TO app_authenticated` (tables created by later migrations, which in
+CI all run as `postgres`). Verified on a **fresh `postgres:16-alpine` cluster identical to CI** (no
+`postgres-init.sh`, no `pathway_app` role): migrations applied clean → `app_authenticated` exists as
+`rolbypassrls=f, rolsuper=f` → **can SELECT all 58/58 tables** → **full integration suite 745/745 (114
+files) and RLS subset 165/165 pass connecting as `postgres`**. The A1a helper switch (`SET LOCAL ROLE
+app_authenticated`) is what makes this genuine: CI's `postgres` superuser connection drops into the
+non-bypass role exactly as prod's `neondb_owner` does, so the connection role no longer matters. **Do not
+add a provisioning step to `ci.yml` — it would be dead code.** `ci.yml` passes as-is once Actions is on.
+(Trade-off noted: under CI's `postgres` _session_, the escalation-block assertion in `rls-cross-org.test.ts`
+self-skips — a superuser session can always `SET ROLE`. That specific assertion still executes in the
+pre-push `verify` which connects as `pathway_app`. Provisioning `pathway_app` in CI to run it there too is
+optional hardening, not required for genuineness.)
+
 ### A2 — contact merge silently loses child relations — 🔴 not started
 
 **Evidence.** `src/modules/duplicates/merge-engine.ts:178` `executeContactMerge` re-parents an

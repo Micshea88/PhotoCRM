@@ -15,6 +15,21 @@ export const BACKGROUND_JOB_BACKOFF_SECONDS = [10, 10, 30, 120, 300, 900] as con
 export const DEFAULT_MAX_ATTEMPTS = 5
 export const LEASE_DURATION_SECONDS = 300
 
+/**
+ * Retention for the prune-terminal-jobs GC (the `prune-jobs` cron).
+ *
+ * `done` rows are operational noise — a completed workflow send / webhook
+ * ingest — so they get a SHORT window (long enough to debug "did last night's
+ * run go out?"). `dead` rows are the DLQ: the forensic record of retry-exhausted
+ * work, so they're kept LONGER for reconcile before GC. Both are overridable via
+ * env on the cron route without a deploy.
+ */
+export const DONE_RETENTION_DAYS = 7
+export const DEAD_RETENTION_DAYS = 30
+/** Rows pruned per status per run; a larger backlog drains over successive runs
+ *  (bounded like `purge-deleted`, so one run can't lock the table for long). */
+export const PRUNE_BATCH_LIMIT = 5000
+
 /** Backoff for the given completed-attempt number, capped at the last entry. */
 export function backoffSecondsForAttempt(attempt: number): number {
   const i = Math.max(0, Math.min(attempt, BACKGROUND_JOB_BACKOFF_SECONDS.length - 1))

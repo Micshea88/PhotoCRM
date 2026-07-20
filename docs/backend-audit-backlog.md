@@ -256,9 +256,14 @@ worker):
   thin (no message content) so a null-org row leaks no tenant data. Handler parses + branches
   (delivery → `ingestResendDeliveryEvent`, else → `ingestInboundFromEvent`).
 - **Runner** now runs queue mechanics (claim/mark/reap) as the system worker on the base connection; only
-  the handler gets a tenant context, and only for org-scoped jobs. **Follow-up (retention):** add a
-  prune-completed/dead-`background_jobs` cron (standard says short-retain the inbox); low urgency here
-  since payloads are thin/non-sensitive.
+  the handler gets a tenant context, and only for org-scoped jobs. **Follow-up (retention): ✅ DONE
+  (2026-07-20).** The `prune-jobs` cron (`app/api/jobs/cron/prune-jobs`, daily 04:15 UTC) reaps terminal
+  rows via `pruneTerminalJobs` — `done` on a SHORT window keyed on `completedAt` (7d default), `dead` DLQ
+  on a LONGER window keyed on `updatedAt` (30d default) for reconcile; `pending`/`running` never touched.
+  Runs the base (BYPASSRLS) connection so one pass sweeps every org + null-org system-inbox rows; bounded
+  per-status batch like `purge-deleted`; env-tunable kill-switch + windows. NOT `audit()`'d — operational
+  table + `audit_log.organizationId` is NOT NULL (same reason `purge-deleted` skips its global `faqEntries`
+  audit); the structured log line is the run record. Proven: `background-jobs-prune.test.ts`.
 
 **Evidence.** `src/modules/workflows/executor.ts` marks a pending execution running via a
 plain `SELECT` + non-atomic update, so overlapping cron ticks can double-process one pending

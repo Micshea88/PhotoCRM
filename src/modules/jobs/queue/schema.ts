@@ -41,8 +41,9 @@ import { organization } from "@/modules/auth/schema"
  * 'app.current_org', ...)` — same as rc-sync / workflow-execute. RLS still
  * isolates by org (policy below); the system context sets the GUC explicitly.
  *
- * Operational, not user data → excluded from `purge-deleted` (a future
- * prune-completed cron reaps terminal rows).
+ * Operational, not user data → excluded from `purge-deleted`. Terminal rows
+ * (`done`, `dead`) are reaped by the dedicated `prune-jobs` cron
+ * (`pruneTerminalJobs`): short retention for `done`, longer for the `dead` DLQ.
  */
 export const backgroundJobs = pgTable(
   "background_jobs",

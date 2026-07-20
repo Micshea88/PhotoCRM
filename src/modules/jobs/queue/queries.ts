@@ -1,5 +1,5 @@
 import "server-only"
-import { and, asc, eq, lte, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, lt, lte, sql } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import type * as schema from "@/db/schema"
@@ -229,6 +229,69 @@ export async function markJobFailed(
     .where(and(eq(backgroundJobs.id, id), eq(backgroundJobs.leaseToken, leaseToken)))
     .returning({ id: backgroundJobs.id })
   return { ok: rows.length > 0, dead }
+}
+
+export interface PruneResult {
+  doneDeleted: number
+  deadDeleted: number
+}
+
+/**
+ * Retention GC: hard-delete terminal rows past their window so the queue table
+ * doesn't grow unbounded. Intended to run as the base (BYPASSRLS) connection —
+ * like the reaper — so one pass sweeps every org AND the null-org system-inbox
+ * rows (resend webhooks), which no tenant context could reach.
+ *
+ * Two distinct windows keyed on two distinct columns:
+ *   - `done`  → `completedAt` (set by markJobDone; the true completion time).
+ *   - `dead`  → `updatedAt` (dead rows never set `completedAt`; `updatedAt` is
+ *               the time the row went dead and nothing touches it afterward).
+ *
+ * `pending` / `running` are live work and never match. Bounded by `batchLimit`
+ * per status (select-ids → delete, since Postgres DELETE has no LIMIT); a larger
+ * backlog drains over successive runs, same as `purge-deleted`.
+ */
+export async function pruneTerminalJobs(
+  db: DbHandle,
+  opts: { doneRetentionDays: number; deadRetentionDays: number; batchLimit: number },
+): Promise<PruneResult> {
+  const { doneRetentionDays, deadRetentionDays, batchLimit } = opts
+
+  const doneDeleted = await pruneByStatus(
+    db,
+    "done",
+    lt(backgroundJobs.completedAt, sql`now() - make_interval(days => ${doneRetentionDays})`),
+    batchLimit,
+  )
+  const deadDeleted = await pruneByStatus(
+    db,
+    "dead",
+    lt(backgroundJobs.updatedAt, sql`now() - make_interval(days => ${deadRetentionDays})`),
+    batchLimit,
+  )
+
+  return { doneDeleted, deadDeleted }
+}
+
+async function pruneByStatus(
+  db: DbHandle,
+  status: "done" | "dead",
+  agedPredicate: ReturnType<typeof lt>,
+  batchLimit: number,
+): Promise<number> {
+  const rows = await db
+    .select({ id: backgroundJobs.id })
+    .from(backgroundJobs)
+    .where(and(eq(backgroundJobs.status, status), agedPredicate))
+    .limit(batchLimit)
+  if (rows.length === 0) return 0
+  await db.delete(backgroundJobs).where(
+    inArray(
+      backgroundJobs.id,
+      rows.map((r) => r.id),
+    ),
+  )
+  return rows.length
 }
 
 export interface ReapResult {

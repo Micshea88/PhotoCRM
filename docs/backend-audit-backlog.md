@@ -238,8 +238,24 @@ one wins → one send), the **reaper** handles crashed runs, and each send carri
 can't double-send. The `workflow-execute` cron now drains the queue (`processDueJobs`) instead of
 directly sweeping pending executions. Proven: `workflow-queue-concurrency.test.ts` (two concurrent
 drains → exactly one send, execution succeeded, job done) + the queue's atomic-claim / crash-recover
-tests. Foundation commits: queue `2c4c226`, runner `<this branch>`. Backlogged follow-up: retry of
-transient step failures (today a failed step is terminal, unchanged from prior behavior).
+tests. Foundation commits: queue `2c4c226`, runner `<this branch>`.
+
+**Follow-up (transient step retry): ✅ DONE (2026-07-20).** Previously ANY step failure was terminal —
+a Resend 429/5xx or network blip on a `send_email` step permanently failed the workflow. Now the
+executor classifies failures (`isTransientWorkflowError`): `ActionError` = PERMANENT (validation /
+config / auth / stub-deferral — never retried); anything else (provider/network/DB) = TRANSIENT. On a
+transient failure with queue attempts remaining, the executor THROWS instead of finalizing — and
+because the queue runs the whole executor in ONE transaction, the throw ROLLS BACK every write that
+attempt made (step DB writes, audit rows, stepResults). The queue then re-runs it with backoff from a
+clean slate; the only non-transactional effect (the outbound email) carries the stable
+`wf:<execId>:<step>` key so the provider dedups the re-send. The handler passes `isFinalAttempt`
+(`job.attempts >= job.maxAttempts`) so the last attempt finalizes the execution `failed` instead of
+throwing — no stranded non-terminal execution, no infinite retry. `isFinalAttempt` defaults true so
+direct (non-queue) callers keep the original never-throw behavior. **Key safety proof:** a `create_task`
+step BEFORE a transiently-failing `send_email` is NOT duplicated across the retry — the rolled-back
+attempt's insert vanishes, the successful attempt inserts exactly one. Proven:
+`workflow-transient-retry.test.ts` (retry→one-task+stable-key, permanent→no-retry-terminal,
+exhaustion→finalize-failed) + classifier unit assertions.
 
 **Webhooks routed through the queue (policy 2) — Nylas + Resend, 2026-07-19/20.** Both were processed
 INLINE; now both follow the standard durable pipeline (verify → enqueue → ACK <10-15s → async →

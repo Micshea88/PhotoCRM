@@ -13,10 +13,14 @@ import type { HandlerRegistry, JobHandler } from "./runner"
  * re-run safe — the provider dedups the resend.
  *
  * executeWorkflow records the execution's OWN terminal status (succeeded /
- * failed / deferred) in `workflow_executions` and returns without throwing for
- * those domain outcomes → the job is marked done (we don't retry a workflow
- * that failed on a bad step). Only an infrastructure error (executeWorkflow
- * itself throwing) propagates → the job retries with backoff.
+ * failed / deferred) and returns without throwing for PERMANENT domain outcomes
+ * (a bad-config step) → the job is marked done (we don't retry those). A
+ * TRANSIENT step failure (provider 429/5xx, network) instead THROWS while
+ * retries remain → the job's transaction rolls back and the queue re-runs it
+ * with backoff. We pass `isFinalAttempt` (the claim already bumped `attempts`,
+ * so `attempts === maxAttempts` is the last try) so the executor finalizes the
+ * execution terminal on the last attempt instead of throwing — otherwise the
+ * job would DLQ with the execution stranded non-terminal.
  */
 const workflowExecutionHandler: JobHandler = async (tx, job) => {
   const payload = job.payload as { executionId?: unknown } | null
@@ -25,7 +29,7 @@ const workflowExecutionHandler: JobHandler = async (tx, job) => {
   if (!executionId) {
     throw new Error("workflow_execution job is missing payload.executionId")
   }
-  await executeWorkflow(tx, executionId)
+  await executeWorkflow(tx, executionId, { isFinalAttempt: job.attempts >= job.maxAttempts })
 }
 
 /**

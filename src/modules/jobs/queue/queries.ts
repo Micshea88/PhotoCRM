@@ -22,11 +22,15 @@ function dbSecondsFromNow(seconds: number) {
 // ─── Producer ──────────────────────────────────────────────────────────────
 
 export interface EnqueueJobArgs {
-  organizationId: string
+  /** Null for a tenant-agnostic system-inbox job (a webhook whose org needs
+   *  enrichment to resolve). Such rows must be inserted on a BYPASSRLS
+   *  connection (the base pool in prod), since the org-isolation WITH CHECK
+   *  can't be satisfied without an org. */
+  organizationId: string | null
   type: string
   payload?: Record<string, unknown>
-  /** Exactly-once key. When set, a redelivery of the same (org, type, key) is a
-   *  no-op (partial unique index). Null → no dedup (every call inserts). */
+  /** Exactly-once key. When set, a redelivery of the same (type, key) is a
+   *  no-op (global partial unique index). Null → no dedup (every call inserts). */
   idempotencyKey?: string | null
   maxAttempts?: number
   /** Delay before the job is first eligible to run (seconds). Default 0 = now. */
@@ -63,13 +67,14 @@ export async function enqueueJob(
 
   if (inserted.length > 0) return { id, enqueued: true }
 
-  // Conflict on the idempotency key — the job already exists. Return its id.
+  // Conflict on the idempotency key — the job already exists. Look it up by the
+  // GLOBAL (type, key) that the unique index enforces (org may be null, and a
+  // redelivery could even land in a different org's context).
   const [existing] = await tx
     .select({ id: backgroundJobs.id })
     .from(backgroundJobs)
     .where(
       and(
-        eq(backgroundJobs.organizationId, args.organizationId),
         eq(backgroundJobs.type, args.type),
         eq(backgroundJobs.idempotencyKey, args.idempotencyKey ?? ""),
       ),
@@ -82,7 +87,7 @@ export async function enqueueJob(
 
 export interface ClaimableJob {
   id: string
-  organizationId: string
+  organizationId: string | null
   type: string
   payload: unknown
   attempts: number

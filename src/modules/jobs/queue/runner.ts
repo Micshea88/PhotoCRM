@@ -58,7 +58,10 @@ export async function enqueueJobInContext(
   args: EnqueueJobArgs,
 ): Promise<{ id: string; enqueued: boolean }> {
   return baseDb.transaction(async (tx) => {
-    await setMachineContext(tx, args.organizationId)
+    // Org-scoped job → set the org context so the INSERT satisfies FORCE RLS
+    // WITH CHECK. Null-org system-inbox job → insert on the base BYPASSRLS
+    // connection with no context (a tenant-agnostic raw-webhook row).
+    if (args.organizationId) await setMachineContext(tx, args.organizationId)
     return enqueueJob(tx, args)
   })
 }
@@ -96,49 +99,50 @@ async function processJob(
   db: DbHandle,
 ): Promise<JobOutcome> {
   const leaseToken = createId()
+  // The queue mechanics (claim / markDone / markFailed) are SYSTEM operations on
+  // the base connection — no org context. In prod the base pool is BYPASSRLS
+  // (neondb_owner), so this sweeps both org-scoped and null-org system-inbox
+  // rows uniformly. Only the HANDLER runs under a tenant context, and only for
+  // org-scoped jobs (below).
   // tx1 — claim + COMMIT.
-  const claimed = await db.transaction(async (tx) => {
-    await setMachineContext(tx, job.organizationId)
-    return claimJob(tx, job.id, leaseToken)
-  })
+  const claimed = await db.transaction((tx) => claimJob(tx, job.id, leaseToken))
   if (!claimed) return "skipped" // another worker won the claim
 
   const handler = handlers[job.type]
   if (!handler) {
-    await db.transaction(async (tx) => {
-      await setMachineContext(tx, job.organizationId)
-      await markJobFailed(
+    await db.transaction((tx) =>
+      markJobFailed(
         tx,
         job.id,
         leaseToken,
         claimed.attempts,
         claimed.maxAttempts,
         `no handler registered for type "${job.type}"`,
-      )
-    })
+      ),
+    )
     log.error({ jobId: job.id, type: job.type }, "[job-queue] no handler for type")
     return "no_handler"
   }
 
   try {
-    // handler runs in its own committed tx — the claim is already durable.
+    // handler runs in its own committed tx — the claim is already durable. An
+    // org-scoped job (workflow) gets the app_authenticated + org machine context
+    // so the executor's tenant writes pass RLS; a null-org system-inbox job
+    // (resend webhook) gets a plain tx — its handler resolves the tenant and
+    // opens its own org-scoped transactions internally.
     await db.transaction(async (tx) => {
-      await setMachineContext(tx, job.organizationId)
+      if (claimed.organizationId) await setMachineContext(tx, claimed.organizationId)
       await handler(tx, claimed)
     })
     // tx2 — markDone + COMMIT.
-    const done = await db.transaction(async (tx) => {
-      await setMachineContext(tx, job.organizationId)
-      return markJobDone(tx, job.id, leaseToken)
-    })
+    const done = await db.transaction((tx) => markJobDone(tx, job.id, leaseToken))
     // done=false → our lease was reclaimed mid-flight; the reclaimer owns it.
     return done ? "done" : "skipped"
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    const res = await db.transaction(async (tx) => {
-      await setMachineContext(tx, job.organizationId)
-      return markJobFailed(tx, job.id, leaseToken, claimed.attempts, claimed.maxAttempts, msg)
-    })
+    const res = await db.transaction((tx) =>
+      markJobFailed(tx, job.id, leaseToken, claimed.attempts, claimed.maxAttempts, msg),
+    )
     log.warn({ jobId: job.id, type: job.type, msg }, "[job-queue] job failed")
     return res.dead ? "dead" : "failed"
   }

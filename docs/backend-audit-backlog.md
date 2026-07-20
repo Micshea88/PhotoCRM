@@ -241,6 +241,25 @@ drains → exactly one send, execution succeeded, job done) + the queue's atomic
 tests. Foundation commits: queue `2c4c226`, runner `<this branch>`. Backlogged follow-up: retry of
 transient step failures (today a failed step is terminal, unchanged from prior behavior).
 
+**Webhooks routed through the queue (policy 2) — Nylas + Resend, 2026-07-19/20.** Both were processed
+INLINE; now both follow the standard durable pipeline (verify → enqueue → ACK <10-15s → async →
+idempotent-on-provider-event-id → DLQ). The tenant-resolution split is deliberate and researched (see
+Stripe/Nylas/Svix/Hookdeck — the "claim-check" pattern; cost-based: cheap id lookup → edge, enrichment →
+worker):
+
+- **Nylas** (thin payload = ids): resolve org at the edge via the `grant_id`-hash index → ORG-SCOPED job
+  (raw payload RLS-isolated). Handler = existing `ingestNylasWebhook`.
+- **Resend** (thin payload = `email_id` + Svix meta; org needs enrichment — fetch email + contact-match /
+  sent-message correlation): tenant-agnostic **system-inbox** job (`background_jobs.organization_id`
+  NULLABLE, idempotency index made GLOBAL `(type, key)` in migration `0066`), org resolved in the worker.
+  Null-org rows are touched only by the system runner on the BYPASSRLS base connection; their payload is
+  thin (no message content) so a null-org row leaks no tenant data. Handler parses + branches
+  (delivery → `ingestResendDeliveryEvent`, else → `ingestInboundFromEvent`).
+- **Runner** now runs queue mechanics (claim/mark/reap) as the system worker on the base connection; only
+  the handler gets a tenant context, and only for org-scoped jobs. **Follow-up (retention):** add a
+  prune-completed/dead-`background_jobs` cron (standard says short-retain the inbox); low urgency here
+  since payloads are thin/non-sensitive.
+
 **Evidence.** `src/modules/workflows/executor.ts` marks a pending execution running via a
 plain `SELECT` + non-atomic update, so overlapping cron ticks can double-process one pending
 execution → duplicate outbound client email (real client-facing harm). _(Exact line range to

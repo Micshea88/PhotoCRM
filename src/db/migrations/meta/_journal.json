@@ -463,6 +463,13 @@
       "when": 1784512559598,
       "tag": "0065_magenta_phil_sheldon",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1784519632961,
+      "tag": "0066_wandering_silverclaw",
+      "breakpoints": true
     }
   ]
 }

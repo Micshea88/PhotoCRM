@@ -48,11 +48,23 @@ export const backgroundJobs = pgTable(
   "background_jobs",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "restrict" }),
+    /**
+     * The owning org — NULLABLE. Most jobs (workflow_execution, nylas_webhook,
+     * resend_delivery) are enqueued org-scoped and their row is RLS-isolated.
+     * But a webhook whose tenant needs ENRICHMENT to resolve (resend inbound:
+     * fetch the email + contact-match) can't be org-tagged at the edge — it's a
+     * tenant-agnostic system-inbox row (the standard "claim-check" webhook
+     * pattern), resolved by the worker. Such rows are touched ONLY by the system
+     * runner on the base (BYPASSRLS) connection; the handler sets the resolved
+     * org's context for the actual tenant writes. Their raw payload is thin
+     * (ids + provider metadata, never message content), so a null-org row leaks
+     * no tenant data.
+     */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "restrict",
+    }),
     /** Discriminator for the handler registry: "workflow_execution" |
-     *  "inbound_email" | "outbound_email" | … */
+     *  "nylas_webhook" | "resend_webhook" | … */
     type: text("type").notNull(),
     /** Small type-specific data the handler needs (e.g. `{ executionId }` or
      *  `{ provider, eventId }`). Bulk payloads belong in a domain table linked
@@ -84,9 +96,13 @@ export const backgroundJobs = pgTable(
     index("background_jobs_status_scheduled_idx").on(t.status, t.scheduledFor),
     // Reaper sweep: running jobs past their lease.
     index("background_jobs_status_lease_idx").on(t.status, t.leaseExpiresAt),
-    // Idempotency: at most one row per (org, type, key). Redelivery → no-op.
+    // Idempotency: at most one row per (type, key), GLOBAL — provider event ids
+    // (Nylas event id, Svix svix-id) and workflow trigger keys are globally
+    // unique, and a global key is what lets a null-org system-inbox row dedup a
+    // redelivery (a per-org key can't, since the org is unknown). Redelivery →
+    // no-op via onConflictDoNothing.
     uniqueIndex("background_jobs_idempotency_uidx")
-      .on(t.organizationId, t.type, t.idempotencyKey)
+      .on(t.type, t.idempotencyKey)
       .where(sql`idempotency_key IS NOT NULL`),
     // Org-isolation RLS — mirrors rc_sync_jobs. FORCE RLS is hand-appended to
     // the generated SQL per AGENTS.md §10a.

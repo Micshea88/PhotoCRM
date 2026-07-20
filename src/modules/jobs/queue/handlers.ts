@@ -1,6 +1,8 @@
 import "server-only"
 import { executeWorkflow } from "@/modules/workflows/executor"
 import { ingestNylasWebhook } from "@/modules/email-connections/nylas-inbound"
+import { ingestInboundFromEvent } from "@/modules/email-log/inbound"
+import { ingestResendDeliveryEvent } from "@/modules/email-delivery/resend-delivery"
 import type { HandlerRegistry, JobHandler } from "./runner"
 
 /**
@@ -47,9 +49,49 @@ const nylasWebhookHandler: JobHandler = async (_tx, job) => {
   await ingestNylasWebhook(rawBody, signature)
 }
 
+/** Resend delivery event types (vs `email.received` inbound). */
+const RESEND_DELIVERY_TYPES = new Set(["email.bounced", "email.complained", "email.delivered"])
+
+/**
+ * Runs a `resend_webhook` job: the async half of the Resend durable pipeline.
+ * This is a tenant-agnostic system-inbox job (null org) — Resend's thin payload
+ * carries only ids (a `data.email_id`, the Svix headers), never message content,
+ * and the org needs ENRICHMENT to resolve (fetch the email + contact-match /
+ * correlate a sent message), so per the claim-check standard the tenant is
+ * resolved HERE, in the worker, not at the edge.
+ *
+ * The edge already Svix-verified the body; we parse and branch by type, exactly
+ * as the old inline route did. `ingestResendDeliveryEvent` (dedups on the Svix
+ * id → email_delivery_events unique) and `ingestInboundFromEvent` → `process-
+ * InboundEmail` (dedups on message id, resolves + fail-closes the org) are each
+ * idempotent, so a reaper re-run after a crash can't double-process; both open
+ * their own org-scoped transactions once they resolve the tenant.
+ */
+const resendWebhookHandler: JobHandler = async (_tx, job) => {
+  const p = job.payload as { rawBody?: unknown; svixId?: unknown } | null
+  const rawBody = p && typeof p.rawBody === "string" ? p.rawBody : null
+  const svixId = p && typeof p.svixId === "string" ? p.svixId : null
+  if (!rawBody) {
+    throw new Error("resend_webhook job is missing payload.rawBody")
+  }
+  let event: unknown
+  try {
+    event = JSON.parse(rawBody)
+  } catch {
+    return // malformed body — drop (the edge already verified the signature)
+  }
+  const type = (event as { type?: string }).type
+  if (type && RESEND_DELIVERY_TYPES.has(type)) {
+    await ingestResendDeliveryEvent(event, svixId)
+  } else {
+    await ingestInboundFromEvent(event)
+  }
+}
+
 /** The central registry the queue drain (`processDueJobs`) dispatches on. New
- *  job types (resend_webhook, outbound_email, …) register their handler here. */
+ *  job types (outbound_email, …) register their handler here. */
 export const jobHandlers: HandlerRegistry = {
   workflow_execution: workflowExecutionHandler,
   nylas_webhook: nylasWebhookHandler,
+  resend_webhook: resendWebhookHandler,
 }

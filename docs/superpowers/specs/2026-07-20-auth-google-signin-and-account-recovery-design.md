@@ -44,6 +44,12 @@ Three self-contained pieces, built in order (A → B → C), likely three small 
 
 ## A. Google sign-in
 
+**Google is an OPTIONAL alternate, not a replacement.** Email + password (Better Auth `emailAndPassword`,
+where the email is the login identifier — no separate "username" field, matching every competitor) remains
+the default login and stays exactly as it is today. Google sign-in is an additional "Continue with Google"
+option; a user who declines Google just signs up / signs in with email + password. Nothing about the existing
+email/password flow is removed or changed.
+
 **Server** (`src/lib/auth.ts`): add
 
 ```ts

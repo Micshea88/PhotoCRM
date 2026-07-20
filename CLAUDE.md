@@ -11,4 +11,4 @@
 
 ## Outstanding work
 
-The repo ships with `TODO.md` at the root — the audit punch list. The Critical block (security + RPC exposure + CI gaps) is fixed; several High items (multi-region rate-limit storage, audit-on-mutate static enforcement, partial indexes, password breach check, hashed verification tokens) are still open.
+The repo ships with `TODO.md` at the root — the audit punch list. The Critical block (security + RPC exposure + CI gaps) is fixed; several High items (multi-region rate-limit storage, partial indexes, password breach check, hashed verification tokens) are still open. (Audit-on-mutate static enforcement is now done — `scripts/check-actions.mjs` enforces `audit()` on every action.)

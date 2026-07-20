@@ -212,6 +212,17 @@ export const resendSharePasscode = orgAction
       recipientEmail: to,
       actorUserId: ctx.session.user.id,
     })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "files.share_passcode_resent",
+      { resourceType: "file_share_link", resourceId: link.id, metadata: { recipientEmail: to } },
+    )
     revalidatePath("/files")
     return { ok: true, to }
   })
@@ -243,6 +254,21 @@ export const sendPasscodeToRecipient = orgAction
       recipientEmail: parsedInput.email,
       actorUserId: ctx.session.user.id,
     })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "files.share_passcode_alt_sent",
+      {
+        resourceType: "file_share_link",
+        resourceId: link.id,
+        metadata: { recipientEmail: parsedInput.email },
+      },
+    )
     revalidatePath("/files")
     return { ok: true }
   })
@@ -308,6 +334,21 @@ export const extendShareLink = orgAction
       actorUserId: ctx.session.user.id,
       metadata: { expiration: parsedInput.expiration },
     })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "files.share_extended",
+      {
+        resourceType: "file_share_link",
+        resourceId: link.id,
+        metadata: { expiration: parsedInput.expiration },
+      },
+    )
     revalidatePath("/files")
     return { ok: true, expiresAt }
   })
@@ -329,6 +370,17 @@ export const manualUnlockShareLink = orgAction
       eventType: "manual_unlock",
       actorUserId: ctx.session.user.id,
     })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "files.share_unlocked",
+      { resourceType: "file_share_link", resourceId: link.id },
+    )
     revalidatePath("/files")
     return { ok: true }
   })

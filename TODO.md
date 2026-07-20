@@ -24,6 +24,7 @@ Tags: `[sec]` security · `[db]` database/migrations · `[ci]` CI/verification �
   - [x] `eslint.config.mjs` bans default exports in `src/modules/**` and `src/lib/**` via `no-restricted-syntax`.
   - [x] `no-restricted-imports` now blocks `drizzle-orm` (bare + subpath), `@/lib/db`, `@/db`, `@/db/*`, and `@/modules/*/schema` from `app/**`. Documented exceptions: `app/api/jobs/**`, `app/api/files/**`, `app/api/blob/**`, `app/api/auth/**`.
   - [x] `check-actions.mjs` enforces `.inputSchema(...)` on every action chain.
+  - [x] `check-actions.mjs` also enforces `audit()` on every action (policy 9 / hard rule #5) — an action must call `audit()` or sit in the `AUDIT_EXEMPT` registry with a reason; the registry is guarded against stale entries. Closes the "audit-on-mutate static enforcement" High item. _(2026-07-20)_
   - [x] AGENTS.md updated with the cron/queue/blob exception spelled out.
 - [x] **C12** `[prod]` `src/modules/jobs/queue.ts` now carries a loud header marking the queue as a non-durable stub and logs a warn on every production enqueue. Skill docs and README will be updated to point at Vercel Queues / Inngest / Trigger.dev as the real swap-in.
 

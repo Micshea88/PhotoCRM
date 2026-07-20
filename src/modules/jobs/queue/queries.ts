@@ -89,6 +89,11 @@ export interface ClaimableJob {
   maxAttempts: number
 }
 
+/** A successfully claimed job. `leaseToken` fences later completion;
+ *  `idempotencyKey` is handed to the handler so it can pass it through to an
+ *  external provider for exactly-once side effects. */
+export type ClaimedJob = ClaimableJob & { leaseToken: string; idempotencyKey: string | null }
+
 /**
  * Read due pending jobs (scheduled_for ≤ now), oldest first. System read across
  * ALL orgs — intended to run as the base (BYPASSRLS) connection, same as
@@ -127,7 +132,7 @@ export async function claimJob(
   tx: DbHandle,
   id: string,
   leaseToken: string,
-): Promise<(ClaimableJob & { leaseToken: string }) | null> {
+): Promise<ClaimedJob | null> {
   const rows = await tx
     .update(backgroundJobs)
     .set({
@@ -151,6 +156,7 @@ export async function claimJob(
       payload: backgroundJobs.payload,
       attempts: backgroundJobs.attempts,
       maxAttempts: backgroundJobs.maxAttempts,
+      idempotencyKey: backgroundJobs.idempotencyKey,
       leaseToken: backgroundJobs.leaseToken,
     })
   const row = rows[0]

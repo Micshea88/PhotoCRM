@@ -1,44 +1,31 @@
 /**
- * Unit tests for the refactored Resend webhook route (Task 6 Part 3):
+ * Unit tests for the Resend webhook route:
  * `POST` in `app/api/webhooks/resend/inbound/route.ts`.
+ *
+ * The route now follows the durable-queue "claim-check" pipeline: it
+ * Svix-verifies and ENQUEUES a null-org `resend_webhook` system job — it does
+ * NOT process inline. The delivery-vs-inbound branch moved to the async queue
+ * handler (covered by `tests/integration/resend-webhook-queue.test.ts`).
  *
  * Seams (all mocked):
  *   - `verifyResendWebhook` — signature verification (no real Svix)
- *   - `ingestInboundFromEvent` — inbound email path
- *   - `ingestResendDeliveryEvent` — delivery event path
- *
- * Handler-level tests (ingestResendDeliveryEvent logic) live in
- * `tests/unit/resend-delivery-handler.test.ts` to avoid a single-file
- * mock conflict (the route tests mock ingestResendDeliveryEvent as a whole
- * while the handler tests need the real implementation with mocked deps).
+ *   - `enqueueJobInContext` — the durable-queue producer
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 // ─── hoisted mocks ─────────────────────────────────────────────────────────
 
 const mockVerifyResendWebhook = vi.hoisted(() => vi.fn())
-const mockIngestInboundFromEvent = vi.hoisted(() => vi.fn())
-const mockIngestResendDeliveryEvent = vi.hoisted(() => vi.fn())
-
-const mockEnv = vi.hoisted(() => ({
-  RESEND_API_KEY: "re_test_key",
-  RESEND_FROM_EMAIL: "noreply@mail.kandkphotography.com",
-  RESEND_WEBHOOK_SECRET: "whsec_test_secret",
-}))
+const mockEnqueueJobInContext = vi.hoisted(() => vi.fn())
 
 // ─── vi.mock declarations ──────────────────────────────────────────────────
 
 vi.mock("@/modules/email-log/inbound", () => ({
   verifyResendWebhook: mockVerifyResendWebhook,
-  ingestInboundFromEvent: mockIngestInboundFromEvent,
 }))
-
-vi.mock("@/modules/email-delivery/resend-delivery", () => ({
-  ingestResendDeliveryEvent: mockIngestResendDeliveryEvent,
+vi.mock("@/modules/jobs/queue/runner", () => ({
+  enqueueJobInContext: mockEnqueueJobInContext,
 }))
-
-vi.mock("@/lib/env", () => ({ env: mockEnv }))
-vi.mock("@/lib/db", () => ({ db: {} }))
 vi.mock("@/lib/log", () => ({
   log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
@@ -64,94 +51,49 @@ function makeRequest(body: string, svixId = "svix_test_id") {
 
 // ─── Route tests ──────────────────────────────────────────────────────────
 
-describe("POST /api/webhooks/resend/inbound — route branching (Part 3)", () => {
+describe("POST /api/webhooks/resend/inbound — durable-queue routing", () => {
   beforeEach(() => {
     mockVerifyResendWebhook.mockReset()
-    mockIngestInboundFromEvent.mockReset()
-    mockIngestResendDeliveryEvent.mockReset()
-
-    mockIngestInboundFromEvent.mockResolvedValue(undefined)
-    mockIngestResendDeliveryEvent.mockResolvedValue(undefined)
+    mockEnqueueJobInContext.mockReset()
+    mockEnqueueJobInContext.mockResolvedValue({ id: "job_1", enqueued: true })
   })
 
-  it("acks 200 when verifyResendWebhook returns null (bad signature)", async () => {
+  it("acks 200 and does NOT enqueue when the signature is bad", async () => {
     mockVerifyResendWebhook.mockReturnValue(null)
 
     const res = await POST(makeRequest('{"type":"email.received"}'))
 
     expect(res.status).toBe(200)
-    const body = (await res.json()) as unknown
-    expect(body).toEqual({ ok: true })
-    expect(mockIngestInboundFromEvent).not.toHaveBeenCalled()
-    expect(mockIngestResendDeliveryEvent).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ ok: true })
+    expect(mockEnqueueJobInContext).not.toHaveBeenCalled()
   })
 
-  it("routes email.bounced to ingestResendDeliveryEvent with svix-id as providerEventId", async () => {
+  it("enqueues a null-org resend_webhook job keyed on the svix-id for a verified event", async () => {
     const event = { type: "email.bounced", data: { email_id: "re_abc" } }
     mockVerifyResendWebhook.mockReturnValue(event)
+    const body = JSON.stringify(event)
 
-    const res = await POST(makeRequest(JSON.stringify(event), "svix_bounce_42"))
+    const res = await POST(makeRequest(body, "svix_bounce_42"))
 
     expect(res.status).toBe(200)
-    expect(mockIngestResendDeliveryEvent).toHaveBeenCalledOnce()
-    expect(mockIngestResendDeliveryEvent).toHaveBeenCalledWith(event, "svix_bounce_42")
-    expect(mockIngestInboundFromEvent).not.toHaveBeenCalled()
+    expect(mockEnqueueJobInContext).toHaveBeenCalledOnce()
+    // Tenant-agnostic system-inbox job; raw body + svix id in the payload; the
+    // handler resolves the tenant + branches by type.
+    expect(mockEnqueueJobInContext).toHaveBeenCalledWith({
+      organizationId: null,
+      type: "resend_webhook",
+      payload: { rawBody: body, svixId: "svix_bounce_42" },
+      idempotencyKey: "svix_bounce_42",
+    })
   })
 
-  it("routes email.complained to ingestResendDeliveryEvent", async () => {
-    const event = { type: "email.complained", data: { email_id: "re_xyz" } }
-    mockVerifyResendWebhook.mockReturnValue(event)
+  it("acks 200 even when the enqueue throws (never disables the endpoint)", async () => {
+    mockVerifyResendWebhook.mockReturnValue({ type: "email.delivered" })
+    mockEnqueueJobInContext.mockRejectedValue(new Error("DB unavailable"))
 
-    const res = await POST(makeRequest(JSON.stringify(event)))
-
-    expect(res.status).toBe(200)
-    expect(mockIngestResendDeliveryEvent).toHaveBeenCalledOnce()
-    expect(mockIngestInboundFromEvent).not.toHaveBeenCalled()
-  })
-
-  it("routes email.delivered to ingestResendDeliveryEvent", async () => {
-    const event = { type: "email.delivered", data: { email_id: "re_xyz" } }
-    mockVerifyResendWebhook.mockReturnValue(event)
-
-    const res = await POST(makeRequest(JSON.stringify(event)))
+    const res = await POST(makeRequest('{"type":"email.delivered"}'))
 
     expect(res.status).toBe(200)
-    expect(mockIngestResendDeliveryEvent).toHaveBeenCalledOnce()
-    expect(mockIngestInboundFromEvent).not.toHaveBeenCalled()
-  })
-
-  it("routes email.received to ingestInboundFromEvent", async () => {
-    const event = { type: "email.received", data: { email_id: "re_inbound" } }
-    mockVerifyResendWebhook.mockReturnValue(event)
-
-    const res = await POST(makeRequest(JSON.stringify(event)))
-
-    expect(res.status).toBe(200)
-    expect(mockIngestInboundFromEvent).toHaveBeenCalledOnce()
-    expect(mockIngestInboundFromEvent).toHaveBeenCalledWith(event)
-    expect(mockIngestResendDeliveryEvent).not.toHaveBeenCalled()
-  })
-
-  it("routes unknown event type to ingestInboundFromEvent (no-op path)", async () => {
-    const event = { type: "email.opened", data: {} }
-    mockVerifyResendWebhook.mockReturnValue(event)
-
-    const res = await POST(makeRequest(JSON.stringify(event)))
-
-    expect(res.status).toBe(200)
-    expect(mockIngestInboundFromEvent).toHaveBeenCalledOnce()
-    expect(mockIngestResendDeliveryEvent).not.toHaveBeenCalled()
-  })
-
-  it("acks 200 even when the handler throws", async () => {
-    const event = { type: "email.delivered", data: { email_id: "re_xyz" } }
-    mockVerifyResendWebhook.mockReturnValue(event)
-    mockIngestResendDeliveryEvent.mockRejectedValue(new Error("DB unavailable"))
-
-    const res = await POST(makeRequest(JSON.stringify(event)))
-
-    expect(res.status).toBe(200)
-    const body = (await res.json()) as unknown
-    expect(body).toEqual({ ok: true })
+    expect(await res.json()).toEqual({ ok: true })
   })
 })

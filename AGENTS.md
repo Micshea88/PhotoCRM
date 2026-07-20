@@ -95,10 +95,30 @@ To satisfy LAW 1 (persona separation) for live-consultation / client-facing disp
 - Assert the **row is denser** (e.g. the preview clamped to one line) — not that a density attribute is present.
 - Assert the **quote was removed** from the cleaned string — not that a trim function was called.
 
-**COROLLARY — real payloads for external input:** any code that parses **EXTERNAL input** (email bodies, webhook payloads, imported files) MUST be tested against **REAL CAPTURED PAYLOADS**, not hand-written fixtures. Hand-written fixtures encode the shape the author *imagined*, and pass on code that fails on the shape that actually arrives. **A test that passes on a fixture that does not resemble production input proves nothing.**
+**COROLLARY — real payloads for external input:** any code that parses **EXTERNAL input** (email bodies, webhook payloads, imported files) MUST be tested against **REAL CAPTURED PAYLOADS**, not hand-written fixtures. Hand-written fixtures encode the shape the author _imagined_, and pass on code that fails on the shape that actually arrives. **A test that passes on a fixture that does not resemble production input proves nothing.**
 
-- **Why this law exists (worked examples, all shipped through clean reviews):** three notification features shipped broken because their tests verified *state* not *behavior* — sort didn't sort (test asserted the mapped param, not the rendered order), compact wasn't compact (test asserted a `data-density` attribute, not the row density), and the email cleaner didn't clean real Gmail HTML (fixtures were newline-separated + entity-free; the real payload is single-line + entity-encoded). See `docs/cleanup-and-tech-debt.md` for the full post-mortem.
+- **Why this law exists (worked examples, all shipped through clean reviews):** three notification features shipped broken because their tests verified _state_ not _behavior_ — sort didn't sort (test asserted the mapped param, not the rendered order), compact wasn't compact (test asserted a `data-density` attribute, not the row density), and the email cleaner didn't clean real Gmail HTML (fixtures were newline-separated + entity-free; the real payload is single-line + entity-encoded). See `docs/cleanup-and-tech-debt.md` for the full post-mortem.
 - **Trigger:** the D1/D2/D3 production defects (2026-07-10).
+
+## Standing backend policies (LOCKED — apply to EVERY backend change)
+
+Twelve backend policies, checked like the design laws. Full context + status in
+`docs/backend-audit-backlog.md`.
+
+1. **RLS tests run under a NOBYPASSRLS role** via helper-level `SET LOCAL ROLE app_authenticated`.
+2. **Every webhook:** verify-sig → enqueue → ACK → async → idempotent-on-event-id → DLQ + reconcile. Never inline. `rc-sync` is the template.
+3. **Every job:** idempotent + atomic claim (`UPDATE…WHERE…RETURNING` / `FOR UPDATE SKIP LOCKED`) + lease + reaper; `retry_after` > max runtime.
+4. **Every merge re-parents ALL child relations, enumerated from the FKs, test-enforced.** New child table ⇒ merge engine + re-parent test updated in the same PR.
+5. **Every outbound provider call** goes through a rate-limited, 429-aware, retrying client.
+6. **No `OFFSET` on tenant-scoped lists** — keyset on `(sort_col, id)`; everything paginated/capped including tasks and the activity feed.
+7. **"Queryable ⇒ not free text"** — enum/lookup + normalize-on-write for lead source, company category, lost reason.
+8. **Permission checks centralized** (`orgAction.withPermission(key)`); financial/sensitive actions carry an action-layer check AND RLS.
+9. **`audit()` on every state-changing action**, enforced via `check-actions.mjs`, not convention.
+10. **Externally-consumed endpoints versioned `/api/v1`** + shared rate-limit (Upstash) before multi-region.
+11. **PII + payments baseline:** MFA, session expiry reconciled, password **min 8 + composition (≥1 uppercase / ≥1 number / ≥1 special), requirements shown in the UI**, HIBP wired (HIBP is the load-bearing control; composition is competitor-parity, a deliberate deviation from NIST — see `docs/decisions-2026-07-16.md` → Passwords, revised 2026-07-19).
+12. **PM frontend when it ships:** virtualization + optimistic UI + production scale-seed in v1 (LAW 2). Don't retrofit.
+
+> **Enforcement caveat (2026-07-15):** "enforced" / "CI-enforced" for items above (esp. #1, #9) currently means the **local `lefthook` pre-push hook only** — GitHub Actions has never run on this repo. Making these remote-gated is tracked as A1b in `docs/backend-audit-backlog.md`.
 
 ## Build-planning audits — STANDING PROCESS (every audit)
 
@@ -161,6 +181,7 @@ These are enforced by lint, types, hooks, or CI. Don't try to work around them �
 7. **No `console.*` in `src/` and `app/`.** Use `import { log } from "@/lib/log"` (pino). Tests, scripts, and `instrumentation*.ts` can use `console.*`. Enforced by ESLint.
 8. **No default exports in `src/modules/**`and`src/lib/**`.** Named exports only. Enforced by ESLint (`no-restricted-syntax` on `ExportDefaultDeclaration`).
 9. **Migrations on `main` are immutable.** Never edit a committed migration file. Generate a new one with `pnpm db:generate`.
+   9a. **The rule stands absolutely for any migration that CREATES, ALTERS, or DROPS schema** — that's the schema-divergence disaster it guards against (a DB on the old version ending up shaped differently from a fresh one on the new version). **One-time authorized exception (2026-07-18, migration `0015`):** removed a **non-schema** `DO`-block self-test (an RLS assertion, created nothing) that ran `SET LOCAL ROLE pathway_app` — a role no migration creates (only `scripts/postgres-init.sh`, dev-only) — which broke **build-from-zero** on any cluster without that role (CI, a fresh prod rebuild). Grounds: a DO-block assertion produces **zero schema divergence** when removed (fresh cluster → byte-identical schema to prod), so this is a case Rule #9 never aimed at, not an override; drizzle also keys applied migrations on the journal timestamp, never a content hash (`drizzle-orm` `pg-core/dialect.js` `migrate()`), so editing an already-applied file is inert on prod. The assertion was **moved, not deleted** — it lives in `tests/integration/assignment-scoped-rls.test.ts` ("cross-org attack"). Full record: `docs/backend-audit-backlog.md` → A2/migration portability. **This is the ONLY sanctioned in-place edit besides §10a's `FORCE` append; any other requires the same explicit owner authorization + a schema-divergence-is-zero argument.**
 10. **No destructive schema changes in a single migration.** Use the expand → migrate → contract pattern (see `docs/architecture.md`).
     10a. **Never hand-write a migration `.sql` from scratch, and never hand-edit a snapshot.** Schema changes go through `pnpm db:generate` so the `.sql` and the matching `meta/NNNN_snapshot.json` are written together. Drift between them is what produced the 0035→0038 snapshot stall that bit Item 2. Convention: declare RLS in TS via `pgPolicy(...)` inside the table's extra-config array + `.enableRLS()` on the table — `db:generate` emits the policy SQL and keeps the snapshot in sync. **One hand-edit is permitted**: appending `ALTER TABLE "x" FORCE ROW LEVEL SECURITY;` after the auto-generated `CREATE POLICY` (drizzle-kit emits ENABLE but not FORCE, and FORCE is what makes RLS apply to the table owner). The CI guard in `pnpm verify --tier=1` catches drift before it lands.
 11. **Sage never connects to a production database from his machine.** `src/lib/db.ts` parses `DATABASE_URL` and refuses to start in development unless the host is in the local-allowlist. `scripts/seed.ts` does the same check. Production credentials live only in Vercel project env vars.

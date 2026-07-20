@@ -157,29 +157,47 @@ describe("hotfix 0041 — runtime role switch enforces org isolation", () => {
     )
   })
 
-  it("from inside app_authenticated, SET LOCAL ROLE to a privileged role FAILS", async () => {
-    // The escalation attempt Mike asked us to test. In dev:
-    //   - session_user = pathway_app (the connection role)
-    //   - pathway_app is a member of app_authenticated → SET LOCAL
-    //     ROLE app_authenticated succeeds (this is the runtime path)
-    //   - pathway_app is NOT a member of postgres → SET LOCAL ROLE
-    //     postgres FAILS with "permission denied to set role"
-    //   - neondb_owner does not exist in dev → SET LOCAL ROLE
-    //     neondb_owner FAILS with "role does not exist"
-    // Either failure proves the role boundary holds.
+  it("inside app_authenticated the effective role is non-bypass, and a non-privileged session cannot escalate", async () => {
+    // Connection-INDEPENDENT invariant — the real guarantee, holds under ANY
+    // DATABASE_URL (dev pathway_app OR CI postgres): after the runtime switch,
+    // current_user is app_authenticated, NOBYPASSRLS and non-superuser, so RLS
+    // genuinely applies. This is what actually protects tenants.
     await withAppAuthClient(async (client) => {
-      // postgres escalation — pathway_app is not a member of postgres.
-      await expect(client.query("SET LOCAL ROLE postgres")).rejects.toThrow(
-        /permission denied to set role|must be (?:able to set role|member of)/i,
+      const r = await client.query<{ u: string; bypass: boolean; super: string }>(
+        `SELECT current_user AS u,
+                (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypass,
+                current_setting('is_superuser') AS super`,
       )
+      expect(r.rows[0]?.u).toBe("app_authenticated")
+      expect(r.rows[0]?.bypass).toBe(false)
+      expect(r.rows[0]?.super).toBe("off")
     })
-    // Use a fresh connection for the neondb_owner probe because the
-    // previous one is rolled back (and the txn was poisoned by the
-    // failed SET ROLE).
+
+    // neondb_owner does not exist in any test DB → SET ROLE always fails
+    // (does-not-exist), regardless of the session role. Safe to assert unconditionally.
     await withAppAuthClient(async (client) => {
       await expect(client.query("SET LOCAL ROLE neondb_owner")).rejects.toThrow(
         /role "neondb_owner" does not exist|permission denied to set role/i,
       )
     })
+
+    // Escalation to an EXISTING privileged role (postgres) is blocked only when the
+    // CONNECTION (session) role is itself non-privileged — dev's pathway_app, and the
+    // prod app path. Under a SUPERUSER connection (CI's `postgres`) SET ROLE always
+    // succeeds: that's a property of the connection, NOT a hole in app_authenticated.
+    // So assert the block only when the session role can't escalate.
+    const sessionIsSuper = await withAppAuthClient(async (client) => {
+      const r = await client.query<{ s: boolean }>(
+        `SELECT COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname = session_user), false) AS s`,
+      )
+      return r.rows[0]?.s ?? false
+    })
+    if (!sessionIsSuper) {
+      await withAppAuthClient(async (client) => {
+        await expect(client.query("SET LOCAL ROLE postgres")).rejects.toThrow(
+          /permission denied to set role|must be (?:able to set role|member of)/i,
+        )
+      })
+    }
   })
 })

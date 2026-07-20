@@ -4,6 +4,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import { createId } from "@paralleldrive/cuid2"
 import type * as schema from "@/db/schema"
 import { auditLog } from "@/modules/audit/schema"
+import { enqueueJob } from "@/modules/jobs/queue/queries"
 import { workflows, workflowExecutions } from "./schema"
 import { type TriggerType } from "./types"
 
@@ -159,6 +160,15 @@ export async function matchAuditEventsToWorkflows(
       if (insertResult.length > 0 && insertResult[0]) {
         executionsCreated += 1
         createdExecutionIds.push(insertResult[0].id)
+        // Enqueue the durable job that will run this execution. Reusing the
+        // execution's idempotency key means a re-matched event (or a retried
+        // matcher tick) can't create a second job for the same execution.
+        await enqueueJob(db, {
+          organizationId: row.organizationId,
+          type: "workflow_execution",
+          payload: { executionId: insertResult[0].id },
+          idempotencyKey,
+        })
       } else {
         duplicatesSkipped += 1
       }

@@ -1,5 +1,7 @@
 # Multi-Tenant Isolation Remediation Plan
 
+> **⚠️ CORRECTION (2026-07-15) — "CI guard" in this doc means the LOCAL pre-push/pre-commit hook, NOT GitHub Actions.** GitHub Actions has never run on this repo (`actions/runs` → `total_count: 0`; the only commit check is Vercel's build). So `check-rls-force.mjs` and the RLS suite are enforced only by the pusher's local `lefthook` hook — not a remote required check. And critically: **the RLS integration suite has never actually run in remote CI at all** (it runs locally as `pathway_app`, NOBYPASSRLS, where it IS genuine). Being made a real remote gate is tracked as A1b in `docs/backend-audit-backlog.md`. Read "CI"/"CI guard" below as "pusher-local pre-push hook."
+
 **Status:** ACTIVE remediation. Owner standard: **multi-tenant-correct from the start — NO deferrals.** Every finding below gets fixed; none is accepted as "single-tenant-safe."
 
 **Source:** four read-only isolation audits (2026-07-07) — RLS table coverage, cross-org query/resolver classification, deferred-isolation doc scan, and an RLS-policy-correctness leak hunt. Branch: `fix/multi-tenant-isolation` (stacked on `feat/email-round-notification-center`; merges together after Tier 1 + Tier 2 reviewed).

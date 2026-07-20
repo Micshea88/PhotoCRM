@@ -18,6 +18,31 @@ import { Pool, type PoolClient } from "pg"
  *   - Pass `orgId` as a string (Postgres `set_config` is text-only).
  *   - The transaction always ROLLBACKs at the end; tests cannot mutate state.
  */
+/**
+ * THE durable guarantee for the whole RLS suite. `SET LOCAL ROLE app_authenticated`
+ * (NOBYPASSRLS) as the FIRST statement of the transaction — exactly what production
+ * does at the top of every read (`org-context.ts:122`) and write (`safe-action.ts:210`)
+ * transaction. This makes every probe execute under the non-bypass role REGARDLESS of
+ * what `DATABASE_URL` connects as:
+ *   - locally the connection is `pathway_app` (already NOBYPASSRLS, and a member of
+ *     `app_authenticated` via migration `0041`) → the switch drops into an equivalent
+ *     non-bypass role; behaviour is unchanged (the suite was already genuine locally).
+ *   - in CI the connection is `postgres` (SUPERUSER + BYPASSRLS) → WITHOUT this switch
+ *     every FORCE-RLS policy is a no-op and the isolation assertions pass vacuously on
+ *     an empty table / fail falsely on a seeded one. WITH it, RLS genuinely applies.
+ * A future bad env var repointing `DATABASE_URL` at a bypass role can no longer make the
+ * suite vacuous — the HELPER, not the connection string, is the guarantee.
+ *
+ * Seeding runs under `app_authenticated` too, and that is safe/proven: the tests have
+ * always seeded under a non-bypass role (`pathway_app`) locally, setting `app.current_org`
+ * before each org-scoped insert so the policy WITH CHECK passes. (This is why the
+ * "seed as the connection role THEN switch" split that `withAppAuthClient` uses is
+ * unnecessary in the shared helpers.)
+ */
+async function switchToAppRole(client: PoolClient): Promise<void> {
+  await client.query("SET LOCAL ROLE app_authenticated")
+}
+
 export async function withRawOrgContext<T>(
   args: { orgId: string; role: string; userId?: string | null; viewAllEvents?: boolean },
   fn: (client: PoolClient) => Promise<T>,
@@ -30,6 +55,7 @@ export async function withRawOrgContext<T>(
   try {
     await client.query("BEGIN")
     try {
+      await switchToAppRole(client)
       await client.query("SELECT set_config('app.current_org', $1, true)", [args.orgId])
       await client.query("SELECT set_config('app.current_role', $1, true)", [args.role])
       await client.query("SELECT set_config('app.current_user_id', $1, true)", [args.userId ?? ""])
@@ -72,6 +98,7 @@ export async function withRawClient<T>(fn: (client: PoolClient) => Promise<T>): 
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    await switchToAppRole(client)
     await client.query("SELECT set_config('app.current_view_all_events', 'true', true)")
     try {
       return await fn(client)

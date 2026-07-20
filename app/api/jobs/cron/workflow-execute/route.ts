@@ -1,93 +1,37 @@
-import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { verifyCronAuth } from "@/modules/jobs/cron-auth"
-import { workflowExecutions, workflows } from "@/modules/workflows/schema"
-import { executeWorkflow } from "@/modules/workflows/executor"
+import { processDueJobs } from "@/modules/jobs/queue/runner"
+import { jobHandlers } from "@/modules/jobs/queue/handlers"
 import { log } from "@/lib/log"
 
 /**
- * Cron sweep over `workflow_executions WHERE status = 'pending'`.
- * For each pending row, set the org's RLS context (using the workflow's
- * organizationId — trusted because the matcher only writes
- * organizationId from the audit row source) and call executeWorkflow.
+ * Drains the generic durable job queue: reap expired leases (reclaim crashed /
+ * hung jobs), then atomically claim + run due jobs. Today the queue carries
+ * `workflow_execution` jobs (enqueued by the trigger-matcher); inbound webhooks
+ * and outbound sends route through the same drain as they're migrated.
  *
- * Idempotency is layered:
- *   - The execution's terminal-status check inside executeWorkflow
- *     prevents re-running succeeded/failed/deferred rows.
- *   - The per-step stepResults check prevents re-running individual
- *     succeeded steps within a partially-completed execution.
+ * This REPLACES the former direct `SELECT … workflow_executions WHERE
+ * status='pending'` sweep, which double-processed on overlapping cron ticks
+ * (non-atomic mark-running → duplicate client email). The queue's atomic claim
+ * is now the concurrency guard, and the reaper + per-step send idempotency keys
+ * give crash-recovery without double-send.
  *
- * This V1 design is a single-pod sweep; production should swap the
- * sweep for a queue dispatch (Vercel Queues / Inngest / Trigger.dev)
- * per src/modules/jobs/README.md. The executor function works
- * unchanged with either dispatch model.
+ * Runs on the base connection (BYPASSRLS in prod) so the reap + poll sweep every
+ * org; each job is processed under its own app_authenticated, org-scoped tx.
  */
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return new Response("Unauthorized", { status: 401 })
   }
   try {
-    // Read pending executions across all orgs (system-context read; the
-    // cron connection bypasses RLS via the admin role in production).
-    const pending = await db
-      .select({
-        id: workflowExecutions.id,
-        organizationId: workflowExecutions.organizationId,
-        workflowId: workflowExecutions.workflowId,
-      })
-      .from(workflowExecutions)
-      .where(eq(workflowExecutions.status, "pending"))
-      .limit(100)
-
-    let processed = 0
-    let succeeded = 0
-    let deferred = 0
-    let failed = 0
-    for (const exec of pending) {
-      // Verify the workflow still exists + is in the same org (no cross-
-      // org corruption possible because the matcher writes from a single
-      // audit row's organizationId — but defense in depth).
-      const [wf] = await db
-        .select({ id: workflows.id })
-        .from(workflows)
-        .where(
-          and(eq(workflows.id, exec.workflowId), eq(workflows.organizationId, exec.organizationId)),
-        )
-        .limit(1)
-      if (!wf) {
-        log.warn({ executionId: exec.id }, "[workflow-execute] workflow missing — skipping")
-        continue
-      }
-
-      // Open a tx with the org's RLS context, then execute.
-      await db.transaction(async (tx) => {
-        // Drop into the NOBYPASSRLS app role FIRST (before any GUC) so FORCE RLS
-        // genuinely enforces on this system-context write — mirroring
-        // processInboundEmail (src/modules/email-log/inbound.ts:260-262).
-        // Without the role switch the BYPASSRLS owner silently skips RLS in prod.
-        await tx.execute(sql`SET LOCAL ROLE app_authenticated`)
-        await tx.execute(sql`SELECT set_config('app.current_org', ${exec.organizationId}, true)`)
-        await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
-        // System context sees every event: the contacts/projects/tasks RLS
-        // overlay (migration 0047) keys write access off app.current_view_all_events,
-        // NOT app.current_role — so update_field / create_task steps need this
-        // set to 'true' or they affect 0 rows once RLS is active.
-        await tx.execute(sql`SELECT set_config('app.current_view_all_events', 'true', true)`)
-        const result = await executeWorkflow(tx, exec.id)
-        processed += 1
-        if (result.status === "succeeded") succeeded += 1
-        else if (result.status === "deferred") deferred += 1
-        else if (result.status === "failed") failed += 1
-      })
-    }
-
-    return Response.json({ ok: true, processed, succeeded, deferred, failed })
+    const result = await processDueJobs(jobHandlers, { limit: 100, db })
+    return Response.json({ ok: true, ...result })
   } catch (err) {
     log.error(
       { err: err instanceof Error ? { message: err.message, stack: err.stack } : err },
-      "[workflow-execute] failed",
+      "[workflow-execute] queue drain failed",
     )
-    return Response.json({ ok: false, error: "executor failed" }, { status: 500 })
+    return Response.json({ ok: false, error: "drain failed" }, { status: 500 })
   }
 }
 

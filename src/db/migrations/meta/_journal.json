@@ -456,6 +456,20 @@
       "when": 1783565601099,
       "tag": "0064_cold_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1784512559598,
+      "tag": "0065_magenta_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1784519632961,
+      "tag": "0066_wandering_silverclaw",
+      "breakpoints": true
     }
   ]
 }

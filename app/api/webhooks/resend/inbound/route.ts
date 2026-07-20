@@ -1,30 +1,30 @@
 import { log } from "@/lib/log"
-import { ingestInboundFromEvent, verifyResendWebhook } from "@/modules/email-log/inbound"
-import { ingestResendDeliveryEvent } from "@/modules/email-delivery/resend-delivery"
+import { verifyResendWebhook } from "@/modules/email-log/inbound"
+import { enqueueJobInContext } from "@/modules/jobs/queue/runner"
 
 /**
- * Resend webhook receiver (Task 6 Part 3 — branched handler).
+ * Resend webhook receiver (inbound `email.received` + delivery events on the
+ * same Svix-signed endpoint).
  *
- * Handles both inbound-email events (`email.received`) and outbound delivery
- * events (`email.bounced`, `email.complained`, `email.delivered`) on the same
- * endpoint. Resend signs ALL webhooks with Svix, so we verify ONCE here and
- * branch by `event.type` — no double-verify:
+ * Follows the standard durable-webhook pipeline (policy 2), NOT inline
+ * processing. Unlike Nylas, a Resend event's ORG can't be resolved by a cheap
+ * edge lookup — inbound needs to fetch the email + contact-match, and delivery
+ * correlates to a sent message — so this uses the tenant-agnostic
+ * "claim-check" inbox: the edge does the minimum and the WORKER resolves the
+ * tenant.
  *
- *   - Delivery types  → `ingestResendDeliveryEvent` (Task 6 Part 3 / Task 4)
- *   - Inbound type    → `ingestInboundFromEvent` (Task 3 / Commit 3 Phase C)
- *   - Anything else   → no-op (ack 200, drop silently)
+ *   1. VERIFY the Svix signature at the door;
+ *   2. ENQUEUE a `resend_webhook` system-inbox job (null org — resolved later)
+ *      keyed on the Svix id (idempotent — a redelivery is a no-op). The payload
+ *      is thin (raw body of ids + the svix id), never message content, so a
+ *      null-org row leaks no tenant data;
+ *   3. ACK 200 in milliseconds (Resend/Svix expect <15s).
  *
- * ALWAYS acks 200 — even on error — so Resend does not disable the endpoint
- * over a transient blip. Unverifiable events (bad signature / missing secret)
- * are silently dropped inside `verifyResendWebhook`.
- *
- * Manual dashboard step (done by Mike after deployment): add the three
- * delivery event types (`email.bounced`, `email.complained`, `email.delivered`)
- * to the existing Resend webhook endpoint alongside `email.received`.
+ * The parse + branch (delivery vs inbound), the Resend API fetch, and
+ * processInboundEmail / recordDeliveryEvent all run async in the queue handler
+ * (`jobs/queue/handlers.ts`). ALWAYS acks 200 so a transient blip or an
+ * unverifiable event never disables the endpoint.
  */
-
-const DELIVERY_TYPES = new Set(["email.bounced", "email.complained", "email.delivered"])
-
 export async function POST(request: Request) {
   const rawBody = await request.text()
   const svixId = request.headers.get("svix-id")
@@ -36,17 +36,17 @@ export async function POST(request: Request) {
 
   try {
     const event = verifyResendWebhook(rawBody, headers)
-    if (!event) return Response.json({ ok: true })
-
-    const evt = event as { type?: string }
-
-    if (evt.type && DELIVERY_TYPES.has(evt.type)) {
-      await ingestResendDeliveryEvent(event, svixId)
-    } else {
-      await ingestInboundFromEvent(event)
+    if (event) {
+      await enqueueJobInContext({
+        organizationId: null, // system-inbox: the worker resolves the tenant
+        type: "resend_webhook",
+        payload: { rawBody, svixId },
+        idempotencyKey: svixId,
+      })
     }
+    // event === null → bad signature / missing secret: drop (never enqueue).
   } catch (err) {
-    log.error({ err }, "resend-inbound: route handler failed")
+    log.error({ err }, "resend-inbound: enqueue failed")
   }
 
   return Response.json({ ok: true })

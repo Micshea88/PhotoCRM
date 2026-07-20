@@ -2,12 +2,33 @@ import "server-only"
 import { and, eq, isNull } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 import type * as schema from "@/db/schema"
+import { ActionError } from "@/lib/safe-action"
 import { log } from "@/lib/log"
 import { workflows, workflowSteps, workflowExecutions } from "./schema"
 import { dispatchAction, STUB_ACTION_SET } from "./dispatch"
 import { type ActionType, type ExecutionStatus, type StepResult } from "./types"
 
 type DbHandle = NodePgDatabase<typeof schema>
+
+/**
+ * Classify a step failure as TRANSIENT (worth a retry) vs PERMANENT (terminal).
+ *
+ * `ActionError` is the app-defined error for validation / business / config /
+ * auth failures (missing fields, unknown resourceType, unsupported action, stub
+ * deferrals) — none of those fix themselves on a retry, so they are PERMANENT.
+ * Anything else — chiefly a plain `Error` escaping `sendEmail` (Resend 429/5xx,
+ * a network blip) or a transient DB error — is TRANSIENT and worth re-running.
+ *
+ * Conservative on purpose: a genuinely-permanent provider error (e.g. Resend
+ * 422 invalid-recipient, surfaced today as a plain `Error`) is misclassified
+ * transient and burns the retry budget before going terminal — wasteful but
+ * SAFE, because the send carries a stable idempotency key so no retry can
+ * double-deliver. FUTURE precision: have `sendEmail` throw a typed error
+ * carrying the HTTP status so 4xx can be classified permanent here directly.
+ */
+export function isTransientWorkflowError(err: unknown): boolean {
+  return !(err instanceof ActionError)
+}
 
 /**
  * Per-step idempotency: the executor reads `stepResults[N].status` BEFORE
@@ -105,11 +126,26 @@ function stepResultByNo(arr: unknown[] | null, sequenceNo: number): StepResult |
  * app.current_org/role/user_id, then call this. The cron/queue route
  * handler is the production caller; tests call it directly with
  * setOrgContext.
+ *
+ * Transient-failure retry: when a real-action step fails for a TRANSIENT
+ * reason (see `isTransientWorkflowError`) and this is NOT the queue's final
+ * attempt, the executor THROWS instead of finalizing. Because the caller runs
+ * the whole executor in one transaction, the throw ROLLS BACK every write this
+ * attempt made (all step DB writes, audit rows, stepResults) — so the queue's
+ * backoff-retry re-runs from a clean slate with no half-committed side effects.
+ * The only non-transactional effect, an outbound email, carries a stable
+ * per-step idempotency key so the provider dedups the re-send → exactly one
+ * email. A PERMANENT failure, or a transient one on the FINAL attempt, is
+ * finalized terminal as before (so a stuck execution can't outlive the queue's
+ * retries). `isFinalAttempt` defaults true so direct (non-queue) callers keep
+ * the original finalize-terminal-never-throw behavior.
  */
 export async function executeWorkflow(
   db: DbHandle,
   executionId: string,
+  opts: { isFinalAttempt?: boolean } = {},
 ): Promise<ExecuteWorkflowResult> {
+  const isFinalAttempt = opts.isFinalAttempt ?? true
   // 1. Load execution; terminal-status check (idempotency layer 1).
   const [execution] = await db
     .select()
@@ -238,6 +274,7 @@ export async function executeWorkflow(
           organizationId: execution.organizationId,
           workflowId: workflow.id,
           executionId: execution.id,
+          sequenceNo: step.sequenceNo,
           triggerPayload: execution.triggerPayload,
         },
         step.actionType as ActionType,
@@ -252,6 +289,25 @@ export async function executeWorkflow(
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error"
       const isStub = STUB_ACTION_SET.has(step.actionType)
+
+      // Transient infra/provider failure with retries left → roll the whole
+      // attempt back and let the queue retry. Throwing BEFORE we record any
+      // stepResult or terminal status means nothing from this attempt commits
+      // (the caller's transaction unwinds); the re-run starts clean, and the
+      // idempotency-keyed email is deduped by the provider on re-send.
+      if (!isStub && !isFinalAttempt && isTransientWorkflowError(err)) {
+        log.warn(
+          {
+            executionId: execution.id,
+            sequenceNo: step.sequenceNo,
+            actionType: step.actionType,
+            message,
+          },
+          "[workflow-executor] transient step failure — rolling back for queue retry",
+        )
+        throw err
+      }
+
       stepResults.push({
         sequenceNo: step.sequenceNo,
         status: isStub ? "deferred" : "failed",
@@ -259,7 +315,9 @@ export async function executeWorkflow(
         completedAt: new Date().toISOString(),
       })
       // Stubs terminate the execution as `deferred` (user error, not
-      // system error); other failures terminate as `failed`.
+      // system error); other failures terminate as `failed`. A transient
+      // failure that reaches here is on the FINAL attempt — finalize it so the
+      // execution doesn't outlive the queue's retries in a non-terminal state.
       finalStatus = isStub ? "deferred" : "failed"
       finalError = message
       log.warn(

@@ -37,6 +37,10 @@ export interface DispatchContext {
   organizationId: string
   workflowId: string
   executionId: string
+  /** The step's sequence number — part of the per-step idempotency key so a
+   *  queue reaper re-running the execution after a crash re-issues each step's
+   *  external effect under a stable key (provider dedups → one effect). */
+  sequenceNo: number
   triggerPayload: Record<string, unknown> | null
 }
 
@@ -150,6 +154,9 @@ async function handleSendEmail(
     subject,
     html: body,
     from: studioFromHeader(orgRow?.name ?? "your studio"),
+    // Stable across retries of THIS step of THIS execution, so a queue reaper
+    // re-running the execution after a crash makes Resend dedup the resend.
+    idempotencyKey: `wf:${ctx.executionId}:${String(ctx.sequenceNo)}`,
   })
   await audit(
     { db: ctx.db, organizationId: ctx.organizationId, actorUserId: null },

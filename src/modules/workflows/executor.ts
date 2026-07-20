@@ -238,6 +238,7 @@ export async function executeWorkflow(
           organizationId: execution.organizationId,
           workflowId: workflow.id,
           executionId: execution.id,
+          sequenceNo: step.sequenceNo,
           triggerPayload: execution.triggerPayload,
         },
         step.actionType as ActionType,

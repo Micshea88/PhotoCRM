@@ -49,6 +49,14 @@ export interface SendEmailParams {
   attachments?: { filename: string; content: string }[]
   /** Custom headers — used to set a stable Message-ID for email threading. */
   headers?: Record<string, string>
+  /**
+   * Resend idempotency key. When set, Resend dedups retries of the same send
+   * server-side (the `Idempotency-Key` header), so a durable-queue reaper that
+   * re-runs a handler after a crash re-issues the send yet the client still
+   * receives EXACTLY ONE email. Callers pass a stable per-effect key
+   * (e.g. `wf:<executionId>:<stepNo>`).
+   */
+  idempotencyKey?: string
 }
 
 export async function sendEmail({
@@ -62,21 +70,25 @@ export async function sendEmail({
   bcc,
   attachments,
   headers,
+  idempotencyKey,
 }: SendEmailParams) {
   if (!react && !html) {
     throw new Error("sendEmail requires either `react` or `html`")
   }
-  const result = await resend().emails.send({
-    from: from ?? defaultFromAddress(),
-    to,
-    subject,
-    ...(react ? { react } : { html: html ?? "" }),
-    replyTo,
-    ...(cc ? { cc } : {}),
-    ...(bcc ? { bcc } : {}),
-    ...(attachments && attachments.length > 0 ? { attachments } : {}),
-    ...(headers ? { headers } : {}),
-  })
+  const result = await resend().emails.send(
+    {
+      from: from ?? defaultFromAddress(),
+      to,
+      subject,
+      ...(react ? { react } : { html: html ?? "" }),
+      replyTo,
+      ...(cc ? { cc } : {}),
+      ...(bcc ? { bcc } : {}),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      ...(headers ? { headers } : {}),
+    },
+    idempotencyKey ? { idempotencyKey } : undefined,
+  )
   if (result.error) {
     throw new Error(`Email send failed: ${result.error.message}`)
   }

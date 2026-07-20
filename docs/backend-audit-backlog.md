@@ -227,7 +227,19 @@ re-parent list — so it is **not** the same rot class as the merge engine. No G
 feature walks contact children by a literal list today (the `export`/`anonymize` grep hits were
 `export function` false positives). The merge engine is the one literal-list rot site.
 
-### A3 — workflow double-send (non-atomic claim) — 🔴 not started
+### A3 — workflow double-send (non-atomic claim) — ✅ FIXED via the durable queue (2026-07-19)
+
+**Fixed by routing workflows through the new generic durable queue rather than patching the
+non-atomic claim in place.** The trigger-matcher now enqueues a `workflow_execution` job
+(`background_jobs`, idempotency-keyed to the execution); the queue's **atomic claim** is the
+concurrency guard (two overlapping `workflow-execute` ticks race to claim the one job — exactly
+one wins → one send), the **reaper** handles crashed runs, and each send carries a per-step
+**idempotency key** (`wf:<executionId>:<stepNo>` → Resend dedups) so a post-crash reaper re-run
+can't double-send. The `workflow-execute` cron now drains the queue (`processDueJobs`) instead of
+directly sweeping pending executions. Proven: `workflow-queue-concurrency.test.ts` (two concurrent
+drains → exactly one send, execution succeeded, job done) + the queue's atomic-claim / crash-recover
+tests. Foundation commits: queue `2c4c226`, runner `<this branch>`. Backlogged follow-up: retry of
+transient step failures (today a failed step is terminal, unchanged from prior behavior).
 
 **Evidence.** `src/modules/workflows/executor.ts` marks a pending execution running via a
 plain `SELECT` + non-atomic update, so overlapping cron ticks can double-process one pending

@@ -1,5 +1,5 @@
 import "server-only"
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { env } from "@/lib/env"
@@ -76,6 +76,42 @@ interface NylasWebhookEvent {
       date?: number
     }
   }
+}
+
+// ─── Edge routing (durable-queue producer) ──────────────────────────────────
+
+/**
+ * Resolve the org for a verified Nylas webhook so the edge can enqueue an
+ * ORG-SCOPED durable job (raw payload stays RLS-isolated) and ACK in
+ * milliseconds — the heavy work (message fetch + processInboundEmail) then runs
+ * in the async handler via `ingestNylasWebhook`.
+ *
+ * Org resolution is a cheap indexed lookup: every Nylas `message.*` / `grant.*`
+ * event carries `data.object.grant_id`, and `findConnectionByGrantIdAnyOrg`
+ * hits the grant_id-hash index. Returns null (→ ACK + drop) when the body isn't
+ * parseable, has no grant_id, or the grant maps to no known connection — none
+ * of which are ours to process.
+ *
+ * Idempotency key = Nylas's stable top-level event `id` when present (their
+ * documented dedup key, stable across the 3 retries), else a SHA-256 of the raw
+ * body (redeliveries are byte-identical, so this dedups them too).
+ */
+export async function resolveNylasWebhookRouting(
+  rawBody: string,
+  dbHandle: Parameters<typeof findConnectionByGrantIdAnyOrg>[0] = db,
+): Promise<{ organizationId: string; idempotencyKey: string } | null> {
+  let event: NylasWebhookEvent
+  try {
+    event = JSON.parse(rawBody) as NylasWebhookEvent
+  } catch {
+    return null
+  }
+  const grantId = event.data?.object?.grant_id
+  if (!grantId) return null
+  const conn = await findConnectionByGrantIdAnyOrg(dbHandle, grantId)
+  if (!conn) return null
+  const idempotencyKey = event.id ?? createHash("sha256").update(rawBody).digest("hex")
+  return { organizationId: conn.organizationId, idempotencyKey }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

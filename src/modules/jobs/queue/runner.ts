@@ -6,6 +6,7 @@ import { db as baseDb } from "@/lib/db"
 import { log } from "@/lib/log"
 import type * as schema from "@/db/schema"
 import {
+  enqueueJob,
   reapExpiredLeases,
   selectDueJobs,
   claimJob,
@@ -13,6 +14,7 @@ import {
   markJobFailed,
   type ClaimableJob,
   type ClaimedJob,
+  type EnqueueJobArgs,
 } from "./queries"
 
 type DbHandle = NodePgDatabase<typeof schema>
@@ -42,6 +44,23 @@ async function setMachineContext(tx: DbHandle, organizationId: string): Promise<
   await tx.execute(sql`SELECT set_config('app.current_org', ${organizationId}, true)`)
   await tx.execute(sql`SELECT set_config('app.current_role', 'admin', true)`)
   await tx.execute(sql`SELECT set_config('app.current_view_all_events', 'true', true)`)
+}
+
+/**
+ * Producer helper for callers with NO ambient org context — chiefly the webhook
+ * routes, which resolve the org (grant_id / recipient → connection) and then
+ * enqueue. Opens a base-connection transaction, drops into the org's machine
+ * context (so the INSERT satisfies FORCE RLS WITH CHECK — the raw payload row is
+ * org-scoped, never a null-org system row), and enqueues. Idempotent when
+ * `idempotencyKey` is set (a provider redelivery is a no-op).
+ */
+export async function enqueueJobInContext(
+  args: EnqueueJobArgs,
+): Promise<{ id: string; enqueued: boolean }> {
+  return baseDb.transaction(async (tx) => {
+    await setMachineContext(tx, args.organizationId)
+    return enqueueJob(tx, args)
+  })
 }
 
 export type JobOutcome = "done" | "failed" | "dead" | "skipped" | "no_handler"

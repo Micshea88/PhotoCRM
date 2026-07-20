@@ -1,5 +1,6 @@
 import "server-only"
 import { executeWorkflow } from "@/modules/workflows/executor"
+import { ingestNylasWebhook } from "@/modules/email-connections/nylas-inbound"
 import type { HandlerRegistry, JobHandler } from "./runner"
 
 /**
@@ -25,8 +26,30 @@ const workflowExecutionHandler: JobHandler = async (tx, job) => {
   await executeWorkflow(tx, executionId)
 }
 
+/**
+ * Runs a `nylas_webhook` job: the async half of the durable webhook pipeline.
+ * The edge already verified the signature and resolved the org (for the job
+ * row); here we run the proven `ingestNylasWebhook` — re-verify (cheap, and
+ * keeps the function self-contained), parse, dispatch by event type, re-fetch
+ * the full message, resolve the receiving connection, and hand off to
+ * `processInboundEmail` / `recordDeliveryEvent`. Those are each idempotent
+ * (dedup on rfc/nylas message id, unique provider_event_id), so a reaper re-run
+ * after a crash can't double-process. It manages its own org-scoped
+ * transactions internally, so the passed `tx` is unused.
+ */
+const nylasWebhookHandler: JobHandler = async (_tx, job) => {
+  const p = job.payload as { rawBody?: unknown; signature?: unknown } | null
+  const rawBody = p && typeof p.rawBody === "string" ? p.rawBody : null
+  const signature = p && typeof p.signature === "string" ? p.signature : null
+  if (!rawBody) {
+    throw new Error("nylas_webhook job is missing payload.rawBody")
+  }
+  await ingestNylasWebhook(rawBody, signature)
+}
+
 /** The central registry the queue drain (`processDueJobs`) dispatches on. New
- *  job types (inbound_email, outbound_email, …) register their handler here. */
+ *  job types (resend_webhook, outbound_email, …) register their handler here. */
 export const jobHandlers: HandlerRegistry = {
   workflow_execution: workflowExecutionHandler,
+  nylas_webhook: nylasWebhookHandler,
 }

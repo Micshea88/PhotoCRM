@@ -171,7 +171,13 @@ self-skips — a superuser session can always `SET ROLE`. That specific assertio
 pre-push `verify` which connects as `pathway_app`. Provisioning `pathway_app` in CI to run it there too is
 optional hardening, not required for genuineness.)
 
-### A2 — contact merge silently loses child relations — 🔴 not started
+### A2 — contact merge silently loses child relations — ✅ FIXED (2026-07-19, commit `493beb3`)
+
+**Done:** `executeContactMerge` now re-parents ALL **14** live FK children of `contacts` (the 10 already
+handled + the 4 formerly-missed SET NULL rows: `email_log`, `tasks`, `notifications`, `ai_usage_log`).
+The regression test derives the child-table list from the **live FK catalog** and asserts zero child rows
+reference any loser after a merge — a universal invariant, not a hardcoded list, so a newly-added child
+table fails the test until the engine handles it (policy 4). Full audit trail below.
 
 **Evidence.** `src/modules/duplicates/merge-engine.ts:178` `executeContactMerge` re-parents an
 explicit list of relations but not all of them. **13 child tables FK `contacts.id`**, and the

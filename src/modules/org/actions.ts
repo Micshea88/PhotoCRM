@@ -4,11 +4,13 @@ import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm"
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
+import type * as schema from "@/db/schema"
 import { ActionError, authAction, orgAction } from "@/lib/safe-action"
 import { auth } from "@/lib/auth"
 import { log } from "@/lib/log"
 import { audit } from "@/modules/audit/audit"
-import { invitation, member, user } from "@/modules/auth/schema"
+import { invitation, member, session, user } from "@/modules/auth/schema"
 import { invitationExtendedRole } from "@/modules/rbac/schema"
 import { createInviteWithExtendedRoleCore } from "@/modules/rbac/actions"
 import {
@@ -443,6 +445,131 @@ export const resetOrgInvitation = orgAction
     )
     revalidatePath("/settings/organization/members")
     return { newInvitationId: newId, extendedRole }
+  })
+
+// ─── Account recovery (Piece B: owner/admin → their own team member) ─────────
+
+/**
+ * Resolve a member row to its target user, ENFORCING that the member belongs to
+ * the actor's active org. This in-org check is the isolation boundary for the
+ * recovery actions below — an owner/admin can only ever recover a member of
+ * their OWN studio, never a user in another org (mirrors the org-ownership guard
+ * `resendOrgInvitation` uses on invitations).
+ */
+export async function requireOrgMember(
+  db: NodePgDatabase<typeof schema>,
+  organizationId: string,
+  memberId: string,
+): Promise<{ userId: string; email: string; emailVerified: boolean }> {
+  const [row] = await db
+    .select({
+      userId: member.userId,
+      orgId: member.organizationId,
+      email: user.email,
+      emailVerified: user.emailVerified,
+    })
+    .from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(eq(member.id, memberId))
+    .limit(1)
+  if (!row) throw new ActionError("NOT_FOUND", "Member not found.")
+  if (row.orgId !== organizationId) {
+    throw new ActionError("FORBIDDEN", "Member belongs to a different organization.")
+  }
+  return { userId: row.userId, email: row.email, emailVerified: row.emailVerified }
+}
+
+const memberRecoveryInput = z.object({ memberId: z.string().min(1).max(64) })
+
+/**
+ * Send a fresh password-reset email to a team member who's locked out. Uses the
+ * SAME public reset flow as the "Forgot password" form; no elevated admin role
+ * needed. Owner/admin only, and only for a member of the caller's own org.
+ */
+export const sendMemberPasswordReset = orgAction
+  .metadata({ actionName: "org.member_password_reset" })
+  .inputSchema(memberRecoveryInput)
+  .action(async ({ parsedInput, ctx }) => {
+    assertAdmin(ctx.activeOrg.role)
+    const target = await requireOrgMember(ctx.db, ctx.activeOrg.id, parsedInput.memberId)
+    await auth.api.requestPasswordReset({
+      body: { email: target.email, redirectTo: "/reset-password" },
+      headers: await headers(),
+    })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "member.password_reset_sent",
+      { resourceType: "user", resourceId: target.userId, metadata: { email: target.email } },
+    )
+    return { ok: true as const }
+  })
+
+/**
+ * Sign a team member out of every session (compromise / departed device). Deletes
+ * their Better Auth `session` rows directly — BA validates against that table, so
+ * the member is signed out everywhere. Refuses to target the caller's own account
+ * (that would log the admin out from an admin surface — use normal sign-out).
+ */
+export const revokeMemberSessions = orgAction
+  .metadata({ actionName: "org.member_revoke_sessions" })
+  .inputSchema(memberRecoveryInput)
+  .action(async ({ parsedInput, ctx }) => {
+    assertAdmin(ctx.activeOrg.role)
+    const target = await requireOrgMember(ctx.db, ctx.activeOrg.id, parsedInput.memberId)
+    if (target.userId === ctx.session.user.id) {
+      throw new ActionError("FORBIDDEN", "Use sign-out for your own account.")
+    }
+    await ctx.db.delete(session).where(eq(session.userId, target.userId))
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "member.sessions_revoked",
+      { resourceType: "user", resourceId: target.userId, metadata: { email: target.email } },
+    )
+    revalidatePath("/settings/organization/members")
+    return { ok: true as const }
+  })
+
+/**
+ * Re-send the verification email to a member who never verified (e.g. never got
+ * the first one). No-op-safe: refuses if the member is already verified.
+ */
+export const resendMemberVerification = orgAction
+  .metadata({ actionName: "org.member_resend_verification" })
+  .inputSchema(memberRecoveryInput)
+  .action(async ({ parsedInput, ctx }) => {
+    assertAdmin(ctx.activeOrg.role)
+    const target = await requireOrgMember(ctx.db, ctx.activeOrg.id, parsedInput.memberId)
+    if (target.emailVerified) {
+      throw new ActionError("CONFLICT", "This member's email is already verified.")
+    }
+    await auth.api.sendVerificationEmail({
+      body: { email: target.email },
+      headers: await headers(),
+    })
+    await audit(
+      {
+        db: ctx.db,
+        organizationId: ctx.activeOrg.id,
+        actorUserId: ctx.session.user.id,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      },
+      "member.verification_resent",
+      { resourceType: "user", resourceId: target.userId, metadata: { email: target.email } },
+    )
+    return { ok: true as const }
   })
 
 /**

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { setMemberExtendedRole } from "@/modules/rbac/actions"
 import { getRoleDisplay } from "@/modules/rbac/display"
 import { EXTENDED_ROLES, type ExtendedRole } from "@/modules/rbac/types"
+import { MemberRecoveryMenu } from "@/modules/org/ui/member-recovery-menu"
 
 interface Member {
   id: string
@@ -109,6 +110,7 @@ export function MembersList({
                 >
                   Remove
                 </Button>
+                <MemberRecoveryMenu memberId={m.id} memberName={m.user.name} />
               </>
             )}
           </div>

@@ -35,6 +35,15 @@ vi.mock("@/modules/rbac/actions", () => ({
   setMemberExtendedRole: () => Promise.resolve({ data: { ok: true } }),
 }))
 
+// MembersList now renders MemberRecoveryMenu, which imports the org server
+// actions. Mock the module so the client test bundle doesn't evaluate the
+// server module (which touches server-only env at import).
+vi.mock("@/modules/org/actions", () => ({
+  sendMemberPasswordReset: () => Promise.resolve({ data: { ok: true } }),
+  revokeMemberSessions: () => Promise.resolve({ data: { ok: true } }),
+  resendMemberVerification: () => Promise.resolve({ data: { ok: true } }),
+}))
+
 beforeEach(() => {
   if (typeof window === "undefined") return
   Object.defineProperty(Element.prototype, "hasPointerCapture", {

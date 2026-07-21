@@ -49,7 +49,7 @@ Tags: `[sec]` security · `[db]` database/migrations · `[ci]` CI/verification �
 - [ ] **H10** `[sec]` Auth events not in audit log. **Open.** Wire Better Auth `databaseHooks` / `hooks.after` to call `audit()` for sign-in, password-reset, invite-accepted, session-revoked.
 - [x] **H11** `[sec]` Blob upload MIME whitelist is now explicit: `image/{png,jpeg,webp,gif,svg+xml}`, `application/pdf`, `text/{plain,csv}`. No glob.
 - [x] **H12** `[sec]` `/accept-invite` added to `PUBLIC_ROUTES`.
-- [ ] **H13** `[sec]` Password policy is just `min(12)`. **Open.** Better Auth `password.validatePassword` hook with HIBP k-anonymity check.
+- [x] **H13** `[sec]` Password policy: **min 8 + composition** (client + server-side via `src/modules/auth/password-policy.ts` + Better Auth `before` hook) and **HIBP k-anonymity breach screening** (`haveIbeenPwned` plugin) both wired. _(2026-07-21)_
 - [ ] **H14** `[sec]` Better Auth `verification.value` stored plaintext. **Open.** Enable `advanced.hashToken`; add daily cron to delete expired tokens.
 - [x] **H15** `[sec]` `verifyCronAuth` now also requires `User-Agent: vercel-cron/...` in production.
 

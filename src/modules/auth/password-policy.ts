@@ -29,3 +29,14 @@ export const PASSWORD_REQUIREMENTS = [
   "One number",
   "One special character (e.g. ! ? @ #)",
 ] as const
+
+/**
+ * Server-side composition check (used by the Better Auth `before` hook so the
+ * rule can't be bypassed by skipping the form). Returns the first failing
+ * requirement's message, or null if the password satisfies the policy.
+ */
+export function passwordCompositionError(password: string): string | null {
+  const result = passwordSchema.safeParse(password)
+  if (result.success) return null
+  return result.error.issues[0]?.message ?? "Password does not meet the requirements."
+}

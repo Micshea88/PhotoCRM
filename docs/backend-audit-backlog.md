@@ -324,10 +324,10 @@ Authoritative, transcribed verbatim from Mike (2026-07-15). Ported to `AGENTS.md
 10. Externally-consumed endpoints versioned `/api/v1` + shared rate-limit (Upstash) before
     multi-region.
 11. PII + payments baseline: MFA, session expiry reconciled, password **min 8 + composition (≥1
-    uppercase / ≥1 number / ≥1 special)** with requirements shown in the UI (client-side via
-    `src/modules/auth/password-policy.ts`), **HIBP breach screening NOT yet wired** (TODO H13 — the
-    load-bearing control once built); composition is competitor-parity — see decisions-2026-07-16 →
-    Passwords, revised 2026-07-19, supersedes the earlier "min 12".
+    uppercase / ≥1 number / ≥1 special)** with requirements shown in the UI, enforced client-side AND
+    server-side via `src/modules/auth/password-policy.ts` (Better Auth `before` hook), **HIBP breach
+    screening WIRED** (`haveIbeenPwned` plugin, the load-bearing control); composition is competitor-parity
+    — see decisions-2026-07-16 → Passwords, revised 2026-07-19, supersedes the earlier "min 12".
 12. PM frontend when it ships: virtualization + optimistic UI + production scale-seed in v1
     (LAW 2). Don't retrofit.
 

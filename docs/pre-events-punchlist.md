@@ -69,9 +69,10 @@ decisions are kept on file, marked deferred, not deleted.
   bulk), retries-are-requeues-not-sleeps, full jitter, circuit breaker per provider, **Upstash**
   shared state, extract RingCentral as the template, throttle visibility to the studio. Big
   piece, none built (= policy 5 + TODO H9).
-- **⬜ HIBP breach screening** — the load-bearing password control. NOT wired (TODO H13).
-- **⬜ Server-side password composition** — Better Auth enforces only `minPasswordLength: 8`
-  today; composition is client-side only. Add a server-side validator so it can't be bypassed.
+- **✅ HIBP breach screening** — WIRED (`haveIbeenPwned` plugin, k-anonymity, no key; guards
+  sign-up/change/reset). The load-bearing password control. _(2026-07-21)_
+- **✅ Server-side password composition** — enforced at the API via the Better Auth `before`
+  hook (`passwordCompositionError`), not just the form, so it can't be bypassed. _(2026-07-21)_
 - **⬜ Hashed verification/reset tokens** — stored plaintext today (TODO H14); short-expiry +
   hash-at-rest.
 - **⬜ API `/api/v1`** path versioning + forward-compatible response envelopes + RFC 8594

@@ -10,7 +10,7 @@ test.beforeEach(async () => {
 
 test("sign-up → onboarding → dashboard golden path", async ({ page }) => {
   const email = `user-${String(Date.now())}@example.com`
-  const password = "supersecure-test-password-1234"
+  const password = "Supersecure-test-password-1234"
 
   await page.goto("/sign-up")
   await page.getByLabel("Name").fill("Test User")
@@ -34,7 +34,7 @@ test("sign-up → onboarding → dashboard golden path", async ({ page }) => {
 
 test("sign-out then sign-in", async ({ page }) => {
   const email = `user-${String(Date.now())}@example.com`
-  const password = "supersecure-test-password-1234"
+  const password = "Supersecure-test-password-1234"
 
   // Sign up + create org first
   await page.goto("/sign-up")

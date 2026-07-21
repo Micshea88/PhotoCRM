@@ -159,8 +159,8 @@ describe("ResetPasswordForm — token + error contract", () => {
     h.searchParams = new URLSearchParams({ token: "tok-123" })
     h.resetPassword.mockResolvedValue({ error: { status: 400, message: "INVALID_TOKEN" } })
     render(<ResetPasswordForm />)
-    typeInto(/new password/i, "abcdefghijkl")
-    typeInto(/confirm password/i, "abcdefghijkl")
+    typeInto(/new password/i, "Abcdefgh1!")
+    typeInto(/confirm password/i, "Abcdefgh1!")
     fireEvent.click(screen.getByRole("button", { name: /set new password/i }))
 
     expect(
@@ -173,8 +173,8 @@ describe("ResetPasswordForm — token + error contract", () => {
     h.searchParams = new URLSearchParams({ token: "tok-123" })
     h.resetPassword.mockRejectedValue(new Error("network down"))
     render(<ResetPasswordForm />)
-    typeInto(/new password/i, "abcdefghijkl")
-    typeInto(/confirm password/i, "abcdefghijkl")
+    typeInto(/new password/i, "Abcdefgh1!")
+    typeInto(/confirm password/i, "Abcdefgh1!")
     fireEvent.click(screen.getByRole("button", { name: /set new password/i }))
 
     expect(await screen.findByText("Something went wrong, please try again.")).toBeInTheDocument()
@@ -185,8 +185,8 @@ describe("ResetPasswordForm — token + error contract", () => {
     h.searchParams = new URLSearchParams({ token: "tok-123" })
     h.resetPassword.mockResolvedValue({ data: {} })
     render(<ResetPasswordForm />)
-    typeInto(/new password/i, "abcdefghijkl")
-    typeInto(/confirm password/i, "abcdefghijkl")
+    typeInto(/new password/i, "Abcdefgh1!")
+    typeInto(/confirm password/i, "Abcdefgh1!")
     fireEvent.click(screen.getByRole("button", { name: /set new password/i }))
 
     await waitFor(() => {

@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { passwordSchema } from "@/modules/auth/password-policy"
+import { PasswordRequirementsHint } from "@/modules/auth/ui/password-requirements-hint"
 
 const schema = z
   .object({
-    password: z.string().min(12, "Password must be at least 12 characters"),
+    password: passwordSchema,
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, {
@@ -81,6 +83,7 @@ export function ResetPasswordForm() {
         {errors.password && (
           <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
         )}
+        <PasswordRequirementsHint />
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirm">Confirm password</Label>

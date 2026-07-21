@@ -83,19 +83,30 @@ create-organization. Unit-cover the account-linking config choice.
 
 ## B. Team-member recovery (in-tenant; owner/admin → their own team)
 
-**Enable** Better Auth `admin` plugin (server) + `adminClient()` (client).
+**Mechanism (refined 2026-07-20 after verifying the admin plugin).** Better Auth's `admin` plugin
+authorizes by a **user-level** `adminRoles`/`adminUserIds` (a _global_ admin), NOT org membership — so it
+does NOT fit an org owner helping their own team member. B therefore uses Better Auth's **built-in,
+non-admin** APIs plus a tightly-scoped session revoke, all gated by our own `orgAction`. (The admin plugin
+is enabled in **C**, where a global superadmin is exactly right.)
 
 **New org-scoped actions** in `src/modules/org/actions.ts` (or a new `account-recovery` area), each:
-`orgAction` gated to **owner/admin**, `.inputSchema(...)`, and **verifies the target user is a member of the
-actor's active org** before doing anything, and calls `audit()`:
+`orgAction` gated to **owner/admin** (`assertAdmin(ctx.activeOrg.role)`, the existing helper),
+`.inputSchema(...)`, **verifies the target user is a member of the actor's active org** (the same
+`x.organizationId !== ctx.activeOrg.id → FORBIDDEN` guard `resendOrgInvitation` uses), and calls `audit()`:
 
-- `sendMemberPasswordReset` — trigger a fresh reset email to the member **and** return a copyable one-time
-  reset link the owner can relay out-of-band (covers "the reset email isn't arriving / lost inbox access").
-- `revokeMemberSessions` — sign the member out everywhere (compromise / departed).
-- `resendMemberVerification` — re-send verification if their email is unverified.
+- `sendMemberPasswordReset` — `auth.api.requestPasswordReset({ body: { email, redirectTo } })` (the same
+  public flow the "Forgot password" form uses) → the member gets a fresh reset email. No admin role needed.
+- `revokeMemberSessions` — delete the target user's rows from Better Auth's `session` table (server-side,
+  base connection; BA validates against that table, so deletion signs them out everywhere). Only ever the
+  verified in-org target's `userId`.
+- `resendMemberVerification` — `auth.api.sendVerificationEmail({ body: { email } })` if unverified.
+
+Note: the out-of-band "copyable reset link" from the first draft is dropped — minting a raw reset token
+needs admin-level access; re-sending the reset email is the parity-appropriate mechanism and avoids handling
+a live credential token in the UI.
 
 **Guardrail.** The in-org membership check is the isolation boundary — an owner can never act on a user in
-another studio. The admin-plugin primitives are only ever called after that check passes.
+another studio. Every underlying op runs only after that check passes.
 
 **UI.** A per-row "⋯" menu on `members-list.tsx`: _Send password reset_, _Revoke sessions_, _Resend verification_,
 each behind a confirm. Shown only to owner/admin.
@@ -111,9 +122,15 @@ actually invalidates the member's sessions (observable: a subsequent authed call
 **Superadmin identity.** `PATHWAY_SUPERADMIN_EMAILS` env var (comma-separated, `.optional()`). A helper
 `isPathwaySuperadmin(email)` is the single gate. No DB role, no in-app escalation path.
 
+**Mechanism.** This is where the Better Auth `admin` plugin fits — a _global_ superadmin acting across
+tenants is exactly its model (`adminUserIds`/`adminRoles`). Wire it to the `PATHWAY_SUPERADMIN_EMAILS`
+allowlist and additionally gate the page/actions on that allowlist (defense-in-depth). Alternatively reuse
+B's building blocks (`requestPasswordReset` + `sendVerificationEmail` + scoped session-row delete) for any
+user — decide during implementation which is cleaner. Either way the allowlist is the gate.
+
 **Capabilities — credential-only, for any user by email:**
 
-- reset password (generate a reset link),
+- reset password (send a reset email),
 - resend verification,
 - revoke sessions.
 

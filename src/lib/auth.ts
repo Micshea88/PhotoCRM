@@ -22,11 +22,32 @@ const { baseURL: authBaseURL, trustedOrigins: authTrustedOrigins } = resolveAuth
   vercelBranchUrl: process.env.VERCEL_BRANCH_URL,
 })
 
+// Google social sign-in — an OPTIONAL alternate to email+password. Registered
+// only when BOTH creds are present, so a deploy without them simply falls back
+// to email/password (the button is hidden client-side by the same signal).
+const googleClientId = env.GOOGLE_CLIENT_ID
+const googleClientSecret = env.GOOGLE_CLIENT_SECRET
+const socialProviders =
+  googleClientId && googleClientSecret
+    ? { google: { clientId: googleClientId, clientSecret: googleClientSecret } }
+    : undefined
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
   baseURL: authBaseURL,
   trustedOrigins: authTrustedOrigins,
   secret: env.BETTER_AUTH_SECRET,
+  ...(socialProviders ? { socialProviders } : {}),
+  // Auto-link a Google sign-in to an EXISTING email/password account only when
+  // the provider's email is verified. Google always returns verified emails, so
+  // `trustedProviders: ["google"]` is the "link on verified email" guard — it
+  // prevents hijacking an existing account via an unverified social identity.
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"],
+    },
+  },
   emailAndPassword: {
     enabled: true,
     // Required in real production. The PLAYWRIGHT_E2E escape hatch is set

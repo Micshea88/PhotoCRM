@@ -19,6 +19,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 
 const h = vi.hoisted(() => ({
   signInEmail: vi.fn(),
+  signInSocial: vi.fn(),
   orgList: vi.fn(),
   getSession: vi.fn(),
   setActive: vi.fn(),
@@ -35,7 +36,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
-    signIn: { email: h.signInEmail },
+    signIn: { email: h.signInEmail, social: h.signInSocial },
     organization: { list: h.orgList, setActive: h.setActive },
     getSession: h.getSession,
     requestPasswordReset: h.requestPasswordReset,
@@ -191,5 +192,35 @@ describe("ResetPasswordForm — token + error contract", () => {
     await waitFor(() => {
       expect(h.routerPush).toHaveBeenCalledWith("/sign-in")
     })
+  })
+})
+
+describe("Google sign-in (optional alternate to email/password)", () => {
+  it("shows 'Continue with Google' when enabled and starts Google sign-in on click", async () => {
+    h.signInSocial.mockResolvedValue(undefined)
+    render(<SignInForm googleEnabled />)
+
+    const btn = screen.getByRole("button", { name: /continue with google/i })
+    expect(btn).toBeInTheDocument()
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(h.signInSocial).toHaveBeenCalledWith({ provider: "google", callbackURL: "/" })
+    })
+    // Email/password stays available — Google is additive, not a replacement.
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument()
+  })
+
+  it("hides the Google button when it is not configured", () => {
+    render(<SignInForm googleEnabled={false} />)
+    expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull()
+    // Email/password still there.
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument()
+  })
+
+  it("hides the Google button during the invite flow (a specific email is required)", () => {
+    h.searchParams = new URLSearchParams({ email: "invited@example.com" })
+    render(<SignInForm googleEnabled />)
+    expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull()
   })
 })

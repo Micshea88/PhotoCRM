@@ -13,6 +13,8 @@ import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { isValidCallbackUrl } from "@/modules/auth/callback-url"
+import { GoogleSignInButton } from "@/modules/auth/ui/google-sign-in-button"
+import { AuthOrDivider } from "@/modules/auth/ui/auth-or-divider"
 
 const schema = z
   .object({
@@ -51,7 +53,7 @@ function isAccountExistsError(
   return false
 }
 
-export function SignUpForm() {
+export function SignUpForm({ googleEnabled = false }: { googleEnabled?: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
   const lockedEmail = params.get("email")
@@ -191,97 +193,107 @@ export function SignUpForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">Name</Label>
-        <Input id="name" autoComplete="name" {...register("name")} />
-        {errors.name && (
-          <p className="text-xs text-[var(--color-destructive)]">{errors.name.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          autoComplete="email"
-          readOnly={!!lockedEmail}
-          {...register("email")}
-        />
-        {lockedEmail && (
-          <p className="text-xs text-[var(--color-muted-foreground)]">
-            This invitation was sent to {lockedEmail}. To use a different email, ask the inviter to
-            send a new invitation.
-          </p>
-        )}
-        {errors.email && (
-          <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
-        <PasswordInput id="password" autoComplete="new-password" {...register("password")} />
-        {errors.password && (
-          <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Confirm password</Label>
-        <PasswordInput
-          id="confirmPassword"
-          autoComplete="new-password"
-          {...register("confirmPassword")}
-        />
-        {errors.confirmPassword && (
-          <p className="text-xs text-[var(--color-destructive)]">
-            {errors.confirmPassword.message}
-          </p>
-        )}
-      </div>
-      {accountExistsEmail && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            <p>An account with this email already exists.</p>
-            <p className="mt-2">
-              <Link
-                href={`/sign-in?${(() => {
-                  const r = params.get("redirect")
-                  const qp = new URLSearchParams({ email: accountExistsEmail })
-                  if (r) qp.set("redirect", r)
-                  return qp.toString()
-                })()}`}
-                className="font-medium underline"
-              >
-                Sign in instead
-              </Link>
+    <div className="space-y-4">
+      {/* Google is an OPTIONAL alternate. Hidden during the invite flow (a
+          specific invited email is required). */}
+      {googleEnabled && !lockedEmail && (
+        <>
+          <GoogleSignInButton callbackURL="/" />
+          <AuthOrDivider />
+        </>
+      )}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input id="name" autoComplete="name" {...register("name")} />
+          {errors.name && (
+            <p className="text-xs text-[var(--color-destructive)]">{errors.name.message}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            readOnly={!!lockedEmail}
+            {...register("email")}
+          />
+          {lockedEmail && (
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              This invitation was sent to {lockedEmail}. To use a different email, ask the inviter
+              to send a new invitation.
             </p>
-          </AlertDescription>
-        </Alert>
-      )}
-      {error && !accountExistsEmail && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Creating account…" : "Create account"}
-      </Button>
-      {lockedEmail && (
-        <p className="text-center text-sm text-[var(--color-muted-foreground)]">
-          Already have an account?{" "}
-          <Link
-            href={`/sign-in?${(() => {
-              const r = params.get("redirect")
-              const qp = new URLSearchParams({ email: lockedEmail })
-              if (r) qp.set("redirect", r)
-              return qp.toString()
-            })()}`}
-            className="font-medium underline"
-          >
-            Sign in with {lockedEmail}
-          </Link>
-        </p>
-      )}
-    </form>
+          )}
+          {errors.email && (
+            <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <PasswordInput id="password" autoComplete="new-password" {...register("password")} />
+          {errors.password && (
+            <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <PasswordInput
+            id="confirmPassword"
+            autoComplete="new-password"
+            {...register("confirmPassword")}
+          />
+          {errors.confirmPassword && (
+            <p className="text-xs text-[var(--color-destructive)]">
+              {errors.confirmPassword.message}
+            </p>
+          )}
+        </div>
+        {accountExistsEmail && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              <p>An account with this email already exists.</p>
+              <p className="mt-2">
+                <Link
+                  href={`/sign-in?${(() => {
+                    const r = params.get("redirect")
+                    const qp = new URLSearchParams({ email: accountExistsEmail })
+                    if (r) qp.set("redirect", r)
+                    return qp.toString()
+                  })()}`}
+                  className="font-medium underline"
+                >
+                  Sign in instead
+                </Link>
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
+        {error && !accountExistsEmail && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <Button type="submit" disabled={submitting} className="w-full">
+          {submitting ? "Creating account…" : "Create account"}
+        </Button>
+        {lockedEmail && (
+          <p className="text-center text-sm text-[var(--color-muted-foreground)]">
+            Already have an account?{" "}
+            <Link
+              href={`/sign-in?${(() => {
+                const r = params.get("redirect")
+                const qp = new URLSearchParams({ email: lockedEmail })
+                if (r) qp.set("redirect", r)
+                return qp.toString()
+              })()}`}
+              className="font-medium underline"
+            >
+              Sign in with {lockedEmail}
+            </Link>
+          </p>
+        )}
+      </form>
+    </div>
   )
 }

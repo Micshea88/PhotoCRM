@@ -55,6 +55,10 @@ const AUDIT_EXEMPT = {
   "contacts.merged": "audited by executeContactMerge (merge-engine.ts)",
   "companies.merged": "audited by executeCompanyMerge (merge-engine.ts)",
   "telephony.disconnect": "audited by disconnectTelephonyImpl (disconnect.ts)",
+  "superadmin.password_reset": "audited by auditRecovery (superadmin/actions.ts, target-org-scoped)",
+  "superadmin.revoke_sessions": "audited by auditRecovery (superadmin/actions.ts, target-org-scoped)",
+  "superadmin.resend_verification":
+    "audited by auditRecovery (superadmin/actions.ts, target-org-scoped)",
   // — DELIBERATE non-audit (documented deviation) —
   "rc_sync.enqueue_call": "operational queue insert (background_jobs), not a user-facing resource",
   "saved_views.prefs.update": "per-user UX state (user_object_view_prefs), not org-accountability data",

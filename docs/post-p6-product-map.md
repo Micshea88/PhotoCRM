@@ -22,7 +22,129 @@ Status: forward-looking. Reconcile against locked decisions + V1 wireframe befor
 - TEMPLATES = ONE unified home for all reusable blanks (file templates, email templates, gallery). The "unused master" versions you build/store and clone from. Follows the template→instance pattern already core to the PM engine (clone copies content, never the prior record's identity).
 - ASSETS are NOT here — docs and creative media are separate systems (see §5).
 
-## 3. FINANCE / "QB-LIGHT" (a product within the product; multiple pushes, ~P11+; weeks of work)
+## 3. Finance / QB-Light
+
+### 3.1 Overall philosophy — the QB-Light scope line
+
+Rich transaction tracking + strong reporting. Pathway is a tracking-and-reporting tool that hands off to real accounting software (QuickBooks / Xero).
+
+### 3.2 Transaction tracking (V1)
+
+- Every payment, refund, partial refund, discount, expense, contractor payment, tax-collected
+- Each transaction is categorized, dated, project-linked
+- Each carries its tax breakdown AS RECORDED at the time (per line item, service-tax vs product-tax split)
+- Refunds and reversals are first-class tracked EVENTS that reference the original transaction
+- Hard tax-reversal cases surface to the user (no auto-reconciliation)
+
+### 3.3 Finance Overview landing page (V1)
+
+HoneyBook-style dashboard containing:
+
+- Cashflow chart
+- Payment summary
+- Accounts balance
+- Credit card spending
+
+### 3.4 Invoices + Payments (V1)
+
+- Stripe wired for payment processing
+- Payment received triggers configurable workflows
+- Full and partial refund management: refund linked to original invoice, audit trail of refund reason, auto-update Event record, email confirmation to client
+- Bank accounts linked via Stripe only
+
+### 3.5 Expenses (V1)
+
+- Schema: date, amount, category, description, optional receipt image upload
+- Expense list + filter UI
+- Add/edit forms
+- Integrated into reporting
+
+### 3.6 Tax handling (V1 — user-entered rates)
+
+- Configurable state-by-state tax rates and filing frequencies
+- Tangible vs intangible sales tracked separately (services typically not taxable, products typically taxable)
+- Per-line-item tax application on invoices
+- Sales tax collected report (by jurisdiction, by period)
+- Sales tax remittance reminders when filings are due
+- Multi-state tracking for businesses operating in multiple states
+- Optional Stripe Tax integration for automated calculation
+- Tax-exempt customer flag + tax exemption certificate storage + auto-skip on tax-exempt customers
+
+### 3.7 Contractor payouts (V1 — Stripe Connect Express architecture)
+
+**Architecture:**
+
+- Stripe Connect Express specifically
+- Studio's Stripe-connected account sends the payout
+- Pathway orchestrates and NEVER sits in the money path
+
+**PII / KYC:**
+
+- Stripe Connect Express runs KYC and custodies the SSN/EIN via Stripe-hosted onboarding
+- Pathway stores ONLY the connected-account id/token — never the raw tax ID
+
+**1099-NEC:**
+
+- Stripe's own 1099 tooling for v1 (Stripe generates + files; contractors access forms via Stripe Express)
+- Third-party filers (Track1099 / Tax1099) only if Stripe's tooling gets outgrown
+
+**Native-feel line:**
+
+- Pathway owns the surrounding UI in editorial-ink: payee list, W-9 status, "Pay contractor" button, payout + filing status
+- Identity-collection moment itself is Stripe-hosted (redirect / embedded component)
+
+**Gating rule (verbatim):**
+
+- "No valid tax form, no pay" — hard-block the payout button until Stripe onboarding + W-9 are complete
+
+**Additional features:**
+
+- Per-Event contractor pay assignments (Second Shooter, Editor, Videographer)
+- YTD pay tracking per contractor (for 1099 rollup)
+- Bulk contractor payment generation ("Pay all editors for this month") via Stripe Connect Express bulk payout
+- Contractor sees own pay status in a limited workspace view
+
+**Risk prep (first-class, not afterthought):**
+
+- Payee KYC UX gentleness (it's someone's payday — friction has to be gentle)
+- Tax-doc accuracy liability (mitigated by using Stripe or a third-party filer, not building)
+- W-9 / TIN handled as high-sensitivity PII (mitigated by not custodying it)
+
+### 3.8 Reports (V1 — computes from transaction history)
+
+- P&L
+- Revenue by source
+- Tax collected by period
+- Profit by project
+- Margin
+- Income by source
+- Quarterly estimated tax calculator (based on YTD income)
+- Business trends from own-tenant data only
+
+**To discuss at build time:** Schedule C report (for sole proprietors) and LLC income statement (for LLCs). Not yet decided for V1 — discuss when Reports are built.
+
+### 3.9 Client-facing financial views
+
+**FLAG FOR VERIFICATION BEFORE BUILD.** Prior discussions surfaced a "static-snapshot with manual Push updates button" model from the Gemini R2 review. Mike has not explicitly signed off. Do NOT build this until Mike and Claude discuss further.
+
+### 3.10 QuickBooks / Xero handoff
+
+- **V1:** clean CSV/export optimized for QuickBooks and Xero.
+- **V1.5:** full QuickBooks 2-way OAuth sync. CSV export stays as the fallback.
+
+### 3.11 Roles
+
+- Bookkeeper restricted-access role (see Team/RBAC section)
+
+### 3.12 Pre-launch step — accountant + lawyer review
+
+Once everything in V1 is built, before real customers touch it: have an actual accountant + a lawyer review the financial features and disclaimer language. Log as a pre-launch task to remember.
+
+## Superseded (kept for archaeology)
+
+> **Superseded 2026-07-20. Current V1 Finance scope is in the section above. Ledger entry: docs/PIVOTS_LEDGER.md 2026-07-20 Finance consolidation.**
+
+### Prior §3 — Finance / "QB-Light" (a product within the product; multiple pushes, ~P11+; weeks of work)
 
 - Built as QB-Light AMBITION, not a thin payment-collection layer: income tracking, expense tracking, discounts, sales tax, contractor-payment/1099 tracking. NO actual payroll (W-2 withholding/filing) — contractor-payment tracking only.
 - TAX: slots for local / state / sales / resale tax, and SEPARATE service-tax vs product-tax fields (they differ; law can change what's taxable). None required — user owns/enters rates, Pathway tracks. AI helper SURFACES current rates + the service-vs-product distinction + regulation changes for the user to verify and enter (never auto-applies); disclaimer (information, not tax advice) keeps liability near-nil.
@@ -100,3 +222,5 @@ Keep the competitive goal (rich financial tracking + strong reporting, better th
 Competitive weapons, by defensibility: (1) real CRM+PM done well (nobody does), (2) native QB-Light books (attacks HoneyBook's weak bookkeeping; kills a QB subscription), (3) processor-agnostic payments (attacks HoneyBook's most-hated lock-in), (4) AI as the bonus layer (world is heading AI-heavy; build for it now). AI is upside, not the thesis — CRM+PM done well beats the field even if AI plateaus.
 
 **REJECTED (2nd architecture review) — do NOT add "constructive stickiness" / payment lock-in.** Pathway's no-lock-in / processor-agnostic stance is a deliberate FEATURE (it attacks HoneyBook's most-hated trait). Retention comes from **product quality + data/workflow/AI depth**, NOT hostage-style lock-in. Do not add artificial exit friction (e.g. payment lock-in, data-hostage downgrade). This is consistent with the graceful-downgrade Membership stance (§10) and the "don't hold data hostage" rule.
+
+> **V1 reconciliation (2026-07-20): V1 Finance ships Stripe-only** (see §3). The processor-agnostic framing above is the _intended goal_, not V1 scope — it is **deferred pending research** into which processors can pay out contractors WITHOUT transferring legal/financial liability to Pathway. Stripe Connect **Express** was chosen for V1 because research showed it is the only Connect tier that pays out contractors while keeping Pathway out of the money path; whether V1.x adds a Standard/Express hybrid or other payout-capable processors is an open question to revisit at the Finance-module build. Ledger: `docs/PIVOTS_LEDGER.md` 2026-07-20.

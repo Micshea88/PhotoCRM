@@ -59,6 +59,10 @@ export const env = createEnv({
     // URI `<app-url>/api/auth/callback/google`.
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+    // Pathway-staff account-recovery allowlist (Piece C). Comma-separated emails
+    // that may access the cross-tenant recovery console. Set-once, no in-app way
+    // to escalate. Blank = nobody (the console 404s for everyone).
+    PATHWAY_SUPERADMIN_EMAILS: z.string().optional(),
     RESEND_API_KEY: z.string().min(1),
     RESEND_FROM_EMAIL: z.email(),
     // Push 2c.6.7 — optional display name composed into the From:
@@ -183,6 +187,7 @@ export const env = createEnv({
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    PATHWAY_SUPERADMIN_EMAILS: process.env.PATHWAY_SUPERADMIN_EMAILS,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     RESEND_FROM_NAME: process.env.RESEND_FROM_NAME,

@@ -1,7 +1,9 @@
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { organization } from "better-auth/plugins"
+import { organization, haveIBeenPwned } from "better-auth/plugins"
+import { createAuthMiddleware, APIError } from "better-auth/api"
 import { db } from "@/lib/db"
+import { passwordCompositionError } from "@/modules/auth/password-policy"
 import { env } from "@/lib/env"
 import { sendEmail } from "@/lib/email"
 import { seedNewOrganization } from "@/lib/seed-new-org"
@@ -32,11 +34,34 @@ const socialProviders =
     ? { google: { clientId: googleClientId, clientSecret: googleClientSecret } }
     : undefined
 
+// The password-setting endpoints — server-side composition (below) and the HIBP
+// plugin both guard these so the rules can't be skipped by bypassing the form.
+const PASSWORD_ENDPOINTS = new Set(["/sign-up/email", "/change-password", "/reset-password"])
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
   baseURL: authBaseURL,
   trustedOrigins: authTrustedOrigins,
   secret: env.BETTER_AUTH_SECRET,
+  // Server-side password composition (policy #11) — enforced at the API, not just
+  // the form, so min-8+composition can't be bypassed. Same paths the HIBP plugin
+  // guards. Min-length itself is enforced by emailAndPassword.minPasswordLength.
+  hooks: {
+    // eslint-disable-next-line @typescript-eslint/require-await -- middleware type expects an async handler; the composition check is synchronous
+    before: createAuthMiddleware(async (ctx) => {
+      if (!PASSWORD_ENDPOINTS.has(ctx.path)) return
+      const body = ctx.body as { password?: unknown; newPassword?: unknown } | undefined
+      const pw =
+        typeof body?.password === "string"
+          ? body.password
+          : typeof body?.newPassword === "string"
+            ? body.newPassword
+            : null
+      if (pw === null) return
+      const message = passwordCompositionError(pw)
+      if (message) throw new APIError("BAD_REQUEST", { message })
+    }),
+  },
   ...(socialProviders ? { socialProviders } : {}),
   // Auto-link a Google sign-in to an EXISTING email/password account only when
   // the provider's email is verified. Google always returns verified emails, so
@@ -141,6 +166,13 @@ export const auth = betterAuth({
           await seedNewMember(org.id, usr.id, mem.role as BetterAuthRole, inv.id)
         },
       },
+    }),
+    // HIBP breach screening — the load-bearing password control (policy #11).
+    // Rejects passwords found in known breach corpuses via k-anonymity (no API
+    // key). Guards sign-up + change-password + reset-password by default.
+    haveIBeenPwned({
+      customPasswordCompromisedMessage:
+        "This password has appeared in a data breach. Please choose a different one.",
     }),
   ],
 })

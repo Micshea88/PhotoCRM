@@ -15,12 +15,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { isValidCallbackUrl } from "@/modules/auth/callback-url"
 import { GoogleSignInButton } from "@/modules/auth/ui/google-sign-in-button"
 import { AuthOrDivider } from "@/modules/auth/ui/auth-or-divider"
+import { passwordSchema } from "@/modules/auth/password-policy"
+import { PasswordRequirementsHint } from "@/modules/auth/ui/password-requirements-hint"
 
 const schema = z
   .object({
     name: z.string().min(1, "Name is required").max(100),
     email: z.email("Enter a valid email"),
-    password: z.string().min(12, "Password must be at least 12 characters"),
+    password: passwordSchema,
     confirmPassword: z.string().min(1, "Please confirm your password"),
   })
   .superRefine((data, ctx) => {
@@ -235,6 +237,7 @@ export function SignUpForm({ googleEnabled = false }: { googleEnabled?: boolean 
           {errors.password && (
             <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
           )}
+          <PasswordRequirementsHint />
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm password</Label>

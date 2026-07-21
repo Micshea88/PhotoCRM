@@ -11,6 +11,8 @@ import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
+import { passwordSchema as passwordRule } from "@/modules/auth/password-policy"
+import { PasswordRequirementsHint } from "@/modules/auth/ui/password-requirements-hint"
 
 const profileSchema = z.object({
   name: z.string().min(1).max(100),
@@ -19,7 +21,7 @@ const profileSchema = z.object({
 const passwordSchema = z
   .object({
     currentPassword: z.string().min(1),
-    newPassword: z.string().min(12, "Password must be at least 12 characters"),
+    newPassword: passwordRule,
     confirmPassword: z.string(),
   })
   .refine((v) => v.newPassword === v.confirmPassword, {
@@ -143,6 +145,7 @@ export function AccountSettingsForm({
                 {pw.formState.errors.newPassword.message}
               </p>
             )}
+            <PasswordRequirementsHint />
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm new password</Label>

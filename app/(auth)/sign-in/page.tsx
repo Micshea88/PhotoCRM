@@ -1,9 +1,11 @@
 import Link from "next/link"
 import { Suspense } from "react"
+import { env } from "@/lib/env"
 import { SignInForm } from "@/modules/auth/ui/sign-in-form"
 import { AuthPageHeader, SignInBottomLinks } from "@/modules/auth/ui/auth-page-header"
 
 export default function SignInPage() {
+  const googleEnabled = !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET
   return (
     <div className="space-y-6">
       {/* Push 2c.6.11 — heading + bottom links are client sub-
@@ -28,7 +30,7 @@ export default function SignInPage() {
         />
       </Suspense>
       <Suspense fallback={<p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>}>
-        <SignInForm />
+        <SignInForm googleEnabled={googleEnabled} />
       </Suspense>
       <Suspense fallback={null}>
         <SignInBottomLinks>

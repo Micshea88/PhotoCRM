@@ -52,6 +52,13 @@ export const env = createEnv({
     DATABASE_URL: z.url(),
     BETTER_AUTH_SECRET: productionGradeSecret("BETTER_AUTH_SECRET").pipe(z.string().min(32)),
     BETTER_AUTH_URL: z.url(),
+    // Google OAuth (optional social sign-in — an ALTERNATE to email+password,
+    // never a replacement). Both must be set to enable the "Continue with
+    // Google" button; absent = the button is hidden and email/password is the
+    // only path. Register an OAuth client in Google Cloud Console with redirect
+    // URI `<app-url>/api/auth/callback/google`.
+    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
     RESEND_API_KEY: z.string().min(1),
     RESEND_FROM_EMAIL: z.email(),
     // Push 2c.6.7 — optional display name composed into the From:
@@ -174,6 +181,8 @@ export const env = createEnv({
     DATABASE_URL: process.env.DATABASE_URL,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     RESEND_FROM_NAME: process.env.RESEND_FROM_NAME,

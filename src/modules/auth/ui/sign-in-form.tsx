@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { GoogleSignInButton } from "@/modules/auth/ui/google-sign-in-button"
+import { AuthOrDivider } from "@/modules/auth/ui/auth-or-divider"
 
 const schema = z.object({
   email: z.email("Enter a valid email"),
@@ -25,7 +27,7 @@ type Values = z.infer<typeof schema>
 const INVALID_CREDENTIALS = "Invalid email or password"
 const GENERIC_ERROR = "Something went wrong, please try again."
 
-export function SignInForm() {
+export function SignInForm({ googleEnabled = false }: { googleEnabled?: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
   const redirectTo = params.get("redirect") ?? "/dashboard"
@@ -93,57 +95,68 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          autoComplete="email"
-          readOnly={!!lockedEmail}
-          {...register("email")}
-        />
+    <div className="space-y-4">
+      {/* Google is an OPTIONAL alternate. Hidden during the invite flow, where a
+          specific invited email must be used (Google could sign in a different
+          account). */}
+      {googleEnabled && !lockedEmail && (
+        <>
+          <GoogleSignInButton callbackURL="/" />
+          <AuthOrDivider />
+        </>
+      )}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            readOnly={!!lockedEmail}
+            {...register("email")}
+          />
+          {lockedEmail && (
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              This invitation was sent to {lockedEmail}. To use a different email, ask the inviter
+              to send a new invitation.
+            </p>
+          )}
+          {errors.email && (
+            <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <PasswordInput id="password" autoComplete="current-password" {...register("password")} />
+          {errors.password && (
+            <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
+          )}
+        </div>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <Button type="submit" disabled={submitting} className="w-full">
+          {submitting ? "Signing in…" : "Sign in"}
+        </Button>
         {lockedEmail && (
-          <p className="text-xs text-[var(--color-muted-foreground)]">
-            This invitation was sent to {lockedEmail}. To use a different email, ask the inviter to
-            send a new invitation.
+          <p className="text-center text-sm text-[var(--color-muted-foreground)]">
+            New here?{" "}
+            <Link
+              href={`/sign-up?${(() => {
+                const r = params.get("redirect")
+                const qp = new URLSearchParams({ email: lockedEmail })
+                if (r) qp.set("redirect", r)
+                return qp.toString()
+              })()}`}
+              className="font-medium underline"
+            >
+              Create an account with {lockedEmail}
+            </Link>
           </p>
         )}
-        {errors.email && (
-          <p className="text-xs text-[var(--color-destructive)]">{errors.email.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
-        <PasswordInput id="password" autoComplete="current-password" {...register("password")} />
-        {errors.password && (
-          <p className="text-xs text-[var(--color-destructive)]">{errors.password.message}</p>
-        )}
-      </div>
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Signing in…" : "Sign in"}
-      </Button>
-      {lockedEmail && (
-        <p className="text-center text-sm text-[var(--color-muted-foreground)]">
-          New here?{" "}
-          <Link
-            href={`/sign-up?${(() => {
-              const r = params.get("redirect")
-              const qp = new URLSearchParams({ email: lockedEmail })
-              if (r) qp.set("redirect", r)
-              return qp.toString()
-            })()}`}
-            className="font-medium underline"
-          >
-            Create an account with {lockedEmail}
-          </Link>
-        </p>
-      )}
-    </form>
+      </form>
+    </div>
   )
 }

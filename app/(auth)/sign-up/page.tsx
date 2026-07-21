@@ -1,9 +1,11 @@
 import Link from "next/link"
 import { Suspense } from "react"
+import { env } from "@/lib/env"
 import { SignUpForm } from "@/modules/auth/ui/sign-up-form"
 import { AuthPageHeader } from "@/modules/auth/ui/auth-page-header"
 
 export default function SignUpPage() {
+  const googleEnabled = !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET
   return (
     <div className="space-y-6">
       {/* Push 2c.6.11 — invite-flow-aware heading. AuthPageHeader
@@ -32,7 +34,7 @@ export default function SignUpPage() {
         />
       </Suspense>
       <Suspense fallback={<p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>}>
-        <SignUpForm />
+        <SignUpForm googleEnabled={googleEnabled} />
       </Suspense>
       <p className="text-center text-sm text-[var(--color-muted-foreground)]">
         Already have an account?{" "}

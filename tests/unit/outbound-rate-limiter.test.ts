@@ -39,19 +39,29 @@ describe("RateLimiter floor + shared burst", () => {
   it("uses the org floor, then the shared burst, then refuses", async () => {
     const rl = new RateLimiter(new InMemoryStore())
     const t = 1_000_000
-    expect((await rl.admit("resend", "orgA", budget, t)).ok).toBe(true) // floor
-    expect((await rl.admit("resend", "orgA", budget, t)).ok).toBe(true) // burst
-    expect((await rl.admit("resend", "orgA", budget, t)).ok).toBe(false) // both empty
+    expect((await rl.admit("resend", "orgA", budget, "interactive", t)).ok).toBe(true) // floor
+    expect((await rl.admit("resend", "orgA", budget, "interactive", t)).ok).toBe(true) // burst
+    expect((await rl.admit("resend", "orgA", budget, "interactive", t)).ok).toBe(false) // both empty
   })
 
   it("FAIRNESS: one org draining floor+burst does not starve another org's floor", async () => {
     const rl = new RateLimiter(new InMemoryStore())
     const t = 1_000_000
-    await rl.admit("resend", "orgA", budget, t) // orgA floor
-    await rl.admit("resend", "orgA", budget, t) // shared burst (now gone)
-    await rl.admit("resend", "orgA", budget, t) // refused
+    await rl.admit("resend", "orgA", budget, "interactive", t) // orgA floor
+    await rl.admit("resend", "orgA", budget, "interactive", t) // shared burst (now gone)
+    await rl.admit("resend", "orgA", budget, "interactive", t) // refused
     // orgB still has its OWN guaranteed floor untouched.
-    expect((await rl.admit("resend", "orgB", budget, t)).ok).toBe(true)
+    expect((await rl.admit("resend", "orgB", budget, "interactive", t)).ok).toBe(true)
+  })
+
+  it("LANES: bulk draws only from the shared burst, leaving the org floor for interactive", async () => {
+    const rl = new RateLimiter(new InMemoryStore())
+    const t = 1_000_000
+    // A bulk batch drains the shared burst but NEVER touches orgA's floor.
+    expect((await rl.admit("resend", "orgA", budget, "bulk", t)).ok).toBe(true) // burst
+    expect((await rl.admit("resend", "orgA", budget, "bulk", t)).ok).toBe(false) // burst gone; no floor for bulk
+    // The human-waiting interactive send still has orgA's full floor.
+    expect((await rl.admit("resend", "orgA", budget, "interactive", t)).ok).toBe(true) // floor
   })
 })
 

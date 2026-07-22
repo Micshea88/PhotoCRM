@@ -78,8 +78,12 @@ decisions are kept on file, marked deferred, not deleted.
   `hashToken` toggle and offers no clean hook to hash the reset-token identifier without
   overriding its internal reset flow. Residual risk low (24-char entropy + 1h expiry + now
   pruned; email-verify is a stateless JWT). Revisit on a BA upgrade or a custom adapter.
-- **⬜ API `/api/v1`** path versioning + forward-compatible response envelopes + RFC 8594
-  deprecation/sunset headers (policy 10).
+- **✅ API `/api/v1` versioning convention established** (policy 10) — `/api/v1` home +
+  `{ data, error, meta }` forward-compatible envelope (`@/lib/api/envelope`) + RFC 8594
+  sunset/`Deprecation`/`Link` headers (`@/lib/api/deprecation`) + `/api/v1/health` anchor +
+  `app/api/v1/README.md`. No public endpoints yet (Zapier / API-key access is a later feature);
+  the convention is ready so the first one ships on it, not retrofitted. **The public API-key
+  auth layer + shared Upstash rate-limit are still to build.** _(2026-07-22)_
 - **⬜ Multi-region rate-limit storage** (Upstash) — folded into the gateway above (H9).
 
 ---

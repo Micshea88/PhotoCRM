@@ -56,7 +56,10 @@ decisions are kept on file, marked deferred, not deleted.
   per-record history view, per-field **change notifications**, **comments + @-mentions +
   resolvable threads**, **day-83/87 deletion warnings + export-from-bin**. Today `audit_log`
   has actor/action/resource/metadata only — the base, not the feature.
-- **⬜ Merge warning UI** + "recovery won't repopulate the loser" notice (backend done, UI not).
+- **✅ Merge warning UI** — the confirm step already existed; added the **"recovery won't
+  repopulate the loser"** notice (restoring a merged-away contact/company comes back empty; data
+  moved to the primary) + the 90-day-bin mention, on both the contact and company merge modals.
+  _(2026-07-22)_
 - **⬜ Dropdown "did you mean"** fuzzy-match on field values (org-wide, admin-toggle per user,
   CSV import runs the same match-check). Not built (existing fuzzy code is for contact dedup).
 - **⬜ Pagination full spec** — numbered pages, 50/100/150/250 tiers, select-all-across-pages

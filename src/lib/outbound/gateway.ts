@@ -124,18 +124,18 @@ export class OutboundGateway {
         continue
       }
 
-      // 3. Admitted — make the real provider call.
+      // 3. Admitted — make the real provider call. A provider FAILURE fails fast
+      // (no inline retry): a definitive send error won't fix itself on an
+      // immediate re-send, and the caller (or, for bulk, the enclosing durable
+      // job) owns retry. The inline retry loop is ONLY for admission throttle /
+      // breaker-not-ready above, where a short wait genuinely helps.
       try {
         const value = await doCall()
         breaker.onSuccess()
         return { status: "sent", value }
       } catch (error) {
         breaker.onFailure(this.now())
-        if (lane === "bulk" || isLast) {
-          return { status: "failed", error }
-        }
-        await this.sleep(fullJitterBackoffMs(attempt))
-        // retry
+        return { status: "failed", error }
       }
     }
 

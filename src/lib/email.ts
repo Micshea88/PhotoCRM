@@ -2,6 +2,8 @@ import "server-only"
 import type { ReactElement } from "react"
 import { Resend } from "resend"
 import { env } from "@/lib/env"
+import { getOutboundGateway } from "@/lib/outbound/config"
+import type { Lane } from "@/lib/outbound/rate-limiter"
 
 // Lazy singleton — instantiating at module top-level would access a server env
 // var at import time, which breaks when this module is pulled into a client
@@ -57,6 +59,19 @@ export interface SendEmailParams {
    * (e.g. `wf:<executionId>:<stepNo>`).
    */
   idempotencyKey?: string
+  /**
+   * Org whose outbound-gateway fairness budget this send draws from. Defaults to
+   * a shared `"_system"` bucket for auth/system mail (invites, resets, receipts)
+   * that has no org context.
+   */
+  orgId?: string
+  /**
+   * `interactive` (a human is waiting — the default) vs `bulk` (a workflow batch
+   * or import). Bulk reserves no per-org floor and, on throttle, throws a plain
+   * Error so the enclosing durable job treats it as transient and reschedules
+   * with backoff (requeue-not-sleep via the A3 queue).
+   */
+  lane?: Lane
 }
 
 export async function sendEmail({
@@ -71,26 +86,49 @@ export async function sendEmail({
   attachments,
   headers,
   idempotencyKey,
+  orgId,
+  lane,
 }: SendEmailParams) {
   if (!react && !html) {
     throw new Error("sendEmail requires either `react` or `html`")
   }
-  const result = await resend().emails.send(
-    {
-      from: from ?? defaultFromAddress(),
-      to,
-      subject,
-      ...(react ? { react } : { html: html ?? "" }),
-      replyTo,
-      ...(cc ? { cc } : {}),
-      ...(bcc ? { bcc } : {}),
-      ...(attachments && attachments.length > 0 ? { attachments } : {}),
-      ...(headers ? { headers } : {}),
+  // Every Resend send goes through the outbound gateway: rate-limited, fair
+  // across studios, and circuit-broken. The provider call lives inside `doCall`
+  // so a Resend API error is counted as a provider failure (breaker), not a
+  // success. On throttle/breaker-open the gateway returns a signal we turn into a
+  // plain Error — which the workflow executor treats as transient and reschedules
+  // via the durable queue (requeue-not-sleep); interactive callers surface it to
+  // the UI exactly as a send failure did before.
+  const outcome = await getOutboundGateway().execute(
+    "resend",
+    orgId ?? "_system",
+    lane ?? "interactive",
+    async () => {
+      const result = await resend().emails.send(
+        {
+          from: from ?? defaultFromAddress(),
+          to,
+          subject,
+          ...(react ? { react } : { html: html ?? "" }),
+          replyTo,
+          ...(cc ? { cc } : {}),
+          ...(bcc ? { bcc } : {}),
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
+          ...(headers ? { headers } : {}),
+        },
+        idempotencyKey ? { idempotencyKey } : undefined,
+      )
+      if (result.error) {
+        throw new Error(`Email send failed: ${result.error.message}`)
+      }
+      return result.data
     },
-    idempotencyKey ? { idempotencyKey } : undefined,
   )
-  if (result.error) {
-    throw new Error(`Email send failed: ${result.error.message}`)
+  if (outcome.status === "sent") return outcome.value
+  if (outcome.status === "failed") {
+    throw outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error))
   }
-  return result.data
+  throw new Error(
+    `Email send ${outcome.status} (resend): retry after ~${String(outcome.retryAfterMs)}ms`,
+  )
 }

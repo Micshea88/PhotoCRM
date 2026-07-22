@@ -50,7 +50,7 @@ Tags: `[sec]` security · `[db]` database/migrations · `[ci]` CI/verification �
 - [x] **H11** `[sec]` Blob upload MIME whitelist is now explicit: `image/{png,jpeg,webp,gif,svg+xml}`, `application/pdf`, `text/{plain,csv}`. No glob.
 - [x] **H12** `[sec]` `/accept-invite` added to `PUBLIC_ROUTES`.
 - [x] **H13** `[sec]` Password policy: **min 8 + composition** (client + server-side via `src/modules/auth/password-policy.ts` + Better Auth `before` hook) and **HIBP k-anonymity breach screening** (`haveIbeenPwned` plugin) both wired. _(2026-07-21)_
-- [ ] **H14** `[sec]` Better Auth `verification.value` stored plaintext. **Open.** Enable `advanced.hashToken`; add daily cron to delete expired tokens.
+- [~] **H14** `[sec]` Verification/reset tokens. **Daily expired-token prune cron DONE** (`/api/jobs/cron/prune-auth-tokens`, 04:45 UTC). **Hashing DEFERRED:** BA 1.6.9 has no `advanced.hashToken` toggle and no clean hook to hash the reset-token identifier without overriding its internal reset flow (risky on a security-critical path). Residual risk is low — reset token is a 24-char high-entropy random string, 1h expiry, now pruned; email-verify uses stateless JWTs (never in the DB). Revisit on a BA upgrade that restores the toggle, or via a custom adapter. _(2026-07-21)_
 - [x] **H15** `[sec]` `verifyCronAuth` now also requires `User-Agent: vercel-cron/...` in production.
 
 ### Observability

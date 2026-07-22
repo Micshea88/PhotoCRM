@@ -73,8 +73,11 @@ decisions are kept on file, marked deferred, not deleted.
   sign-up/change/reset). The load-bearing password control. _(2026-07-21)_
 - **✅ Server-side password composition** — enforced at the API via the Better Auth `before`
   hook (`passwordCompositionError`), not just the form, so it can't be bypassed. _(2026-07-21)_
-- **⬜ Hashed verification/reset tokens** — stored plaintext today (TODO H14); short-expiry +
-  hash-at-rest.
+- **◐ Verification/reset tokens (H14)** — expired-token **prune cron DONE**
+  (`/api/jobs/cron/prune-auth-tokens`). **Hash-at-rest DEFERRED:** BA 1.6.9 removed the
+  `hashToken` toggle and offers no clean hook to hash the reset-token identifier without
+  overriding its internal reset flow. Residual risk low (24-char entropy + 1h expiry + now
+  pruned; email-verify is a stateless JWT). Revisit on a BA upgrade or a custom adapter.
 - **⬜ API `/api/v1`** path versioning + forward-compatible response envelopes + RFC 8594
   deprecation/sunset headers (policy 10).
 - **⬜ Multi-region rate-limit storage** (Upstash) — folded into the gateway above (H9).

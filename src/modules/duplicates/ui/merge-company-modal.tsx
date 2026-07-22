@@ -172,10 +172,16 @@ function CompanyMergeModalBody({
         title="Merge companies?"
         className="max-w-md"
       >
-        <p className="mb-4 text-sm">
-          This will permanently combine these records. The non-primary companies will be
-          soft-deleted but recoverable from{" "}
-          <span className="font-mono text-xs">/companies/deleted</span>. Are you sure?
+        <p className="mb-2 text-sm">
+          This permanently combines these records. The non-primary companies move to the Deleted bin
+          (<span className="font-mono text-xs">/companies/deleted</span>, kept 90 days).
+        </p>
+        <p className="mb-4 text-sm text-[var(--color-muted-foreground)]">
+          <strong className="text-[var(--color-foreground)]">
+            Restoring a merged-away company won&apos;t undo the merge
+          </strong>{" "}
+          — it comes back as an empty record. The details and links you&apos;re combining now move
+          to the primary and stay there. Are you sure?
         </p>
         {error && (
           <div className="mb-3 rounded-md border border-[var(--color-destructive)]/40 bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">

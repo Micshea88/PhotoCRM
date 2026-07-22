@@ -67,11 +67,13 @@ decisions are kept on file, marked deferred, not deleted.
 
 ### Hardening (unbuilt — still valid, still needed)
 
-- **⬜ Rate-limit outbound gateway** — one gateway, three thin adapters (Nylas/Resend/RC),
-  per-org fairness (guaranteed floor + shared burst), two lanes (interactive always beats
-  bulk), retries-are-requeues-not-sleeps, full jitter, circuit breaker per provider, **Upstash**
-  shared state, extract RingCentral as the template, throttle visibility to the studio. Big
-  piece, none built (= policy 5 + TODO H9).
+- **◐ Rate-limit outbound gateway** (policy 5 + TODO H9) — **designed** + **step 1 (core engine)
+  built**. Design: `docs/superpowers/specs/2026-07-22-outbound-rate-limit-gateway-design.md`.
+  DONE: pluggable `RateLimitStore` + `InMemoryStore` token bucket + `RateLimiter` floor+shared-burst
+  fairness + full-jitter backoff (`src/lib/outbound/`), unit-tested (incl. fairness proof), wires
+  nothing into live paths yet. REMAINING: (2) circuit breaker, (3) two-lane scheduler +
+  requeue-not-sleep via the A3 queue, (4) adapters (Resend/Nylas through it; extract RC as template),
+  (5) Upstash store for multi-region, (6) throttle visibility to the studio.
 - **✅ HIBP breach screening** — WIRED (`haveIbeenPwned` plugin, k-anonymity, no key; guards
   sign-up/change/reset). The load-bearing password control. _(2026-07-21)_
 - **✅ Server-side password composition** — enforced at the API via the Better Auth `before`

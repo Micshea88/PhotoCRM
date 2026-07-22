@@ -56,17 +56,16 @@ describe("OutboundGateway.execute", () => {
     expect(calls).toBe(1) // the throttled bulk send never called the provider
   })
 
-  it("interactive retries across a transient failure and then succeeds", async () => {
+  it("a provider failure fails fast without inline-retrying (retry is the caller's/queue's job)", async () => {
     const gw = makeGateway()
     let calls = 0
-    const flaky = () => {
+    const boom = () => {
       calls += 1
-      if (calls === 1) return Promise.reject(new Error("transient"))
-      return Promise.resolve("id-2")
+      return Promise.reject(new Error("provider error"))
     }
-    const r = await gw.execute("resend", "orgA", "interactive", flaky)
-    expect(r).toEqual({ status: "sent", value: "id-2" })
-    expect(calls).toBe(2)
+    const r = await gw.execute("resend", "orgA", "interactive", boom)
+    expect(r.status).toBe("failed")
+    expect(calls).toBe(1) // did NOT hammer the provider on a definitive error
   })
 
   it("opens the breaker after repeated failures and then reports circuit_open", async () => {

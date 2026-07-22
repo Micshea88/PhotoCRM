@@ -157,6 +157,12 @@ async function handleSendEmail(
     // Stable across retries of THIS step of THIS execution, so a queue reaper
     // re-running the execution after a crash makes Resend dedup the resend.
     idempotencyKey: `wf:${ctx.executionId}:${String(ctx.sequenceNo)}`,
+    // Workflow sends are a batch — the bulk lane. It reserves no per-org floor
+    // (that's kept for humans clicking Send), and a throttle throws → the
+    // executor treats it as transient → the durable queue reschedules with
+    // backoff. Keyed to this org's fairness budget.
+    orgId: ctx.organizationId,
+    lane: "bulk",
   })
   await audit(
     { db: ctx.db, organizationId: ctx.organizationId, actorUserId: null },

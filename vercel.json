@@ -8,6 +8,7 @@
     { "path": "/api/jobs/cron/workflow-trigger-matcher", "schedule": "* * * * *" },
     { "path": "/api/jobs/cron/workflow-execute", "schedule": "* * * * *" },
     { "path": "/api/jobs/cron/refresh-telephony-tokens", "schedule": "30 4 * * *" },
+    { "path": "/api/jobs/cron/prune-auth-tokens", "schedule": "45 4 * * *" },
     { "path": "/api/jobs/cron/rc-sync-sweep", "schedule": "* * * * *" }
   ]
 }

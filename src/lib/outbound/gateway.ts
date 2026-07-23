@@ -11,6 +11,7 @@ import {
   type BreakerState,
 } from "@/lib/outbound/circuit-breaker"
 import type { RateLimitStore } from "@/lib/outbound/store"
+import type { ThrottleListener } from "@/lib/outbound/throttle-signal"
 
 /**
  * The outbound gateway (step 3) — composes admission control (fairness + lanes),
@@ -52,6 +53,9 @@ export interface GatewayOptions {
   now?: () => number
   /** Interactive lane: admission/retry attempts before giving up. */
   interactiveMaxAttempts?: number
+  /** Fired whenever a send is delayed (throttled / breaker-open) — the throttle
+   *  visibility signal (step 6). Wired in config to log + feed the ThrottleLog. */
+  onThrottle?: ThrottleListener
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -66,6 +70,7 @@ export class OutboundGateway {
   private readonly sleep: (ms: number) => Promise<void>
   private readonly now: () => number
   private readonly interactiveMaxAttempts: number
+  private readonly onThrottle?: ThrottleListener
 
   constructor(opts: GatewayOptions) {
     this.providers = opts.providers
@@ -73,6 +78,7 @@ export class OutboundGateway {
     this.sleep = opts.sleep ?? defaultSleep
     this.now = opts.now ?? Date.now
     this.interactiveMaxAttempts = opts.interactiveMaxAttempts ?? 3
+    this.onThrottle = opts.onThrottle
   }
 
   private breakerFor(provider: string, opts: BreakerOptions): CircuitBreaker {
@@ -90,6 +96,27 @@ export class OutboundGateway {
   }
 
   async execute<T>(
+    provider: string,
+    orgId: string,
+    lane: Lane,
+    doCall: () => Promise<T>,
+  ): Promise<GatewayResult<T>> {
+    const result = await this.attempt(provider, orgId, lane, doCall)
+    // Single emit point for throttle visibility (step 6): any delayed send —
+    // rate-limited or breaker-open — signals the studio's "catching up" state.
+    if (result.status === "throttled" || result.status === "circuit_open") {
+      this.onThrottle?.({
+        provider,
+        orgId,
+        status: result.status,
+        retryAfterMs: result.retryAfterMs,
+        at: this.now(),
+      })
+    }
+    return result
+  }
+
+  private async attempt<T>(
     provider: string,
     orgId: string,
     lane: Lane,

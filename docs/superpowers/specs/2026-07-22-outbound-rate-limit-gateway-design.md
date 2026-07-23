@@ -1,7 +1,10 @@
 # Outbound rate-limit gateway — design
 
 **Date:** 2026-07-22
-**Status:** proposed (awaiting owner review)
+**Status:** IMPLEMENTED (2026-07-22) — all 6 steps merged (PRs #10–#17). All three
+providers (Resend, Nylas, RingCentral) route live through the gateway; Upstash is
+env-gated + dormant until provisioned; the throttle signal is emitted + recorded
+(UI surface intentionally deferred to the notifications module).
 **Policy:** #5 (every outbound provider call goes through a rate-limited, 429-aware, retrying client) + TODO H9 (multi-region rate-limit storage). Locked hardening decision transcribed in `docs/pre-events-punchlist.md` §3.
 
 ## Why
@@ -105,18 +108,25 @@ notifications module; the gateway emits the signal.
 
 ## Build plan (incremental — each its own PR, behind `verify --tier=2`)
 
-1. **Core engine** — `RateLimitStore` interface + `InMemoryStore` + token bucket
-   (floor + shared burst) + full-jitter backoff. Standalone + unit-tested. Wires
-   nothing yet (zero risk to live paths). ← _build first_
-2. **Circuit breaker** — per-provider breaker in the store + gateway integration.
-3. **Two-lane scheduler + requeue-not-sleep** — interactive vs bulk; bulk
-   throttle → enqueue via the A3 queue.
-4. **Adapters** — route Resend + Nylas through the gateway; refactor RC to feed
-   its 429 classification in (extract, don't rewrite). Touches live send paths —
-   done carefully, behind tests + the crash/idempotency guarantees already proven.
-5. **Upstash store** — env-gated `UpstashStore` for multi-region (TODO H9). Owner
-   sets up Upstash.
-6. **Throttle visibility** — emit the throttle signal to the studio.
+1. ✅ **Core engine** — `RateLimitStore` + `InMemoryStore` + floor/burst token
+   bucket + full-jitter backoff. (PR #10)
+2. ✅ **Circuit breaker** — per-provider breaker (`circuit-breaker.ts`). (PR #11)
+3. ✅ **Two-lane scheduler + requeue-not-sleep** — `OutboundGateway.execute`;
+   interactive reserves the org floor + bounded retry, bulk is burst-only and
+   throws on throttle so the enclosing durable job reschedules (requeue-not-sleep
+   reuses A3 — no new job type). (PR #12)
+4. ✅ **Adapters (LIVE)** — 4a: assembled singleton + owner-confirmed budgets
+   (PR #13). 4b: Resend/`sendEmail` routed through the gateway, workflow send on
+   the bulk lane (PR #14). 4c: Nylas (`nylasSendMessageRaw` extracted) + RC
+   (`request` wraps the existing 429 retry `requestRaw` once — extract, not
+   rewrite), org threaded through both (PR #15).
+5. ✅ **Upstash store** — env-gated `UpstashStore` (atomic Lua, fail-open),
+   auto-selected by `getOutboundGateway()`. Dormant until owner provisions
+   Upstash. (PR #16)
+6. ✅ **Throttle visibility** — gateway emits `onThrottle`; config logs a stable
+   `outbound.throttled` event + records to `ThrottleLog` (`isCatchingUp(orgId)`).
+   The UI surface (indicator / notification) is deferred to the notifications
+   module — the gateway just emits. (PR #17)
 
 ## Owner decisions to confirm
 

@@ -98,7 +98,7 @@ export function studioFromHeader(businessName: string): string {
 }
 
 /** Nylas implementation — sends as the connected photographer. */
-function nylasProvider(grantId: string, sourceValue: string): EmailProvider {
+function nylasProvider(grantId: string, sourceValue: string, orgId: string): EmailProvider {
   return {
     async send(msg) {
       const sent = await nylasSendMessage({
@@ -109,6 +109,7 @@ function nylasProvider(grantId: string, sourceValue: string): EmailProvider {
         subject: msg.subject,
         html: msg.html,
         attachments: msg.attachments,
+        orgId,
       })
       const fromDomain = env.RESEND_FROM_EMAIL.split("@")[1] ?? "mail.invalid"
       // Prefer the provider's real RFC Message-ID (what replies reference). If
@@ -130,7 +131,7 @@ function nylasProvider(grantId: string, sourceValue: string): EmailProvider {
 
 /** Resend fallback — dressed to look like the photographer. Mints Pathway's own
  *  Message-ID (as the pre-Nylas composer did). */
-function resendFallbackProvider(fromHeader: string): EmailProvider {
+function resendFallbackProvider(fromHeader: string, orgId: string): EmailProvider {
   return {
     async send(msg) {
       const fromDomain = env.RESEND_FROM_EMAIL.split("@")[1] ?? "mail.invalid"
@@ -144,6 +145,7 @@ function resendFallbackProvider(fromHeader: string): EmailProvider {
         from: fromHeader,
         headers: { "Message-ID": messageId },
         attachments: msg.attachments.map((a) => ({ filename: a.filename, content: a.content })),
+        orgId,
       })
       return {
         source: "resend",
@@ -174,10 +176,10 @@ export async function resolveSenderForUser(
   const conn = await getLiveConnectionForUser(db, args.orgId, args.userId)
   if (isSendable(conn)) {
     return {
-      provider: nylasProvider(decryptGrantId(conn), conn.sourceValue),
+      provider: nylasProvider(decryptGrantId(conn), conn.sourceValue, args.orgId),
       expiredConnection: false,
     }
   }
   const fromHeader = dressedFromHeader(args.photographerName, args.businessName)
-  return { provider: resendFallbackProvider(fromHeader), expiredConnection: !!conn }
+  return { provider: resendFallbackProvider(fromHeader, args.orgId), expiredConnection: !!conn }
 }

@@ -89,7 +89,7 @@ export async function ensureWebhookSubscription(
   }
 
   const { token } = await getValidAccessToken(args, tx)
-  const client = ringCentralClientWithToken(token)
+  const client = ringCentralClientWithToken(token, args.organizationId)
   const address = webhookAddressForOrg(args.organizationId)
 
   // Try renew first if we already have a subscription id.

@@ -1,5 +1,7 @@
 import "server-only"
 import { env } from "@/lib/env"
+import { getOutboundGateway } from "@/lib/outbound/config"
+import type { Lane } from "@/lib/outbound/rate-limiter"
 
 /**
  * Nylas v3 REST calls for sending and fetching a photographer's mail (Commit 4).
@@ -50,6 +52,11 @@ export interface NylasSendParams {
   html: string
   /** Inline attachments: base64 content + filename + content type. */
   attachments?: { filename: string; content: string; contentType: string }[]
+  /** Org whose outbound-gateway fairness budget this send draws from. Defaults to
+   *  a shared `"_system"` bucket when a caller has no org context. */
+  orgId?: string
+  /** interactive (default — a human is in the composer) vs bulk (an automation). */
+  lane?: Lane
 }
 
 export interface NylasSendResult {
@@ -62,8 +69,25 @@ export interface NylasSendResult {
   rfcMessageId: string | null
 }
 
-/** Send a message as the connected photographer. */
+/** Send a message as the connected photographer, through the outbound gateway
+ *  (rate-limited + fair across studios + circuit-broken). A Nylas API error
+ *  (incl. 429) throws inside the gated call, so the breaker counts it. */
 export async function nylasSendMessage(params: NylasSendParams): Promise<NylasSendResult> {
+  const outcome = await getOutboundGateway().execute(
+    "nylas",
+    params.orgId ?? "_system",
+    params.lane ?? "interactive",
+    () => nylasSendMessageRaw(params),
+  )
+  if (outcome.status === "sent") return outcome.value
+  if (outcome.status === "failed") {
+    throw outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error))
+  }
+  throw new Error(`Nylas send ${outcome.status}: retry after ~${String(outcome.retryAfterMs)}ms`)
+}
+
+/** The raw Nylas v3 send — network + parse only. Gated by nylasSendMessage. */
+async function nylasSendMessageRaw(params: NylasSendParams): Promise<NylasSendResult> {
   const { apiUri, apiKey } = requireApi()
   const body: Record<string, unknown> = {
     to: params.to.map((email) => ({ email })),

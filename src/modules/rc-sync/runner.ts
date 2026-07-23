@@ -57,7 +57,7 @@ export type RcRecordFetcher = (
 ) => Promise<RcCallLogRecord | null>
 
 const defaultRecordFetcher: RcRecordFetcher = (job, accessToken) => {
-  const client = ringCentralClientWithToken(accessToken)
+  const client = ringCentralClientWithToken(accessToken, job.organizationId)
   if (job.telephonySessionId) return client.getCallBySessionId(job.telephonySessionId)
   if (job.rcCallId) return client.getCall(job.rcCallId)
   return Promise.resolve(null)

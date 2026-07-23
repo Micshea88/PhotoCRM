@@ -1,6 +1,7 @@
 import "server-only"
 import { env } from "@/lib/env"
 import { getValidAccessToken } from "@/modules/telephony/token-refresh"
+import { getOutboundGateway } from "@/lib/outbound/config"
 import type { RcCallLogRecord, RcCallLogListResponse, RcSubscriptionResponse } from "./types"
 
 /**
@@ -39,6 +40,10 @@ export interface RingCentralClientDeps {
   sleep?: (ms: number) => Promise<void>
   /** Max retries on 429 before throwing. */
   maxRetries?: number
+  /** Org whose outbound-gateway fairness budget these RC calls draw from. Known
+   *  in the request-context factory; absent in machine (token) contexts, where it
+   *  falls back to a shared `"_system"` bucket (still gets the shared breaker). */
+  organizationId?: string
 }
 
 async function safeText(res: Response): Promise<string> {
@@ -66,10 +71,34 @@ export class RingCentralClient {
   }
 
   /**
-   * Authed JSON request with 429-aware retry. `path` may be an absolute URL
-   * (e.g. a recording contentUri) or a `/restapi/...` path joined to baseUrl.
+   * Authed JSON request, through the outbound gateway (fair across studios +
+   * shared circuit breaker), keeping RC's own 429/`Retry-After` retry inside. The
+   * gateway wraps the whole retry sequence ONCE — the internal recursion re-enters
+   * `requestRaw`, never `execute`, so there's no nested admission. A 429-exhausted
+   * throw becomes a gateway failure the breaker counts.
    */
-  async request<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
+  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const outcome = await getOutboundGateway().execute(
+      "ringcentral",
+      this.deps.organizationId ?? "_system",
+      "interactive",
+      () => this.requestRaw<T>(path, init),
+    )
+    if (outcome.status === "sent") return outcome.value
+    if (outcome.status === "failed") {
+      throw outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error))
+    }
+    throw new Error(
+      `RingCentral request ${outcome.status}: retry after ~${String(outcome.retryAfterMs)}ms`,
+    )
+  }
+
+  /**
+   * The raw authed JSON request with 429-aware retry. `path` may be an absolute
+   * URL (e.g. a recording contentUri) or a `/restapi/...` path joined to baseUrl.
+   * Gated by `request`; the 429 recursion stays here (never re-enters the gateway).
+   */
+  private async requestRaw<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
     const token = await this.deps.getAccessToken()
     const url = path.startsWith("http") ? path : `${this.deps.baseUrl}${path}`
     // Build via Headers so any HeadersInit form (object / entries / Headers)
@@ -86,7 +115,7 @@ export class RingCentralClient {
         const backoffMs = retryAfter > 0 ? retryAfter * 1000 : 2 ** attempt * 1000
         const jitterMs = Math.floor(Math.random() * 250)
         await this.sleep(backoffMs + jitterMs)
-        return this.request<T>(path, init, attempt + 1)
+        return this.requestRaw<T>(path, init, attempt + 1)
       }
       throw new RingCentralApiError(429, await safeText(res), true)
     }
@@ -174,6 +203,7 @@ export function ringCentralClientForUser(args: {
   return new RingCentralClient({
     baseUrl: rcServerUrl(),
     getAccessToken: async () => (await getValidAccessToken(args)).token,
+    organizationId: args.organizationId,
   })
 }
 
@@ -183,9 +213,13 @@ export function ringCentralClientForUser(args: {
  * stays inside the worker's tx and needs no ALS context), then build the client
  * with it — avoiding the `withOrgContext` ALS lookup entirely.
  */
-export function ringCentralClientWithToken(accessToken: string): RingCentralClient {
+export function ringCentralClientWithToken(
+  accessToken: string,
+  organizationId?: string,
+): RingCentralClient {
   return new RingCentralClient({
     baseUrl: rcServerUrl(),
     getAccessToken: () => Promise.resolve(accessToken),
+    organizationId,
   })
 }

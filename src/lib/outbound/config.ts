@@ -1,8 +1,10 @@
 import "server-only"
 import { env } from "@/lib/env"
+import { log } from "@/lib/log"
 import { OutboundGateway, type ProviderConfig } from "@/lib/outbound/gateway"
 import { InMemoryStore, type RateLimitStore } from "@/lib/outbound/store"
 import { UpstashStore } from "@/lib/outbound/upstash-store"
+import { ThrottleLog } from "@/lib/outbound/throttle-signal"
 
 /**
  * Per-provider budgets + breaker config — the SINGLE source of truth for the
@@ -50,6 +52,14 @@ function selectStore(): RateLimitStore {
   return new InMemoryStore()
 }
 
+/**
+ * The read-side of throttle visibility (step 6): a bounded, per-org, in-memory
+ * record of recent throttle events. A "sends are catching up" indicator or a
+ * notification can poll `outboundThrottleLog.isCatchingUp(orgId)` — the exact UI
+ * surface is deferred to the notifications module; the gateway just emits.
+ */
+export const outboundThrottleLog = new ThrottleLog()
+
 let singleton: OutboundGateway | null = null
 
 /**
@@ -62,6 +72,12 @@ export function getOutboundGateway(): OutboundGateway {
   singleton ??= new OutboundGateway({
     store: selectStore(),
     providers: OUTBOUND_PROVIDERS,
+    onThrottle: (event) => {
+      // Structured signal a studio's throttling: a stable log event a dashboard
+      // can key on, plus the in-memory read-side for a live UI indicator.
+      log.info({ event: "outbound.throttled", ...event }, "[outbound] send delayed by throttling")
+      outboundThrottleLog.record(event)
+    },
   })
   return singleton
 }

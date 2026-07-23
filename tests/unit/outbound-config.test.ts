@@ -4,7 +4,18 @@
  * provider admits a send, and an unconfigured one fails fast. Not a limits test
  * (those live in the engine tests) — this proves the wiring, per LAW 7.
  */
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
+
+// config → upstash-store → @/lib/log all read `env`; t3-env forbids server-var
+// access in the jsdom unit context, so mock env (Upstash unset → in-memory store).
+vi.mock("@/lib/env", () => ({
+  env: {
+    NODE_ENV: "test",
+    UPSTASH_REDIS_REST_URL: undefined,
+    UPSTASH_REDIS_REST_TOKEN: undefined,
+  },
+}))
+
 import { getOutboundGateway, OUTBOUND_PROVIDERS } from "@/lib/outbound/config"
 
 describe("getOutboundGateway", () => {

@@ -172,6 +172,12 @@ export const env = createEnv({
     // in the Nylas dashboard). Optional so non-configured deploys still boot;
     // the inbound route rejects deliveries when unset/invalid.
     NYLAS_WEBHOOK_SECRET: z.string().min(1).optional(),
+    // Upstash Redis (REST) for the multi-region outbound rate-limit store (TODO
+    // H9). BOTH optional: unset → the outbound gateway uses its in-memory store
+    // (correct for a single Vercel region). Set BOTH to hold limits across
+    // regions/instances. Created in the Upstash dashboard.
+    UPSTASH_REDIS_REST_URL: z.url().optional(),
+    UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
@@ -219,6 +225,8 @@ export const env = createEnv({
     NYLAS_CLIENT_ID: process.env.NYLAS_CLIENT_ID,
     NYLAS_API_URI: process.env.NYLAS_API_URI,
     NYLAS_WEBHOOK_SECRET: process.env.NYLAS_WEBHOOK_SECRET,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },

@@ -45,7 +45,7 @@ Tags: `[sec]` security · `[db]` database/migrations · `[ci]` CI/verification �
 
 ### Security
 
-- [x] **H9** `[sec]` Better Auth's built-in rate limiter is enabled in production with `customRules` for sign-in, sign-up, password reset, verify-email, invitation flows. Storage is in-memory by default — fine for single-region deploys; document switching to a shared store if scaling out. (Multi-region storage NOT yet wired — open.)
+- [x] **H9** `[sec]` Better Auth's built-in rate limiter is enabled in production with `customRules` for sign-in, sign-up, password reset, verify-email, invitation flows. Storage is in-memory by default — fine for single-region deploys; document switching to a shared store if scaling out. (BA's OWN limiter is still in-memory — open. But a shared, env-gated **multi-region `RateLimitStore` now exists**: `src/lib/outbound/upstash-store.ts`, built for the outbound gateway (2026-07-22); the auth layer can reuse it when we scale to multi-region.)
 - [ ] **H10** `[sec]` Auth events not in audit log. **Open.** Wire Better Auth `databaseHooks` / `hooks.after` to call `audit()` for sign-in, password-reset, invite-accepted, session-revoked.
 - [x] **H11** `[sec]` Blob upload MIME whitelist is now explicit: `image/{png,jpeg,webp,gif,svg+xml}`, `application/pdf`, `text/{plain,csv}`. No glob.
 - [x] **H12** `[sec]` `/accept-invite` added to `PUBLIC_ROUTES`.

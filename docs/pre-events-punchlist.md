@@ -67,13 +67,16 @@ decisions are kept on file, marked deferred, not deleted.
 
 ### Hardening (unbuilt — still valid, still needed)
 
-- **◐ Rate-limit outbound gateway** (policy 5 + TODO H9) — **designed** + **step 1 (core engine)
-  built**. Design: `docs/superpowers/specs/2026-07-22-outbound-rate-limit-gateway-design.md`.
-  DONE: pluggable `RateLimitStore` + `InMemoryStore` token bucket + `RateLimiter` floor+shared-burst
-  fairness + full-jitter backoff (`src/lib/outbound/`), unit-tested (incl. fairness proof), wires
-  nothing into live paths yet. REMAINING: (2) circuit breaker, (3) two-lane scheduler +
-  requeue-not-sleep via the A3 queue, (4) adapters (Resend/Nylas through it; extract RC as template),
-  (5) Upstash store for multi-region, (6) throttle visibility to the studio.
+- **✅ Rate-limit outbound gateway** (policy 5 + TODO H9) — **DONE, all 6 steps (PRs #10–#17)**.
+  Design: `docs/superpowers/specs/2026-07-22-outbound-rate-limit-gateway-design.md`. `src/lib/outbound/`:
+  pluggable `RateLimitStore` (`InMemoryStore` + env-gated `UpstashStore`, atomic Lua, fail-open) +
+  floor/shared-burst fairness + full-jitter backoff + per-provider `CircuitBreaker` + two-lane
+  `OutboundGateway.execute` (interactive reserves the org floor + bounded retry; bulk is burst-only
+  and requeues-not-sleeps by throwing so the enclosing durable A3 job reschedules). **All three
+  providers route LIVE:** Resend (`sendEmail`), Nylas (`nylasSendMessageRaw`), RingCentral
+  (`request` wraps the existing 429 retry — extract, not rewrite). Owner-confirmed budgets. Throttle
+  visibility emitted (`outbound.throttled` log + `ThrottleLog.isCatchingUp(orgId)`); UI surface
+  deferred to the notifications module. _(2026-07-22)_
 - **✅ HIBP breach screening** — WIRED (`haveIbeenPwned` plugin, k-anonymity, no key; guards
   sign-up/change/reset). The load-bearing password control. _(2026-07-21)_
 - **✅ Server-side password composition** — enforced at the API via the Better Auth `before`
@@ -89,7 +92,10 @@ decisions are kept on file, marked deferred, not deleted.
   `app/api/v1/README.md`. No public endpoints yet (Zapier / API-key access is a later feature);
   the convention is ready so the first one ships on it, not retrofitted. **The public API-key
   auth layer + shared Upstash rate-limit are still to build.** _(2026-07-22)_
-- **⬜ Multi-region rate-limit storage** (Upstash) — folded into the gateway above (H9).
+- **✅ Multi-region rate-limit storage** (Upstash) — built as the gateway's `UpstashStore` (H9),
+  env-gated + auto-selected; dormant until the owner provisions Upstash. Note: this covers the
+  OUTBOUND provider gateway. The **inbound** public API-key rate-limit (also H9-adjacent, for the
+  future `/api/v1` Zapier/API-key layer) is still to build on the same Upstash store.
 
 ---
 

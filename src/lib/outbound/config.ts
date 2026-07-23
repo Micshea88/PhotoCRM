@@ -1,6 +1,8 @@
 import "server-only"
+import { env } from "@/lib/env"
 import { OutboundGateway, type ProviderConfig } from "@/lib/outbound/gateway"
-import { InMemoryStore } from "@/lib/outbound/store"
+import { InMemoryStore, type RateLimitStore } from "@/lib/outbound/store"
+import { UpstashStore } from "@/lib/outbound/upstash-store"
 
 /**
  * Per-provider budgets + breaker config — the SINGLE source of truth for the
@@ -36,18 +38,29 @@ export const OUTBOUND_PROVIDERS: Record<string, ProviderConfig> = {
   },
 }
 
+/**
+ * Pick the token-bucket store: Upstash Redis when BOTH env vars are set (limits
+ * hold across regions/instances — TODO H9), otherwise the in-process map (correct
+ * for a single Vercel region). Swapping regions is a config change, not a code one.
+ */
+function selectStore(): RateLimitStore {
+  const url = env.UPSTASH_REDIS_REST_URL
+  const token = env.UPSTASH_REDIS_REST_TOKEN
+  if (url && token) return new UpstashStore({ url, token })
+  return new InMemoryStore()
+}
+
 let singleton: OutboundGateway | null = null
 
 /**
  * Process-wide gateway singleton. Breaker + token-bucket state must be SHARED
  * across every send in a region, so this is a module-level singleton (not a
- * per-call instance). Uses the in-memory store today; the Upstash store swaps in
- * at step 5 (when `UPSTASH_REDIS_REST_URL`/`_TOKEN` are set) so limits hold across
- * regions/instances.
+ * per-call instance). The store is auto-selected (Upstash when configured, else
+ * in-memory) so multi-region is an env change, not a code change.
  */
 export function getOutboundGateway(): OutboundGateway {
   singleton ??= new OutboundGateway({
-    store: new InMemoryStore(),
+    store: selectStore(),
     providers: OUTBOUND_PROVIDERS,
   })
   return singleton
